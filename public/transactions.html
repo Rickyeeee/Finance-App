@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>消費記錄 — 瑞奇財務</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="瑞奇財務">
+<meta name="theme-color" content="#161b22">
+<link rel="apple-touch-icon" href="/icons/icon.svg">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+/* ── 月曆 ── */
+.cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.cal-title { font-size:17px; font-weight:600; }
+.cal-nav { display:flex; gap:2px; }
+.cal-nav button { width:30px; height:30px; border:none; background:none; color:var(--text-muted); font-size:20px; cursor:pointer; border-radius:6px; line-height:1; }
+.cal-nav button:hover { color:var(--text); }
+
+.cal-dows { display:grid; grid-template-columns:repeat(7,1fr); }
+.cal-dow { font-size:11px; font-weight:500; color:var(--text-muted); padding:4px 0 6px 8px; }
+.cal-dow.sat { color:#3fb950; }
+.cal-dow.sun { color:#e06c75; }
+
+.cal-grid {
+  display:grid; grid-template-columns:repeat(7,1fr);
+  border-top:1px solid #252c36; border-left:1px solid #252c36;
+}
+.cal-cell {
+  border-right:1px solid #252c36; border-bottom:1px solid #252c36;
+  min-height:76px; padding:7px 5px 4px 7px; position:relative; cursor:default;
+}
+.cal-cell.clickable { cursor:pointer; }
+.cal-cell.has-expense { background:rgba(248,81,73,0.07); }
+.cal-cell.has-income  { background:rgba(63,185,80,0.05); }
+.cal-cell.has-both    { background:rgba(248,81,73,0.07); }
+.cal-cell.today { outline:2px solid var(--accent); outline-offset:-1px; position:relative; z-index:1; }
+.cal-cell.selected { outline:2px solid var(--accent); background:rgba(88,166,255,0.09); position:relative; z-index:1; }
+.cal-cell.other-month { opacity:0.3; cursor:default; }
+
+.cal-d { font-size:17px; font-weight:700; line-height:1; color:var(--text); font-variant-numeric:tabular-nums; }
+.cal-cell.sat-col .cal-d { color:#3fb950; }
+.cal-cell.sun-col .cal-d { color:#e06c75; }
+.cal-cell.today    .cal-d { color:var(--accent); }
+.cal-cell.other-month .cal-d { color:var(--text-muted) !important; }
+
+.cal-amts { position:absolute; bottom:4px; right:5px; text-align:right; line-height:1.45; }
+.cal-inc { color:#3fb950; font-size:10px; font-weight:600; }
+.cal-exp { color:#e06c75; font-size:10px; font-weight:600; }
+
+.cal-footer { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding-top:10px; margin-top:2px; border-top:1px solid var(--border); font-size:12px; }
+.cf-item { display:flex; align-items:center; gap:5px; }
+.cf-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+
+/* ── 當日總覽 ── */
+.detail-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.detail-hd-title { font-size:15px; font-weight:600; }
+.overview-btn { display:flex; align-items:center; gap:4px; background:var(--surface2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:5px 10px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; }
+.overview-btn:hover { background:var(--surface); }
+.overview-btn.active { border-color:var(--accent); color:var(--accent); }
+
+/* ── 定期 tab ── */
+.monthly-bar { display:flex; gap:16px; flex-wrap:wrap; padding:12px 16px; background:var(--surface2); border-radius:12px; margin-bottom:18px; }
+.monthly-bar-item { display:flex; flex-direction:column; gap:2px; }
+.monthly-bar-label { font-size:11px; color:var(--text-muted); }
+.monthly-bar-val { font-size:15px; font-weight:700; }
+
+.rec-item { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border); }
+.rec-item:last-child { border-bottom:none; }
+.rec-item-info { flex:1; min-width:0; }
+.rec-item-name { font-weight:600; font-size:14px; }
+.rec-item-meta { font-size:12px; color:var(--text-muted); margin-top:2px; }
+.rec-meta-sep { display:inline; }
+.rec-meta-card { display:inline; }
+.rec-item-right { text-align:right; flex-shrink:0; }
+.rec-item-amt { font-size:15px; font-weight:700; }
+.rec-item-next { font-size:11px; color:var(--text-muted); margin-top:2px; }
+.rec-group-hd { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); padding:12px 0 6px; border-bottom:1px solid var(--border); margin-bottom:4px; display:flex; align-items:center; justify-content:space-between; }
+@media (max-width:768px) {
+  .rec-meta-sep { display:none; }
+  .rec-meta-card { display:block; }
+}
+
+/* 分類管理 */
+.cat-manage-btn { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:14px; padding:2px 6px; border-radius:4px; }
+.cat-manage-btn:hover { color:var(--text); }
+.cat-item { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border); }
+.cat-item:last-child { border-bottom:none; }
+
+@media (max-width: 640px) {
+  .cal-cell { min-height:58px; padding:5px 3px 3px 5px; }
+  .cal-d { font-size:14px; }
+  .cal-inc, .cal-exp { font-size:9px; }
+  .cal-dow { font-size:10px; padding-left:4px; }
+}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo"><span>💰</span><span>瑞奇財務</span></div>
+  <nav class="sidebar-nav">
+    <a href="/" class="nav-item"><span class="icon">🏠</span><span>資產總覽</span></a>
+    <a href="/transactions.html" class="nav-item active"><span class="icon">📋</span><span>消費記錄</span></a>
+    <a href="/reconcile.html" class="nav-item"><span class="icon">🔍</span><span>信用卡對帳</span></a>
+    <a href="/investments.html" class="nav-item"><span class="icon">📈</span><span>投資損益</span></a>
+  </nav>
+</aside>
+
+<div class="main">
+  <div class="header">
+    <h1>消費記錄</h1>
+    <div class="header-actions">
+      <button class="btn btn-secondary btn-sm" onclick="syncGmail()">🔄 同步</button>
+      <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ 新增</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- Tab 切換 -->
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-btn-records" onclick="switchTab('records')">📋 記錄</button>
+      <button class="tab-btn" id="tab-btn-recurring" onclick="switchTab('recurring')">🔄 定期</button>
+    </div>
+
+    <!-- ── 記錄 Tab ── -->
+    <div id="panel-records">
+      <div class="card" style="margin-bottom:16px">
+        <div class="cal-header">
+          <div class="cal-title" id="cal-title">–</div>
+          <div class="cal-nav">
+            <button onclick="changeMonth(-1)">‹</button>
+            <button onclick="changeMonth(1)">›</button>
+          </div>
+        </div>
+        <div class="cal-dows">
+          <div class="cal-dow">週一</div><div class="cal-dow">週二</div>
+          <div class="cal-dow">週三</div><div class="cal-dow">週四</div>
+          <div class="cal-dow">週五</div>
+          <div class="cal-dow sat">週六</div><div class="cal-dow sun">週日</div>
+        </div>
+        <div id="cal-grid" class="cal-grid"></div>
+        <div class="cal-footer" id="cal-footer"></div>
+      </div>
+
+      <div class="card">
+        <div class="detail-hd">
+          <div class="detail-hd-title" id="detail-title">當日總覽</div>
+          <button class="overview-btn" id="overview-btn" onclick="toggleMonthly()">
+            總覽 <span id="overview-arrow">▾</span>
+          </button>
+        </div>
+        <div id="daily-view">
+          <div class="empty-state" style="padding:20px 0">點選月曆中的日期查看當日記錄</div>
+        </div>
+        <div id="monthly-view" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- ── 定期 Tab ── -->
+    <div id="panel-recurring" style="display:none">
+      <div class="monthly-bar" id="rec-monthly-bar"></div>
+      <div class="card">
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:16px">
+          <button class="btn btn-secondary btn-sm" onclick="triggerRecurring()">⚡ 立即生成</button>
+          <button class="btn btn-primary btn-sm" onclick="openRecModal()">+ 新增</button>
+        </div>
+        <div id="rec-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 新增/編輯交易 Modal -->
+<div class="modal-overlay" id="txn-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">新增支出</div>
+      <button class="modal-close" onclick="closeTxnModal()">×</button>
+    </div>
+    <input type="hidden" id="edit-id">
+    <div class="type-toggle">
+      <button id="btn-expense" class="active-expense" onclick="setType('支出')">支出</button>
+      <button id="btn-income" onclick="setType('收入')">收入</button>
+      <button id="btn-transfer-type" onclick="setType('轉帳')">↔ 轉帳</button>
+    </div>
+
+    <!-- 支出 / 收入欄位 -->
+    <div id="fields-normal">
+      <div class="form-group">
+        <label class="form-label">日期 *</label>
+        <input type="date" id="f-date">
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">
+          <span>分類</span>
+          <button class="cat-manage-btn" onclick="openCatModal()">⚙️</button>
+        </label>
+        <select id="f-category"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">金額 (NT$) *</label>
+        <input type="number" id="f-amount" placeholder="0" class="calc-input" oninput="updateNormalTotal()">
+      </div>
+      <div id="fee-section-normal" style="display:none">
+        <div class="form-group" style="margin-bottom:4px">
+          <label class="form-label">手續費 (NT$)</label>
+          <input type="number" id="f-fee" placeholder="0" class="calc-input" oninput="updateNormalTotal()">
+        </div>
+        <div id="fee-total-normal" style="font-size:12px;color:var(--text-muted);padding:0 0 8px;font-weight:500"></div>
+      </div>
+      <button type="button" id="fee-toggle-normal" onclick="toggleFeeSection('normal')" style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0 0 10px;font-family:inherit;text-align:left;display:block">＋ 加入手續費</button>
+      <div class="form-group">
+        <label class="form-label">名稱 <span style="color:var(--text-muted);font-weight:400;font-size:11px">選填</span></label>
+        <input type="text" id="f-name" placeholder="例：全家、薪資">
+      </div>
+      <div class="form-group">
+        <label class="form-label">帳戶</label>
+        <select id="f-card"></select>
+      </div>
+      <input type="hidden" id="f-note">
+    </div>
+
+    <!-- 轉帳欄位 -->
+    <div id="fields-transfer" style="display:none">
+      <div style="background:rgba(88,166,255,0.06);border:1px solid rgba(88,166,255,0.2);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--text-muted)">
+        同時建立兩筆關聯記錄：來源帳戶的支出 + 目標帳戶的收入
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">來源帳戶 *</label>
+          <select id="f-xfr-from"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">目標帳戶 *</label>
+          <select id="f-xfr-to"></select>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">金額 (NT$) *</label>
+          <input type="number" id="f-xfr-amount" placeholder="0" class="calc-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label">日期 *</label>
+          <input type="date" id="f-xfr-date">
+        </div>
+      </div>
+      <div id="fee-section-transfer" style="display:none">
+        <div class="form-group" style="margin-bottom:4px">
+          <label class="form-label">手續費 (NT$) <span style="color:var(--text-muted);font-weight:400;font-size:11px">從來源帳戶額外扣除</span></label>
+          <input type="number" id="f-xfr-fee" placeholder="0" class="calc-input">
+        </div>
+      </div>
+      <button type="button" id="fee-toggle-transfer" onclick="toggleFeeSection('transfer')" style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0 0 10px;font-family:inherit;text-align:left;display:block">＋ 加入手續費</button>
+      <div class="form-group">
+        <label class="form-label">備註</label>
+        <input type="text" id="f-xfr-note" placeholder="選填">
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeTxnModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveTxn()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 轉帳 Modal -->
+<div class="modal-overlay" id="transfer-modal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">↔ 帳戶轉帳</div>
+      <button class="modal-close" onclick="closeTransferModal()">×</button>
+    </div>
+    <div style="background:rgba(88,166,255,0.06);border:1px solid rgba(88,166,255,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text-muted)">
+      轉帳會同時建立兩筆關聯記錄：來源帳戶的支出和目標帳戶的收入。
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">來源帳戶 *</label>
+        <select id="xfr-from"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">目標帳戶 *</label>
+        <select id="xfr-to"></select>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">金額 (NT$) *</label>
+        <input type="number" id="xfr-amount" placeholder="0" class="calc-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label">日期 *</label>
+        <input type="date" id="xfr-date">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">備註</label>
+      <input type="text" id="xfr-note" placeholder="選填">
+    </div>
+    <input type="hidden" id="edit-transfer-id">
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeTransferModal()">取消</button>
+      <button class="btn btn-primary" id="xfr-save-btn" onclick="saveTransfer()">建立轉帳</button>
+    </div>
+  </div>
+</div>
+
+<!-- 分類管理 Modal -->
+<div class="modal-overlay" id="cat-modal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <div class="modal-title">管理分類</div>
+      <button class="modal-close" onclick="closeCatModal()">×</button>
+    </div>
+    <div id="cat-list" style="margin-bottom:16px;max-height:280px;overflow-y:auto"></div>
+    <button onclick="fixCategoryRecords()" style="width:100%;background:none;border:1px dashed var(--border);color:var(--text-muted);border-radius:8px;padding:8px;font-size:12px;cursor:pointer;font-family:inherit;margin-bottom:12px">🔧 修復舊紀錄（同步分類名稱）</button>
+    <div style="background:var(--surface2);border-radius:8px;padding:10px;margin-bottom:8px">
+      <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px">新增支出分類</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="new-expense-cat" placeholder="分類名稱" style="flex:1">
+        <button class="btn btn-secondary btn-sm" onclick="addCategory('支出')">新增</button>
+      </div>
+    </div>
+    <div style="background:rgba(63,185,80,0.07);border-radius:8px;padding:10px;border:1px solid rgba(63,185,80,0.2)">
+      <div style="font-size:11px;color:var(--success);font-weight:600;margin-bottom:6px">新增收入分類</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="new-income-cat" placeholder="分類名稱" style="flex:1">
+        <button class="btn btn-primary btn-sm" onclick="addCategory('收入')">新增</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 定期 新增/編輯 Modal -->
+<div class="modal-overlay" id="rec-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="rec-modal-title">新增定期支出</div>
+      <button class="modal-close" onclick="closeRecModal()">×</button>
+    </div>
+    <input type="hidden" id="rec-edit-id">
+    <div class="type-toggle">
+      <button id="rec-btn-exp" class="active-expense" onclick="setRecType('支出')">支出</button>
+      <button id="rec-btn-inc" onclick="setRecType('收入')">收入</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">名稱 *</label>
+      <input type="text" id="r-name" placeholder="例：Netflix、房租">
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">金額 (NT$) *</label>
+        <input type="number" id="r-amount" placeholder="0" class="calc-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label">頻率</label>
+        <select id="r-frequency" onchange="onFreqChange()">
+          <option value="monthly">每月</option>
+          <option value="weekly">每週</option>
+          <option value="yearly">每年</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" id="r-day-group">
+      <label class="form-label">每月幾號</label>
+      <select id="r-day"></select>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">分類 *</label>
+        <select id="r-category"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">帳戶</label>
+        <select id="r-card"></select>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">起始日期 *</label>
+        <input type="date" id="r-start-date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">結束日期 <span style="color:var(--text-muted);font-weight:400;font-size:11px">選填，空白＝無限</span></label>
+        <input type="date" id="r-end-date">
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:4px">
+      <label class="form-label">手續費 (NT$) <span style="color:var(--text-muted);font-weight:400;font-size:11px">選填，每次觸發自動加入</span></label>
+      <input type="number" id="r-fee" placeholder="0" class="calc-input">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeRecModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveRecurring()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/calc-keyboard.js"></script>
+<script type="module">
+import { api, toast, formatMoney, fmtSigned, amtColor, badgeHtml, catIconHtml, catIcon, freqLabel } from '/js/api.js'
+
+// 用已存的 icon 欄位 fallback 到 CAT_ICON_MAP
+function resolvedCatIcon(categoryName) {
+  const cat = allCategories.find(c => c.name === categoryName)
+  return (cat && cat.icon) ? cat.icon : catIcon(categoryName)
+}
+// 分類 icon 圓圈（供 daily view 使用）
+function resolvedCatIconHtml(categoryName, size = 36) {
+  const icon = resolvedCatIcon(categoryName)
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*0.5)}px;flex-shrink:0">${icon}</div>`
+}
+// 分類 icon 純 emoji（供 table cell 使用，不含圓圈背景）
+function catEmojiTag(categoryName) {
+  return `<span style="font-size:16px;flex-shrink:0;line-height:1">${resolvedCatIcon(categoryName)}</span>`
+}
+
+// ── State ──
+let allCategories = [], allAccounts = [], currentType = '支出'
+let selectedDate = '', currentMonth = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' }).slice(0, 7)
+let showMonthly = false, cachedTxns = []
+let recItems = [], recType = '支出'
+let currentTab = 'records'
+const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
+
+async function init() {
+  await loadMeta()
+  await Promise.all([loadMonth(), loadRecurring()])
+  // 自動選今天
+  selectedDate = today
+  renderCalendar(currentMonth, rebuildByDate())
+  const todayTxns = cachedTxns.filter(t => t.date === today)
+  if (todayTxns.length) renderDailyView(todayTxns)
+  const [,mm,dd] = today.split('-')
+  document.getElementById('detail-title').textContent = `${parseInt(mm)} 月 ${parseInt(dd)} 日`
+}
+
+async function loadMeta() {
+  const [cr, ar] = await Promise.all([api.getCategories(), api.getAssets()])
+  if (cr.ok) { allCategories = cr.data; renderCategorySelects() }
+  if (ar.ok) { allAccounts = ar.data.accounts ?? []; renderAccountSelects(); renderXfrSelects() }
+}
+
+// ── Tab 切換 ──
+window.switchTab = function(tab) {
+  currentTab = tab
+  document.getElementById('panel-records').style.display = tab === 'records' ? 'block' : 'none'
+  document.getElementById('panel-recurring').style.display = tab === 'recurring' ? 'block' : 'none'
+  document.getElementById('tab-btn-records').classList.toggle('active', tab === 'records')
+  document.getElementById('tab-btn-recurring').classList.toggle('active', tab === 'recurring')
+}
+
+// ── 月曆 ──
+async function loadMonth() {
+  const res = await api.getTransactions({ month: currentMonth, limit: 500 })
+  if (!res.ok) return
+  cachedTxns = res.data
+
+  // 排除轉帳，避免 A→B 的轉帳同時計入支出和收入
+  const realTxns = cachedTxns.filter(t => !t.transfer_id)
+  const expTotal = realTxns.filter(t => t.type !== '收入').reduce((s,t) => s+t.amount, 0)
+  const incTotal = realTxns.filter(t => t.type === '收入').reduce((s,t) => s+t.amount, 0)
+  const net = incTotal - expTotal
+
+  const byDate = {}
+  for (const t of realTxns) {
+    if (!byDate[t.date]) byDate[t.date] = { income:0, expense:0 }
+    if (t.type === '收入') byDate[t.date].income += t.amount
+    else byDate[t.date].expense += t.amount
+  }
+
+  renderCalendar(currentMonth, byDate)
+
+  const netSigned = incTotal - expTotal
+  document.getElementById('cal-footer').innerHTML = `
+    <div class="cf-item"><span class="cf-dot" style="background:#e06c75"></span>支出
+      <b style="color:#e06c75">-$${expTotal.toLocaleString()}</b></div>
+    <div class="cf-item"><span class="cf-dot" style="background:#3fb950"></span>收入
+      <b style="color:#3fb950">+$${incTotal.toLocaleString()}</b></div>
+    <div class="cf-item"><span class="cf-dot" style="background:#bc8cff"></span>總計
+      <b style="color:#bc8cff">${netSigned >= 0 ? '+' : '-'}$${Math.abs(netSigned).toLocaleString()}</b></div>
+  `
+
+  if (showMonthly) renderMonthlyTable()
+  if (selectedDate) renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
+}
+
+function fmtAmt(n) {
+  if (n >= 10000) return Math.round(n/1000) + 'k'
+  return n.toLocaleString()
+}
+
+function renderCalendar(month, byDate) {
+  const [year, mon] = month.split('-').map(Number)
+  const firstDow = new Date(year, mon-1, 1).getDay()
+  const offset = firstDow === 0 ? 6 : firstDow - 1
+  const daysInMonth = new Date(year, mon, 0).getDate()
+  const prevDays = new Date(year, mon-1, 0).getDate()
+
+  const [y, m] = currentMonth.split('-').map(Number)
+  document.getElementById('cal-title').textContent = `${y} 年 ${m} 月`
+
+  let html = ''
+  for (let i = offset-1; i >= 0; i--) {
+    html += cellHtml(String(prevDays-i).padStart(2,'0'), null, 'other-month', (offset-1-i)%7, null)
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(mon).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+    const colIdx = (offset + d - 1) % 7
+    const data = byDate[dateStr] || null
+    const cls = []
+    if (data?.expense > 0 && data?.income > 0) cls.push('has-both')
+    else if (data?.expense > 0) cls.push('has-expense')
+    else if (data?.income > 0) cls.push('has-income')
+    if (dateStr === today) cls.push('today')
+    if (dateStr === selectedDate) cls.push('selected')
+    if (data) cls.push('clickable')
+    html += cellHtml(String(d).padStart(2,'0'), dateStr, cls.join(' '), colIdx, data)
+  }
+  const tail = (offset + daysInMonth) % 7
+  if (tail !== 0) {
+    for (let i = 1; i <= 7-tail; i++) {
+      html += cellHtml(String(i).padStart(2,'0'), null, 'other-month', (offset+daysInMonth-1+i)%7, null)
+    }
+  }
+  document.getElementById('cal-grid').innerHTML = html
+}
+
+function cellHtml(label, dateStr, extraCls, colIdx, data) {
+  const isSat = colIdx===5, isSun = colIdx===6
+  const colCls = isSat ? 'sat-col' : isSun ? 'sun-col' : ''
+  const clickAttr = dateStr ? `onclick="selectDay('${dateStr}')"` : ''
+  const dblClickAttr = dateStr ? `ondblclick="openAddModal('${dateStr}')"` : ''
+  let amtsHtml = ''
+  if (data) {
+    let lines = ''
+    if (data.income > 0)  lines += `<div class="cal-inc">+${fmtAmt(data.income)}</div>`
+    if (data.expense > 0) lines += `<div class="cal-exp">−${fmtAmt(data.expense)}</div>`
+    if (lines) amtsHtml = `<div class="cal-amts">${lines}</div>`
+  }
+  return `<div class="cal-cell ${extraCls} ${colCls}" ${clickAttr} ${dblClickAttr}><div class="cal-d">${label}</div>${amtsHtml}</div>`
+}
+
+window.changeMonth = async function(dir) {
+  selectedDate = ''
+  const [y, m] = currentMonth.split('-').map(Number)
+  const d = new Date(y, m-1+dir, 1)
+  currentMonth = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+  resetDetailView()
+  await loadMonth()
+}
+
+window.selectDay = async function(date) {
+  if (selectedDate === date) {
+    selectedDate = ''; resetDetailView(); renderCalendar(currentMonth, rebuildByDate()); return
+  }
+  selectedDate = date
+  renderCalendar(currentMonth, rebuildByDate())
+  if (showMonthly) { showMonthly = false; syncToggleBtn() }
+  renderDailyView(cachedTxns.filter(t => t.date === date))
+  const [,mm,dd] = date.split('-')
+  document.getElementById('detail-title').textContent = `${parseInt(mm)} 月 ${parseInt(dd)} 日`
+}
+
+function rebuildByDate() {
+  const m = {}
+  for (const t of cachedTxns) {
+    if (t.transfer_id) continue
+    if (!m[t.date]) m[t.date] = { income:0, expense:0 }
+    if (t.type === '收入') m[t.date].income += t.amount
+    else m[t.date].expense += t.amount
+  }
+  return m
+}
+
+// ── 合併轉帳配對 ──
+function mergeTransferPairs(txns) {
+  const result = []
+  const seen = new Set()
+  for (const t of txns) {
+    if (t.transfer_id) {
+      if (seen.has(t.transfer_id)) continue
+      seen.add(t.transfer_id)
+      const out = txns.find(x => x.transfer_id === t.transfer_id && x.type === '支出') || t
+      const inc = txns.find(x => x.transfer_id === t.transfer_id && x.type === '收入') || t
+      result.push({ ...out, _isMergedTransfer: true, _xfrFrom: out.card, _xfrTo: inc.card })
+    } else {
+      result.push(t)
+    }
+  }
+  return result
+}
+
+// ── 當日總覽 ──
+function renderDailyView(txns) {
+  document.getElementById('daily-view').style.display = 'block'
+  document.getElementById('monthly-view').style.display = 'none'
+  const el = document.getElementById('daily-view')
+  if (!txns.length) { el.innerHTML = '<div class="empty-state" style="padding:20px 0">當日無記錄</div>'; return }
+
+  const realTxns = txns.filter(t => !t.transfer_id)
+  const expTotal = realTxns.filter(t => t.type !== '收入').reduce((s,t) => s+t.amount, 0)
+  const incTotal = realTxns.filter(t => t.type === '收入').reduce((s,t) => s+t.amount, 0)
+
+  let html = mergeTransferPairs(txns).map(t => {
+    if (t._isMergedTransfer) {
+      const icon = `<div style="width:38px;height:38px;border-radius:50%;background:rgba(208,112,48,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">↔</div>`
+      return `<div class="txn-row">
+        ${icon}
+        <div class="txn-info">
+          <div class="txn-name">${escHtml(t.name || '轉帳')}</div>
+          <div class="txn-meta">${escHtml(t._xfrFrom)} → ${escHtml(t._xfrTo)}</div>
+        </div>
+        <div class="txn-right">
+          <span class="txn-amt" style="color:#d07030">NT$${t.amount.toLocaleString()}</span>
+          <button class="btn btn-secondary btn-sm" onclick="editTransfer('${t.transfer_id}')">編輯</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteTxn('${t.id}',true)">刪</button>
+        </div>
+      </div>`
+    }
+    const editAttrs = `'${t.id}','${escJs(t.name)}',${t.amount},'${t.date}','${escJs(t.category)}','${escJs(t.card||'')}','${escJs(t.note||'')}','${escJs(t.type||'支出')}'`
+    const recBadge = t.source === '定期' ? ' <span title="定期項目" style="font-size:13px">🔁</span>' : ''
+    return `<div class="txn-row">
+      ${resolvedCatIconHtml(t.category, 38)}
+      <div class="txn-info">
+        <div class="txn-name">${escHtml(t.name || t.category)}${recBadge}</div>
+        <div class="txn-meta">${t.card?escHtml(t.card):''}</div>
+      </div>
+      <div class="txn-right">
+        <span class="txn-amt ${t.type==='收入'?'amt-inc':'amt-exp'}">${fmtSigned(t.amount,t.type)}</span>
+        <button class="btn btn-secondary btn-sm" onclick="editTxn(${editAttrs})">編輯</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteTxn('${t.id}',false)">刪</button>
+      </div>
+    </div>`
+  }).join('')
+
+  if (txns.length > 1) {
+    html += `<div style="padding:8px 0 0;font-size:12px;color:var(--text-muted);display:flex;gap:14px">
+      ${expTotal>0?`支出 <b style="color:#e06c75">-$${expTotal.toLocaleString()}</b>`:''}
+      ${incTotal>0?`收入 <b style="color:#3fb950">+$${incTotal.toLocaleString()}</b>`:''}
+    </div>`
+  }
+  el.innerHTML = html
+}
+
+function resetDetailView() {
+  document.getElementById('detail-title').textContent = '當日總覽'
+  document.getElementById('daily-view').innerHTML = '<div class="empty-state" style="padding:20px 0">點選月曆中的日期查看當日記錄</div>'
+}
+
+// ── 整月 toggle ──
+window.toggleMonthly = function() {
+  showMonthly = !showMonthly
+  syncToggleBtn()
+  if (showMonthly) {
+    document.getElementById('daily-view').style.display = 'none'
+    document.getElementById('monthly-view').style.display = 'block'
+    const [y,m] = currentMonth.split('-').map(Number)
+    document.getElementById('detail-title').textContent = `${y} 年 ${m} 月`
+    renderMonthlyTable()
+  } else {
+    document.getElementById('monthly-view').style.display = 'none'
+    document.getElementById('daily-view').style.display = 'block'
+    if (selectedDate) {
+      renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
+      const [,mm,dd] = selectedDate.split('-')
+      document.getElementById('detail-title').textContent = `${parseInt(mm)} 月 ${parseInt(dd)} 日`
+    } else { resetDetailView() }
+  }
+}
+
+function syncToggleBtn() {
+  const btn = document.getElementById('overview-btn')
+  document.getElementById('overview-arrow').textContent = showMonthly ? '▴' : '▾'
+  btn.classList.toggle('active', showMonthly)
+}
+
+function renderMonthlyTable() {
+  const container = document.getElementById('monthly-view')
+  if (!cachedTxns.length) {
+    container.innerHTML = '<div class="empty-state" style="padding:20px 0">本月無記錄</div>'
+    return
+  }
+  const sorted = [...cachedTxns].sort((a,b) => b.date.localeCompare(a.date) || b.created_at.localeCompare(a.created_at))
+
+  // 按日期分組
+  const dateGroups = []
+  const seen = {}
+  for (const t of sorted) {
+    if (!seen[t.date]) { seen[t.date] = []; dateGroups.push({ date: t.date, txns: seen[t.date] }) }
+    seen[t.date].push(t)
+  }
+
+  let html = ''
+  for (const { date, txns } of dateGroups) {
+    const [,mm,dd] = date.split('-')
+    const expTotal = txns.filter(t => t.type !== '收入' && !t.transfer_id).reduce((s,t) => s+t.amount, 0)
+    const incTotal = txns.filter(t => t.type === '收入' && !t.transfer_id).reduce((s,t) => s+t.amount, 0)
+
+    html += `<div style="font-size:13px;font-weight:600;padding:14px 0 6px;color:var(--text-muted);border-top:1px solid var(--border);margin-top:4px">${parseInt(mm)} 月 ${parseInt(dd)} 日</div>`
+    html += mergeTransferPairs(txns).map(t => {
+      if (t._isMergedTransfer) {
+        const icon = `<div style="width:38px;height:38px;border-radius:50%;background:rgba(208,112,48,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">↔</div>`
+        return `<div class="txn-row">
+          ${icon}
+          <div class="txn-info">
+            <div class="txn-name">${escHtml(t.name || '轉帳')}</div>
+            <div class="txn-meta">${escHtml(t._xfrFrom)} → ${escHtml(t._xfrTo)}</div>
+          </div>
+          <div class="txn-right">
+            <span class="txn-amt" style="color:#d07030">NT$${t.amount.toLocaleString()}</span>
+            <button class="btn btn-secondary btn-sm" onclick="editTransfer('${t.transfer_id}')">編輯</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteTxn('${t.id}',true)">刪</button>
+          </div>
+        </div>`
+      }
+      const editAttrs = `'${t.id}','${escJs(t.name)}',${t.amount},'${t.date}','${escJs(t.category)}','${escJs(t.card||'')}','${escJs(t.note||'')}','${escJs(t.type||'支出')}'`
+      const recBadge = t.source === '定期' ? ' <span title="定期項目" style="font-size:13px">🔁</span>' : ''
+      return `<div class="txn-row">
+        ${resolvedCatIconHtml(t.category, 38)}
+        <div class="txn-info">
+          <div class="txn-name">${escHtml(t.name || t.category)}${recBadge}</div>
+          <div class="txn-meta">${t.card?escHtml(t.card):''}</div>
+        </div>
+        <div class="txn-right">
+          <span class="txn-amt ${t.type==='收入'?'amt-inc':'amt-exp'}">${fmtSigned(t.amount,t.type)}</span>
+          <button class="btn btn-secondary btn-sm" onclick="editTxn(${editAttrs})">編輯</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteTxn('${t.id}',false)">刪</button>
+        </div>
+      </div>`
+    }).join('')
+
+    const parts = []
+    if (expTotal > 0) parts.push(`支出 <b style="color:#e06c75">-$${expTotal.toLocaleString()}</b>`)
+    if (incTotal > 0) parts.push(`收入 <b style="color:#3fb950">+$${incTotal.toLocaleString()}</b>`)
+    if (parts.length) html += `<div style="padding:4px 0 2px;font-size:12px;color:var(--text-muted);display:flex;gap:14px">${parts.join('')}</div>`
+  }
+  container.innerHTML = html
+}
+
+// ── Selects ──
+function renderCategorySelects() {
+  document.getElementById('f-category').innerHTML = allCategories.filter(c => c.type === currentType)
+    .map(c => `<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('')
+}
+function renderAccountSelects() {
+  document.getElementById('f-card').innerHTML = allAccounts
+    .map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+}
+function renderXfrSelects() {
+  const opts = allAccounts.map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+  document.getElementById('xfr-from').innerHTML = opts
+  document.getElementById('xfr-to').innerHTML = opts
+  if (allAccounts.length > 1) document.getElementById('xfr-to').selectedIndex = 1
+}
+
+// ── 新增/編輯交易 ──
+window.setType = function(type) {
+  currentType = type
+  const bE = document.getElementById('btn-expense')
+  const bI = document.getElementById('btn-income')
+  const bT = document.getElementById('btn-transfer-type')
+  bE.className = type === '支出' ? 'active-expense' : ''
+  bI.className = type === '收入' ? 'active-income' : ''
+  bT.className = type === '轉帳' ? 'active-income' : ''
+  document.getElementById('fields-normal').style.display = type === '轉帳' ? 'none' : 'block'
+  document.getElementById('fields-transfer').style.display = type === '轉帳' ? 'block' : 'none'
+  document.getElementById('modal-title').textContent =
+    (document.getElementById('edit-id').value ? '編輯' : '新增') + (type === '轉帳' ? '轉帳' : type)
+  if (type !== '轉帳') renderCategorySelects()
+  else {
+    // 填入帳戶選單
+    const opts = allAccounts.map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+    document.getElementById('f-xfr-from').innerHTML = opts
+    document.getElementById('f-xfr-to').innerHTML = opts
+    if (allAccounts.length > 1) document.getElementById('f-xfr-to').selectedIndex = 1
+  }
+}
+
+window.openAddModal = function(dateOverride) {
+  const fillDate = dateOverride || selectedDate || today
+  document.getElementById('edit-id').value = ''
+  document.getElementById('f-name').value = ''
+  document.getElementById('f-amount').value = ''
+  document.getElementById('f-date').value = fillDate
+  document.getElementById('f-note').value = ''
+  document.getElementById('f-xfr-amount').value = ''
+  document.getElementById('f-xfr-date').value = fillDate
+  document.getElementById('f-xfr-note').value = ''
+  document.getElementById('f-fee').value = ''
+  document.getElementById('f-xfr-fee').value = ''
+  document.getElementById('fee-section-normal').style.display = 'none'
+  document.getElementById('fee-section-transfer').style.display = 'none'
+  document.getElementById('fee-toggle-normal').textContent = '＋ 加入手續費'
+  document.getElementById('fee-toggle-transfer').textContent = '＋ 加入手續費'
+  document.getElementById('fee-total-normal').textContent = ''
+  setType('支出')
+  document.getElementById('txn-modal').classList.add('open')
+  setTimeout(() => document.getElementById('f-amount').focus(), 50)
+}
+
+window.toggleFeeSection = function(type) {
+  const sectionId = type === 'normal' ? 'fee-section-normal' : 'fee-section-transfer'
+  const toggleId = type === 'normal' ? 'fee-toggle-normal' : 'fee-toggle-transfer'
+  const section = document.getElementById(sectionId)
+  const isOpen = section.style.display !== 'none'
+  section.style.display = isOpen ? 'none' : 'block'
+  document.getElementById(toggleId).textContent = isOpen ? '＋ 加入手續費' : '－ 移除手續費'
+  if (isOpen) {
+    if (type === 'normal') { document.getElementById('f-fee').value = ''; document.getElementById('fee-total-normal').textContent = '' }
+    else document.getElementById('f-xfr-fee').value = ''
+  } else {
+    setTimeout(() => document.getElementById(type === 'normal' ? 'f-fee' : 'f-xfr-fee').focus(), 50)
+  }
+}
+
+window.updateNormalTotal = function() {
+  const base = parseInt(document.getElementById('f-amount').value) || 0
+  const fee = parseInt(document.getElementById('f-fee').value) || 0
+  const el = document.getElementById('fee-total-normal')
+  if (fee > 0 && base > 0) {
+    el.textContent = `NT$${base.toLocaleString()} + 手續費 NT$${fee.toLocaleString()} = 合計 NT$${(base + fee).toLocaleString()}`
+  } else {
+    el.textContent = ''
+  }
+}
+
+window.editTxn = function(id, name, amount, date, category, card, note, type) {
+  document.getElementById('edit-id').value = id
+  document.getElementById('f-name').value = name
+  document.getElementById('f-amount').value = amount
+  document.getElementById('f-date').value = date
+  document.getElementById('f-note').value = note
+  setType(type || '支出')
+  const cs = document.getElementById('f-category')
+  for (let i=0;i<cs.options.length;i++) if(cs.options[i].value===category){cs.selectedIndex=i;break}
+  const as = document.getElementById('f-card')
+  for (let i=0;i<as.options.length;i++) if(as.options[i].value===card){as.selectedIndex=i;break}
+  document.getElementById('txn-modal').classList.add('open')
+}
+
+window.closeTxnModal = function() { document.getElementById('txn-modal').classList.remove('open') }
+
+window.saveTxn = async function() {
+  const id = document.getElementById('edit-id').value
+
+  // 轉帳走獨立流程
+  if (currentType === '轉帳') {
+    const from_account = document.getElementById('f-xfr-from').value
+    const to_account = document.getElementById('f-xfr-to').value
+    const amount = parseInt(document.getElementById('f-xfr-amount').value)
+    const date = document.getElementById('f-xfr-date').value
+    const note = document.getElementById('f-xfr-note').value.trim() || null
+    const fee = parseInt(document.getElementById('f-xfr-fee').value) || 0
+    if (!amount || !date) { toast('請填寫金額和日期', 'error'); return }
+    if (from_account === to_account) { toast('來源與目標帳戶不能相同', 'error'); return }
+    const res = await api.addTransfer({ from_account, to_account, amount, date, note, fee })
+    if (res.ok) {
+      closeTxnModal(); toast(fee > 0 ? `轉帳記錄已建立，手續費 NT$${fee.toLocaleString()} 另計` : '轉帳記錄已建立')
+      await loadMonth()
+      if (selectedDate) renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
+      if (showMonthly) renderMonthlyTable()
+    } else toast(res.error ?? '轉帳失敗', 'error')
+    return
+  }
+
+  const category = document.getElementById('f-category').value
+  const baseAmount = parseInt(document.getElementById('f-amount').value)
+  const fee = parseInt(document.getElementById('f-fee').value) || 0
+  const data = {
+    name: document.getElementById('f-name').value.trim(),
+    amount: baseAmount + fee,
+    date: document.getElementById('f-date').value,
+    category,
+    card: document.getElementById('f-card').value,
+    type: currentType,
+    note: fee > 0 ? `含手續費 NT$${fee.toLocaleString()}` : null,
+  }
+  if (!data.amount || !data.date) { toast('請填寫金額和日期', 'error'); return }
+  const res = id ? await api.updateTransaction(id, data) : await api.addTransaction(data)
+  if (res.ok) {
+    closeTxnModal(); toast(id ? '已更新' : '已新增')
+    await loadMonth()
+    if (selectedDate) renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
+    if (showMonthly) renderMonthlyTable()
+  } else toast(res.error ?? '操作失敗', 'error')
+}
+
+window.deleteTxn = async function(id, isTransfer) {
+  const msg = isTransfer ? '這是轉帳記錄，確定要同時刪除兩筆關聯記錄？' : '確定要刪除這筆記錄？'
+  if (!confirm(msg)) return
+  const res = await api.deleteTransaction(id)
+  if (res.ok) {
+    toast('已刪除'); await loadMonth()
+    if (selectedDate) renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
+    if (showMonthly) renderMonthlyTable()
+  } else toast(res.error ?? '刪除失敗', 'error')
+}
+
+// ── 轉帳 Modal ──
+window.openTransferModal = function() {
+  document.getElementById('edit-transfer-id').value = ''
+  document.getElementById('xfr-amount').value = ''
+  document.getElementById('xfr-date').value = today
+  document.getElementById('xfr-note').value = ''
+  document.querySelector('#transfer-modal .modal-title').textContent = '↔ 帳戶轉帳'
+  document.getElementById('xfr-save-btn').textContent = '建立轉帳'
+  renderXfrSelects()
+  document.getElementById('transfer-modal').classList.add('open')
+}
+window.closeTransferModal = function() { document.getElementById('transfer-modal').classList.remove('open') }
+window.editTransfer = function(transferId) {
+  const txns = cachedTxns.filter(t => t.transfer_id === transferId)
+  const out = txns.find(t => t.type === '支出')
+  const inc = txns.find(t => t.type === '收入')
+  if (!out || !inc) { toast('找不到轉帳記錄', 'error'); return }
+  renderXfrSelects()
+  document.getElementById('edit-transfer-id').value = transferId
+  document.getElementById('xfr-from').value = out.card
+  document.getElementById('xfr-to').value = inc.card
+  document.getElementById('xfr-amount').value = String(out.amount)
+  document.getElementById('xfr-date').value = out.date
+  document.getElementById('xfr-note').value = out.note ?? ''
+  document.querySelector('#transfer-modal .modal-title').textContent = '↔ 編輯轉帳'
+  document.getElementById('xfr-save-btn').textContent = '更新轉帳'
+  document.getElementById('transfer-modal').classList.add('open')
+}
+window.saveTransfer = async function() {
+  const editId = document.getElementById('edit-transfer-id').value
+  const from_account = document.getElementById('xfr-from').value
+  const to_account = document.getElementById('xfr-to').value
+  const amount = parseInt(document.getElementById('xfr-amount').value)
+  const date = document.getElementById('xfr-date').value
+  const note = document.getElementById('xfr-note').value.trim() || null
+  if (!amount || !date) { toast('請填寫金額和日期', 'error'); return }
+  if (from_account === to_account) { toast('來源與目標帳戶不能相同', 'error'); return }
+  if (editId) {
+    const res = await api.updateTransfer(editId, { from_account, to_account, amount, date, note })
+    if (res.ok) {
+      closeTransferModal(); toast('轉帳記錄已更新')
+      await loadMonth()
+      if (selectedDate) renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
+      if (showMonthly) renderMonthlyTable()
+    } else toast(res.error ?? '更新失敗', 'error')
+  } else {
+    const res = await api.addTransfer({ from_account, to_account, amount, date, note })
+    if (res.ok) {
+      closeTransferModal(); toast('轉帳記錄已建立（兩筆）')
+      await loadMonth()
+      if (selectedDate) renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
+      if (showMonthly) renderMonthlyTable()
+    } else toast(res.error ?? '轉帳失敗', 'error')
+  }
+}
+
+window.syncGmail = async function() {
+  toast('正在同步 Gmail…')
+  const res = await api.syncGmail()
+  if (res.ok) { toast(`同步完成：新增 ${res.synced} 筆`); loadMonth() }
+  else toast(res.error ?? '同步失敗', 'error')
+}
+
+// ── 分類管理 ──
+window.openCatModal = function() {
+  renderCatList()
+  document.getElementById('new-expense-cat').value = ''
+  document.getElementById('new-income-cat').value = ''
+  document.getElementById('cat-modal').classList.add('open')
+}
+window.closeCatModal = function() { document.getElementById('cat-modal').classList.remove('open') }
+
+window.renderCatList = function() {
+  const exp = allCategories.filter(c=>c.type!=='收入').sort((a,b)=>a.sort_order-b.sort_order)
+  const inc = allCategories.filter(c=>c.type==='收入').sort((a,b)=>a.sort_order-b.sort_order)
+  function row(list,c,i) {
+    const icon = c.icon || catIcon(c.name)
+    return `<div class="cat-item" id="cat-row-${c.id}">
+      <div style="display:flex;flex-direction:column;gap:1px">
+        <button class="btn btn-secondary btn-sm" style="padding:1px 5px;font-size:10px" ${i===0?'disabled':''} onclick="moveCat('${c.id}',-1)">↑</button>
+        <button class="btn btn-secondary btn-sm" style="padding:1px 5px;font-size:10px" ${i===list.length-1?'disabled':''} onclick="moveCat('${c.id}',1)">↓</button>
+      </div>
+      <button title="點擊修改 Icon" onclick="startEditIcon('${c.id}','${escJs(icon)}')" style="font-size:20px;background:none;border:1px dashed var(--border);border-radius:6px;width:32px;height:32px;cursor:pointer;flex-shrink:0">${icon}</button>
+      <span style="flex:1;font-size:13px">${escHtml(c.name)}</span>
+      <button class="btn btn-secondary btn-sm" onclick="startEditCat('${c.id}','${escJs(c.name)}')">改名</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteCat('${c.id}','${escJs(c.name)}')">✕</button>
+    </div>`
+  }
+  let h = `<div style="font-size:11px;color:var(--text-muted);font-weight:600;padding:4px 0;border-bottom:1px solid var(--border);margin-bottom:4px">支出分類</div>`
+  h += exp.length ? exp.map((c,i)=>row(exp,c,i)).join('') : '<div class="text-muted text-small" style="padding:6px 0">尚無支出分類</div>'
+  h += `<div style="font-size:11px;color:var(--success);font-weight:600;padding:12px 0 4px;border-bottom:1px solid var(--border);margin-bottom:4px">收入分類</div>`
+  h += inc.length ? inc.map((c,i)=>row(inc,c,i)).join('') : '<div class="text-muted text-small" style="padding:6px 0">尚無收入分類</div>'
+  document.getElementById('cat-list').innerHTML = h
+}
+
+window.moveCat = async function(id,dir) {
+  const cat = allCategories.find(c=>c.id===id); if(!cat) return
+  const sibs = allCategories.filter(c=>c.type===cat.type).sort((a,b)=>a.sort_order-b.sort_order)
+  const idx = sibs.findIndex(c=>c.id===id), si=idx+dir
+  if(si<0||si>=sibs.length) return
+  const other=sibs[si]
+  if(cat.sort_order===other.sort_order) sibs.forEach((s,i)=>{s.sort_order=(i+1)*10})
+  const tmp=cat.sort_order; cat.sort_order=other.sort_order; other.sort_order=tmp
+  renderCatList(); renderCategorySelects()
+  await Promise.all([api.updateCategory(cat.id,{sort_order:cat.sort_order}),api.updateCategory(other.id,{sort_order:other.sort_order})])
+}
+window.startEditCat = function(id,name) {
+  document.getElementById('cat-row-'+id).innerHTML = `
+    <input style="flex:1;background:var(--surface2);border:1px solid var(--accent);border-radius:4px;color:var(--text);font-size:13px;padding:4px 8px" value="${escHtml(name)}" id="cei-${id}"
+      onkeydown="if(event.key==='Enter')saveCat('${id}');if(event.key==='Escape')renderCatList()">
+    <button class="btn btn-primary btn-sm" onclick="saveCat('${id}')">存</button>
+    <button class="btn btn-secondary btn-sm" onclick="renderCatList()">取消</button>`
+  const inp=document.getElementById('cei-'+id); inp.focus(); inp.select()
+}
+window.startEditIcon = function(id, currentIcon) {
+  document.getElementById('cat-row-'+id).innerHTML = `
+    <span style="font-size:12px;color:var(--text-muted)">貼上 Emoji：</span>
+    <input style="width:60px;background:var(--surface2);border:1px solid var(--accent);border-radius:4px;color:var(--text);font-size:20px;padding:3px 6px;text-align:center" value="${escHtml(currentIcon)}" id="ici-${id}" maxlength="2"
+      onkeydown="if(event.key==='Enter')saveIcon('${id}');if(event.key==='Escape')renderCatList()">
+    <button class="btn btn-primary btn-sm" onclick="saveIcon('${id}')">存</button>
+    <button class="btn btn-secondary btn-sm" onclick="renderCatList()">取消</button>`
+  const inp=document.getElementById('ici-'+id); inp.focus(); inp.select()
+}
+window.saveIcon = async function(id) {
+  const inp=document.getElementById('ici-'+id); if(!inp) return
+  const icon=inp.value.trim()
+  const res=await api.updateCategory(id, { icon: icon || null })
+  if(res.ok){
+    const c=allCategories.find(c=>c.id===id)
+    if(c) c.icon = icon || null
+    renderCatList(); renderCategorySelects(); toast('Icon 已更新')
+  } else toast(res.error??'更新失敗','error')
+}
+window.saveCat = async function(id) {
+  const inp=document.getElementById('cei-'+id); if(!inp) return
+  const name=inp.value.trim(); if(!name) return
+  const res=await api.updateCategory(id,{name})
+  if(res.ok){const c=allCategories.find(c=>c.id===id);if(c)c.name=name;renderCatList();renderCategorySelects();toast('已更新')}
+  else toast(res.error??'更新失敗','error')
+}
+window.deleteCat = async function(id,name) {
+  if(!confirm(`確定刪除分類「${name}」？`)) return
+  const res=await api.deleteCategory(id)
+  if(res.ok){allCategories=allCategories.filter(c=>c.id!==id);renderCatList();renderCategorySelects();toast(`已刪除「${name}」`)}
+  else toast(res.error??'刪除失敗','error')
+}
+window.addCategory = async function(type) {
+  const iid=type==='收入'?'new-income-cat':'new-expense-cat'
+  const name=document.getElementById(iid).value.trim(); if(!name) return
+  const sibs=allCategories.filter(c=>c.type===type)
+  const sort_order=sibs.length?Math.max(...sibs.map(c=>c.sort_order))+10:10
+  const res=await api.addCategory(name,type,sort_order)
+  if(res.ok){allCategories.push({id:res.id,name,type,sort_order,created_at:''});document.getElementById(iid).value='';renderCatList();renderCategorySelects();toast(`已新增「${name}」`)}
+  else toast(res.error??'新增失敗','error')
+}
+window.fixCategoryRecords = async function() {
+  const res = await api.fixCategoryRecords()
+  if (res.ok) {
+    toast(res.fixed > 0 ? `已修復 ${res.fixed} 筆不符合的分類` : '所有分類名稱已是最新')
+    if (res.fixed > 0) { await loadMonth(); if (showMonthly) renderMonthlyTable() }
+  } else toast('修復失敗', 'error')
+}
+
+document.getElementById('new-expense-cat').addEventListener('keydown',e=>{if(e.key==='Enter')addCategory('支出')})
+document.getElementById('new-income-cat').addEventListener('keydown',e=>{if(e.key==='Enter')addCategory('收入')})
+
+// ── 定期 Tab ──
+async function loadRecurring() {
+  const res = await api.getRecurring()
+  if (res.ok) { recItems = res.data; renderRecurring() }
+}
+
+function renderRecurring() {
+  const filtered = recItems
+  const active = filtered.filter(i => i.is_active)
+  const inactive = filtered.filter(i => !i.is_active)
+
+  const activeAndStarted = i => i.is_active && (!i.start_date || i.start_date <= today) && (!i.end_date || i.end_date >= today)
+  const monthlyExp = calcMonthlyEquiv(recItems.filter(i => activeAndStarted(i) && i.type !== '收入'))
+  const monthlyInc = calcMonthlyEquiv(recItems.filter(i => activeAndStarted(i) && i.type === '收入'))
+  const net = monthlyInc - monthlyExp
+  document.getElementById('rec-monthly-bar').innerHTML = `
+    <div class="monthly-bar-item"><div class="monthly-bar-label">月均支出</div><div class="monthly-bar-val" style="color:var(--danger)">−NT$${monthlyExp.toLocaleString()}</div></div>
+    <div class="monthly-bar-item"><div class="monthly-bar-label">月均收入</div><div class="monthly-bar-val" style="color:var(--success)">+NT$${monthlyInc.toLocaleString()}</div></div>
+    <div class="monthly-bar-item"><div class="monthly-bar-label">月均淨額</div><div class="monthly-bar-val" style="color:${net>=0?'var(--success)':'var(--danger)'}">${net>=0?'+':'−'}NT$${Math.abs(net).toLocaleString()}</div></div>
+    <div class="monthly-bar-item" style="margin-left:auto"><div class="monthly-bar-label">啟用項目</div><div class="monthly-bar-val">${active.length} 個</div></div>
+  `
+
+  const list = document.getElementById('rec-list')
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty-state"><div style="font-size:40px;margin-bottom:10px">🔄</div><div style="font-weight:600;font-size:15px;margin-bottom:6px">尚無定期項目</div><div style="font-size:13px">點選右上角「＋新增」開始設定</div></div>`
+    return
+  }
+
+  let html = ''
+  const groups = [{ label:'啟用中', items:active }, { label:'已停用', items:inactive }]
+  for (const g of groups) {
+    if (!g.items.length) continue
+    const gTotal = g.items.filter(i=>i.type!=='收入').reduce((s,i)=>s+calcMonthlyEquiv([i]),0)
+    html += `<div class="rec-group-hd"><span>${g.label}（${g.items.length}）</span>${g.label==='啟用中'&&gTotal>0?`<span style="color:var(--danger)">月均 −NT$${gTotal.toLocaleString()}</span>`:''}</div>`
+    for (const item of g.items) {
+      const isInc = item.type === '收入'
+      const daysUntil = Math.ceil((new Date(item.next_date) - new Date(today)) / 86400000)
+      const dueSoon = daysUntil <= 3 && daysUntil >= 0
+      const notStarted = item.start_date && item.start_date > today
+      const hasEnded = item.end_date && item.end_date < today
+      const dimStyle = !item.is_active ? 'opacity:0.45' : (notStarted || hasEnded ? 'opacity:0.38;filter:saturate(0.2)' : '')
+      const statusTag = notStarted
+        ? `<span style="font-size:10px;color:var(--text-muted);background:var(--surface2);border-radius:4px;padding:1px 5px">尚未開始</span>`
+        : hasEnded
+        ? `<span style="font-size:10px;color:var(--text-muted);background:var(--surface2);border-radius:4px;padding:1px 5px">已結束</span>`
+        : ''
+      const feeTag = item.fee > 0 ? `<span style="font-size:11px;color:var(--text-muted)">+ 手續費 NT$${item.fee.toLocaleString()}</span>` : ''
+      html += `<div class="rec-item" style="${dimStyle}">
+        ${resolvedCatIconHtml(item.category,40)}
+        <div class="rec-item-info">
+          <div class="rec-item-name" style="display:flex;align-items:center;gap:6px">${escHtml(item.name)}${statusTag}</div>
+          <div class="rec-item-meta">
+            ${escHtml(item.category)} · ${freqLabel(item.frequency,item.day_of_month)}${item.end_date?' · 至 '+item.end_date:''}${item.card?`<span class="rec-meta-sep"> · </span><span class="rec-meta-card">${escHtml(item.card)}</span>`:''}
+          </div>
+        </div>
+        <div class="rec-item-right">
+          <div class="rec-item-amt" style="color:${isInc?'var(--success)':'var(--danger)'}">${isInc?'+':'−'}NT$${item.amount.toLocaleString()}</div>
+          ${feeTag}
+          <div class="rec-item-next" style="${dueSoon&&!notStarted?'color:var(--warning)':''}">${dueSoon&&!notStarted?'⚠️ ':''}${notStarted?'起始 '+item.start_date:'下次 '+item.next_date}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;align-items:center">
+          <label class="switch"><input type="checkbox" ${item.is_active?'checked':''} onchange="toggleRec('${item.id}',this.checked)"><span class="slider"></span></label>
+          <button class="btn btn-secondary btn-sm" onclick="openEditRecModal('${item.id}')">編輯</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteRec('${item.id}','${escJs(item.name)}')">刪</button>
+        </div>
+      </div>`
+    }
+  }
+  list.innerHTML = html
+}
+
+function calcMonthlyEquiv(items) {
+  return Math.round(items.reduce((s,i) => {
+    if(i.frequency==='weekly') return s+i.amount*4.33
+    if(i.frequency==='yearly') return s+i.amount/12
+    return s+i.amount
+  }, 0))
+}
+
+window.toggleRec = async function(id, active) {
+  await api.updateRecurring(id, { is_active: active ? 1 : 0 })
+  const item = recItems.find(i=>i.id===id)
+  if(item) item.is_active = active ? 1 : 0
+  renderRecurring()
+}
+
+// Populate day select
+function buildDaySelect() {
+  const sel = document.getElementById('r-day')
+  sel.innerHTML = Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1} 日</option>`).join('')
+}
+
+window.setRecType = function(type) {
+  recType = type
+  document.getElementById('rec-btn-exp').className = type==='支出'?'active-expense':''
+  document.getElementById('rec-btn-inc').className = type==='收入'?'active-income':''
+  const cats = document.getElementById('r-category')
+  cats.innerHTML = allCategories.filter(c=>c.type===type).map(c=>`<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('')
+}
+
+window.onFreqChange = function() {
+  document.getElementById('r-day-group').style.display = document.getElementById('r-frequency').value==='monthly'?'block':'none'
+}
+
+function nextDateForDay(day) {
+  const now = new Date(), y=now.getFullYear(), m=now.getMonth()+1
+  const d = String(day).padStart(2,'0')
+  const cand = `${y}-${String(m).padStart(2,'0')}-${d}`
+  if(cand >= today) return cand
+  const nm=m===12?1:m+1, ny=m===12?y+1:y
+  return `${ny}-${String(nm).padStart(2,'0')}-${d}`
+}
+
+window.openRecModal = function() {
+  buildDaySelect()
+  document.getElementById('rec-edit-id').value = ''
+  document.getElementById('rec-modal-title').textContent = '新增定期支出'
+  document.getElementById('r-name').value = ''
+  document.getElementById('r-amount').value = ''
+  document.getElementById('r-fee').value = ''
+  document.getElementById('r-frequency').value = 'monthly'
+  document.getElementById('r-day').value = '1'
+  document.getElementById('r-start-date').value = nextDateForDay(1)
+  document.getElementById('r-end-date').value = ''
+  document.getElementById('r-day-group').style.display = 'block'
+  setRecType('支出')
+  document.getElementById('r-card').innerHTML = allAccounts.map(a=>`<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+  document.getElementById('rec-modal').classList.add('open')
+  setTimeout(()=>document.getElementById('r-name').focus(),50)
+}
+
+document.getElementById('r-day').addEventListener('change', function() {
+  if(document.getElementById('r-frequency').value==='monthly')
+    document.getElementById('r-start-date').value = nextDateForDay(parseInt(this.value))
+})
+
+window.openEditRecModal = function(id) {
+  buildDaySelect()
+  const item = recItems.find(i=>i.id===id); if(!item) return
+  document.getElementById('rec-edit-id').value = id
+  document.getElementById('rec-modal-title').textContent = '編輯定期支出'
+  document.getElementById('r-name').value = item.name
+  document.getElementById('r-amount').value = item.amount
+  document.getElementById('r-fee').value = item.fee ?? ''
+  document.getElementById('r-frequency').value = item.frequency
+  document.getElementById('r-day').value = item.day_of_month ?? 1
+  document.getElementById('r-start-date').value = item.start_date || item.next_date
+  document.getElementById('r-end-date').value = item.end_date ?? ''
+  document.getElementById('r-day-group').style.display = item.frequency==='monthly'?'block':'none'
+  setRecType(item.type)
+  document.getElementById('r-card').innerHTML = allAccounts.map(a=>`<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+  const cs=document.getElementById('r-category')
+  for(let i=0;i<cs.options.length;i++) if(cs.options[i].value===item.category){cs.selectedIndex=i;break}
+  const as=document.getElementById('r-card')
+  for(let i=0;i<as.options.length;i++) if(as.options[i].value===item.card){as.selectedIndex=i;break}
+  document.getElementById('rec-modal').classList.add('open')
+}
+
+window.closeRecModal = function() { document.getElementById('rec-modal').classList.remove('open') }
+
+window.saveRecurring = async function() {
+  const id = document.getElementById('rec-edit-id').value
+  const freq = document.getElementById('r-frequency').value
+  const day = parseInt(document.getElementById('r-day').value)
+  const startDate = document.getElementById('r-start-date').value
+  const endDate = document.getElementById('r-end-date').value || null
+  const data = {
+    name: document.getElementById('r-name').value.trim(),
+    amount: parseInt(document.getElementById('r-amount').value),
+    fee: parseInt(document.getElementById('r-fee').value) || 0,
+    type: recType,
+    category: document.getElementById('r-category').value,
+    card: document.getElementById('r-card').value,
+    frequency: freq,
+    day_of_month: freq==='monthly'?day:1,
+    start_date: startDate,
+    next_date: startDate,
+    end_date: endDate,
+  }
+  if(!data.name||!data.amount||!data.start_date){toast('請填寫名稱、金額和起始日期','error');return}
+  // 編輯時：若起始日期沒改，保留原本的 next_date，避免重複生成
+  if (id) {
+    const orig = recItems.find(i => i.id === id)
+    const origStart = orig?.start_date || orig?.next_date
+    if (orig && startDate === origStart) {
+      data.next_date = orig.next_date  // 起始日期未改，保留原 next_date
+    }
+  }
+  const res = id ? await api.updateRecurring(id,data) : await api.addRecurring(data)
+  if(res.ok){
+    closeRecModal(); toast(id?'已更新':'已新增')
+    const rr=await api.getRecurring()
+    if(rr.ok){recItems=rr.data;renderRecurring()}
+  } else toast(res.error??'操作失敗','error')
+}
+
+window.deleteRec = async function(id,name) {
+  if(!confirm(`確定要刪除「${name}」？`)) return
+  const res=await api.deleteRecurring(id)
+  if(res.ok){toast(`已刪除「${name}」`);recItems=recItems.filter(i=>i.id!==id);renderRecurring()}
+  else toast(res.error??'刪除失敗','error')
+}
+
+window.triggerRecurring = async function() {
+  const res = await api.processRecurring()
+  if (res.ok) {
+    if (res.count > 0) {
+      toast(`已生成 ${res.count} 筆定期記錄`)
+      await loadMonth()
+    } else {
+      toast('目前沒有到期的定期項目')
+    }
+    const rr = await api.getRecurring()
+    if (rr.ok) { recItems = rr.data; renderRecurring() }
+  } else toast(res.error ?? '生成失敗', 'error')
+}
+
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function escJs(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
+
+init()
+
+document.getElementById('nav-add-btn').addEventListener('click', e => {
+  e.preventDefault()
+  const date = selectedDate || today
+  location.href = '/add.html' + (date ? '?date=' + date : '')
+})
+</script>
+
+<nav class="bottom-nav">
+  <a href="/" class="bottom-nav-item"><span class="nav-icon">🏠</span><span>總覽</span></a>
+  <a href="/transactions.html" class="bottom-nav-item active"><span class="nav-icon">📋</span><span>記錄</span></a>
+  <a href="/add.html" class="bottom-nav-item add-center" id="nav-add-btn"><span class="nav-icon">+</span></a>
+  <a href="/reconcile.html" class="bottom-nav-item"><span class="nav-icon">🔍</span><span>對帳</span></a>
+  <a href="/investments.html" class="bottom-nav-item"><span class="nav-icon">📈</span><span>投資</span></a>
+</nav>
+</body>
+</html>

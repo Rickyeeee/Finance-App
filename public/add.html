@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>新增記錄 — 瑞奇財務</title>
+<link rel="manifest" href="/add-manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="新增記錄">
+<meta name="theme-color" content="#0d1117">
+<link rel="apple-touch-icon" href="/icons/add-icon.svg">
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface2: #21262d;
+    --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+    --accent: #58a6ff; --success: #3fb950; --danger: #f85149;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+
+  #app { display: flex; flex-direction: column;
+    height: 100vh; height: 100svh;
+    padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+
+  .topbar { display: flex; align-items: center; justify-content: space-between;
+    padding: calc(max(12px, env(safe-area-inset-top)) + 4px) 20px 14px;
+    flex-shrink: 0; }
+  .topbar-title { font-size: 17px; font-weight: 600; }
+  .topbar-close { background: var(--surface2); border: none; color: var(--muted);
+    width: 30px; height: 30px; border-radius: 50%; font-size: 15px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; text-decoration: none; }
+
+  .step-dots { display: flex; gap: 6px; align-items: center; justify-content: center;
+    padding-bottom: 18px; flex-shrink: 0; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); transition: all 0.2s; }
+  .dot.active { background: var(--accent); width: 18px; border-radius: 3px; }
+  .dot.done { background: var(--success); }
+
+  .slides { flex: 1; position: relative; overflow: hidden; }
+  .slide { position: absolute; inset: 0; padding: 0 24px 12px;
+    display: flex; flex-direction: column;
+    transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    will-change: transform; overflow: hidden; }
+  .slide.active { transform: translateX(0); }
+  .slide.past { transform: translateX(-100%); }
+
+  /* Amount */
+  .amount-display { display: flex; flex-direction: column; align-items: center;
+    justify-content: center; flex: 1; gap: 4px; min-height: 0; }
+  .amount-label { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .amount-expr { font-size: 13px; color: var(--muted); min-height: 18px; margin-top: 2px; }
+  .amount-value { font-size: 52px; font-weight: 300; letter-spacing: -2px;
+    display: flex; align-items: center; }
+  .amount-currency { font-size: 26px; color: var(--muted); margin-right: 4px; }
+  .amount-value.zero span.amt-num { color: var(--border); }
+
+  /* Calculator */
+  .calc-pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+    padding: 8px 0; flex-shrink: 0; }
+  .ck-btn { background: var(--surface); border: none; color: var(--text);
+    border-radius: 12px; font-size: 22px; cursor: pointer;
+    height: 58px; display: flex; align-items: center; justify-content: center;
+    transition: opacity 0.08s; user-select: none; font-family: inherit; }
+  .ck-btn:active { opacity: 0.5; }
+  .ck-op  { background: var(--surface2); color: #cdd9e5; font-size: 20px; }
+  .ck-del { background: var(--surface2); color: var(--muted); font-size: 18px; }
+  .ck-clr { background: var(--surface2); color: var(--danger); font-size: 16px; font-weight: 600; }
+  .ck-eq  { background: var(--surface2); color: #cdd9e5; }
+  .ck-ok  { background: var(--accent); color: #0d1117; font-size: 20px; font-weight: 700; }
+
+  /* Type + Category (Step 2) */
+  .type-tabs { display: flex; gap: 8px; flex-shrink: 0; margin-bottom: 0; }
+  .type-tab { flex: 1; background: var(--surface); border: 2px solid var(--border);
+    border-radius: 12px; color: var(--muted); font-size: 15px; font-weight: 600;
+    padding: 12px 8px; cursor: pointer; text-align: center; transition: all 0.15s;
+    font-family: inherit; }
+  .type-tab:active { transform: scale(0.96); }
+  .type-tab.active-expense  { border-color: var(--danger);  background: rgba(248,81,73,0.1);  color: var(--danger); }
+  .type-tab.active-income   { border-color: var(--success); background: rgba(63,185,80,0.1);  color: var(--success); }
+  .type-tab.active-transfer { border-color: #d07030;        background: rgba(208,112,48,0.1); color: #d07030; }
+
+  .cat-section { flex: 1; overflow: hidden; display: flex; flex-direction: column; margin-top: 16px; }
+  .cat-hint { font-size: 13px; color: var(--muted); margin-bottom: 12px; flex-shrink: 0; }
+  .choose-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+    overflow-y: auto; flex: 1; padding-bottom: 4px; align-content: start; }
+  .choose-btn { background: var(--surface); border: 2px solid var(--border);
+    border-radius: 12px; color: var(--text); font-size: 15px; font-weight: 500;
+    padding: 16px 10px; cursor: pointer; text-align: center; transition: all 0.12s;
+    font-family: inherit; }
+  .choose-btn:active { transform: scale(0.96); }
+  .choose-btn.selected { border-color: var(--accent); background: rgba(88,166,255,0.1); color: var(--accent); }
+  .cat-placeholder { flex: 1; display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 14px; }
+
+  /* Name / Date */
+  .step-label { font-size: 22px; font-weight: 600; margin-bottom: 6px; flex-shrink: 0; }
+  .step-sub { font-size: 14px; color: var(--muted); margin-bottom: 20px; flex-shrink: 0; }
+  .name-wrap { flex: 1; display: flex; flex-direction: column; justify-content: center;
+    max-width: 100%; overflow: hidden; }
+  .big-input { background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: 14px; color: var(--text); font-size: 18px; padding: 16px 18px;
+    width: 100%; font-family: inherit; transition: border-color 0.15s; }
+  .big-input:focus { outline: none; border-color: var(--accent); }
+  .date-input { display: block; width: 100%; width: -webkit-fill-available;
+    box-sizing: border-box; max-width: 100%; color-scheme: dark;
+    margin-top: 12px; text-align: left; }
+  .field-label { font-size: 13px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
+
+  /* Account */
+  .summary-card { background: var(--surface); border-radius: 12px; padding: 14px 16px;
+    margin-bottom: 14px; border: 1px solid var(--border); flex-shrink: 0; }
+  .summary-row { display: flex; justify-content: space-between; padding: 4px 0;
+    font-size: 13px; border-bottom: 1px solid var(--border); }
+  .summary-row:last-child { border-bottom: none; }
+  .summary-row .key { color: var(--muted); }
+  .summary-row .val { font-weight: 600; }
+
+  /* Nav */
+  .bottom-nav { display: flex; gap: 10px; padding: 10px 0 0; flex-shrink: 0; }
+  .btn-back { background: var(--surface); border: 1.5px solid var(--border);
+    color: var(--text); border-radius: 14px; font-size: 15px; font-weight: 600;
+    padding: 15px 18px; cursor: pointer; font-family: inherit; }
+  .btn-back:active { background: var(--surface2); }
+  .btn-next { flex: 1; background: var(--accent); border: none; color: #0d1117;
+    border-radius: 14px; font-size: 16px; font-weight: 700;
+    padding: 15px; cursor: pointer; font-family: inherit; }
+  .btn-next:active { opacity: 0.85; }
+  .btn-next:disabled { opacity: 0.35; pointer-events: none; }
+  .btn-skip { background: transparent; border: 1.5px solid var(--border);
+    color: var(--muted); border-radius: 14px; font-size: 15px; font-weight: 500;
+    padding: 15px 16px; cursor: pointer; font-family: inherit; }
+  .btn-skip:active { background: var(--surface); }
+
+  /* Success */
+  .success-screen { flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 10px; }
+  .success-icon { font-size: 64px; margin-bottom: 6px; }
+  .success-title { font-size: 24px; font-weight: 700; }
+  .success-detail { font-size: 15px; color: var(--muted); text-align: center; }
+  .success-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; margin-top: 28px; padding: 0 24px; }
+  .btn-again { background: var(--accent); border: none; color: #0d1117; border-radius: 14px;
+    font-size: 16px; font-weight: 700; padding: 16px; cursor: pointer; font-family: inherit; }
+  .btn-app { background: var(--surface); border: 1.5px solid var(--border); color: var(--text);
+    border-radius: 14px; font-size: 16px; font-weight: 600; padding: 16px; cursor: pointer;
+    font-family: inherit; text-decoration: none; display: block; text-align: center; }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type="number"] { -moz-appearance: textfield; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-title" id="topbar-title">新增記錄</div>
+    <a href="/transactions.html" class="topbar-close">✕</a>
+  </div>
+  <div class="step-dots" id="dots"></div>
+
+  <div class="slides">
+
+    <!-- Step 1: 金額 -->
+    <div class="slide active" id="s1">
+      <div class="amount-display">
+        <div class="amount-label">輸入金額</div>
+        <div class="amount-value zero" id="amt-display">
+          <span class="amount-currency">NT$</span>
+          <span class="amt-num" id="amt-text">0</span>
+        </div>
+        <div class="amount-expr" id="amt-expr"></div>
+      </div>
+      <div class="calc-pad">
+        <button class="ck-btn ck-op"  onclick="ck('÷')">÷</button>
+        <button class="ck-btn ck-op"  onclick="ck('×')">×</button>
+        <button class="ck-btn ck-op"  onclick="ck('-')">−</button>
+        <button class="ck-btn ck-op"  onclick="ck('+')">+</button>
+        <button class="ck-btn"        onclick="ck('7')">7</button>
+        <button class="ck-btn"        onclick="ck('8')">8</button>
+        <button class="ck-btn"        onclick="ck('9')">9</button>
+        <button class="ck-btn ck-del" onclick="ck('⌫')">⌫</button>
+        <button class="ck-btn"        onclick="ck('4')">4</button>
+        <button class="ck-btn"        onclick="ck('5')">5</button>
+        <button class="ck-btn"        onclick="ck('6')">6</button>
+        <button class="ck-btn ck-clr" onclick="ck('C')">C</button>
+        <button class="ck-btn"        onclick="ck('1')">1</button>
+        <button class="ck-btn"        onclick="ck('2')">2</button>
+        <button class="ck-btn"        onclick="ck('3')">3</button>
+        <button class="ck-btn ck-eq"  onclick="ck('=')">＝</button>
+        <button class="ck-btn"        onclick="ck('.')">.</button>
+        <button class="ck-btn"        onclick="ck('0')">0</button>
+        <button class="ck-btn"        onclick="ck('00')">00</button>
+        <button class="ck-btn ck-ok"  onclick="ck('✓')">✓</button>
+      </div>
+    </div>
+
+    <!-- Step 2: 類型 + 分類 -->
+    <div class="slide" id="s2">
+      <div class="type-tabs">
+        <button class="type-tab" id="tab-expense"  onclick="selectType('支出')">支出</button>
+        <button class="type-tab" id="tab-income"   onclick="selectType('收入')">收入</button>
+        <button class="type-tab" id="tab-transfer" onclick="selectType('轉帳')">轉帳</button>
+      </div>
+      <div class="cat-section">
+        <div class="cat-placeholder" id="cat-placeholder">選擇類型後顯示分類</div>
+        <div id="cat-grid-wrap" style="display:none;flex:1;overflow:hidden;display:none;flex-direction:column;">
+          <div class="cat-hint">點選分類後自動進入下一步</div>
+          <div class="choose-grid" id="cat-grid"></div>
+        </div>
+      </div>
+      <div class="bottom-nav">
+        <button class="btn-back" onclick="goTo(1)">‹</button>
+        <button class="btn-next" id="btn-s2-next" disabled onclick="goTo(3)">下一步</button>
+      </div>
+    </div>
+
+    <!-- Step 3: 名稱+日期（支出/收入）or 日期+備註（轉帳） -->
+    <div class="slide" id="s3">
+      <div id="s3-normal" style="flex:1;display:flex;flex-direction:column;">
+        <div class="name-wrap">
+          <div class="step-label">這筆叫什麼？</div>
+          <div class="step-sub">選填</div>
+          <input class="big-input" type="text" id="inp-name" placeholder="例：全家、Uber Eats、診所"
+            autocomplete="off" autocorrect="off" spellcheck="false">
+          <input type="date" class="big-input date-input" id="inp-date">
+        </div>
+        <div class="bottom-nav">
+          <button class="btn-back" onclick="goTo(2)">‹</button>
+          <button class="btn-skip" onclick="goTo(4)">跳過</button>
+          <button class="btn-next" onclick="goTo(4)">下一步</button>
+        </div>
+      </div>
+      <div id="s3-xfr" style="display:none;flex:1;flex-direction:column;">
+        <div class="name-wrap">
+          <div class="step-label">日期與備註</div>
+          <div class="field-label" style="margin-top:0">日期</div>
+          <input type="date" class="big-input date-input" id="xfr-date" style="margin-top:0">
+          <div class="field-label" style="margin-top:16px">備註（選填）</div>
+          <input class="big-input" type="text" id="xfr-note" placeholder="備註"
+            autocomplete="off" autocorrect="off" spellcheck="false" style="margin-top:0">
+        </div>
+        <div class="bottom-nav">
+          <button class="btn-back" onclick="goTo(2)">‹</button>
+          <button class="btn-next" onclick="goTo(4)">下一步</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: 帳戶（支出/收入）or 轉出帳戶（轉帳） -->
+    <div class="slide" id="s4">
+      <div id="s4-acc" style="flex:1;display:flex;flex-direction:column;">
+        <div class="step-label">選擇帳戶</div>
+        <div class="step-sub">點選後送出記錄</div>
+        <div class="summary-card" id="summary-preview"></div>
+        <div class="choose-grid" id="acc-grid" style="flex:1"></div>
+        <div class="bottom-nav">
+          <button class="btn-back" onclick="goTo(3)">‹</button>
+        </div>
+      </div>
+      <div id="s4-from" style="display:none;flex:1;flex-direction:column;">
+        <div class="step-label">轉出帳戶</div>
+        <div class="step-sub">從哪個帳戶轉出？</div>
+        <div class="choose-grid" id="from-grid" style="flex:1"></div>
+        <div class="bottom-nav">
+          <button class="btn-back" onclick="goTo(3)">‹</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5: 轉入帳戶（轉帳限定） -->
+    <div class="slide" id="s5">
+      <div class="step-label">轉入帳戶</div>
+      <div class="step-sub">點選後送出轉帳記錄</div>
+      <div class="summary-card" id="xfr-summary-preview"></div>
+      <div class="choose-grid" id="to-grid" style="flex:1"></div>
+      <div class="bottom-nav">
+        <button class="btn-back" onclick="goTo(4)">‹</button>
+      </div>
+    </div>
+
+    <!-- Success -->
+    <div class="slide" id="s-success">
+      <div class="success-screen">
+        <div class="success-icon">✅</div>
+        <div class="success-title">已新增！</div>
+        <div class="success-detail" id="success-detail"></div>
+      </div>
+      <div class="success-actions">
+        <button class="btn-again" onclick="reset()">再新增一筆</button>
+        <a href="/transactions.html" class="btn-app">開啟消費記錄</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+const BASE = 'https://ricky-finance.ke877857.workers.dev'
+const _token = localStorage.getItem('ricky_finance_token') ?? ''
+
+let cats = [], incomeCats = [], accs = []
+let form = { type: '', amount: 0, name: '', date: '', category: '', card: '', note: '', toCard: '' }
+let amtExpr = ''
+
+const CAT_ICON_MAP = {
+  '餐飲':'🍜','餐廳':'🍽️','外食':'🍱','飲食':'🥡','飲料':'🧋','咖啡':'☕','早餐':'🥞','午餐':'🥘','晚餐':'🍲',
+  '交通':'🚇','捷運':'🚇','公車':'🚌','計程車':'🚕','停車':'🅿️','加油':'⛽','Uber':'🚗','高鐵':'🚅',
+  '購物':'🛍️','衣物':'👔','服飾':'👗','網購':'📦','百貨':'🏬',
+  '娛樂':'🎮','電影':'🎬','音樂':'🎵','遊戲':'🎯','KTV':'🎤',
+  '醫療':'💊','健康':'🏥','藥局':'💊','看診':'🩺',
+  '房租':'🏠','水電':'💡','瓦斯':'🔥','網路':'📡','住宿':'🛏️',
+  '訂閱':'📱','軟體':'💻','App':'📲','Netflix':'🎬','Spotify':'🎵','Disney':'🎬',
+  '教育':'📚','書籍':'📖','課程':'🎓','文具':'✏️',
+  '旅遊':'✈️','飯店':'🏨','景點':'🗺️',
+  '保險':'🛡️','美容':'💄','美髮':'✂️','保養':'🧴','寵物':'🐾',
+  '禮品':'🎁','禮物':'🎁','運動':'🏃','健身':'🏋️',
+  '超商':'🏪','全家':'🏪','7-11':'🏪','萊爾富':'🏪',
+  '薪資':'💰','薪水':'💰','獎金':'🎉',
+  '投資':'📈','股票':'📊','基金':'💹','配息':'💹',
+  '租金收入':'🏠','副業':'💼','轉帳':'💸','還款':'💸','其他':'📦',
+}
+function fallbackIcon(name) {
+  const key = Object.keys(CAT_ICON_MAP).find(k => name.includes(k))
+  return key ? CAT_ICON_MAP[key] : '📦'
+}
+function resolveIcon(c) { return c.icon || fallbackIcon(c.name) }
+
+const urlDate = new URLSearchParams(location.search).get('date')
+const todayTW = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
+const defaultDate = urlDate || todayTW
+form.date = defaultDate
+
+renderDots(1)
+
+fetch(BASE + '/api/shortcut/data', { headers: { 'Authorization': 'Bearer ' + _token } })
+  .then(r => r.json()).then(d => {
+    cats       = d.expense_category_objects  ?? (d.expense_categories  ?? []).map(n => ({ name: n, icon: null }))
+    incomeCats = d.income_category_objects   ?? (d.income_categories   ?? []).map(n => ({ name: n, icon: null }))
+    accs = d.accounts ?? []
+    renderAccs()
+    renderXfrAccs()
+  })
+
+// ── Dots ──
+function renderDots(n) {
+  const el = document.getElementById('dots')
+  const total = form.type === '轉帳' ? 5 : 4
+  if (n === 1) { el.innerHTML = ''; return }
+  let h = ''
+  for (let i = 2; i <= total; i++) {
+    h += `<div class="dot ${i < n ? 'done' : i === n ? 'active' : ''}"></div>`
+  }
+  el.innerHTML = h
+}
+
+// ── Slide ──
+const slideIds = { 1:'s1', 2:'s2', 3:'s3', 4:'s4', 5:'s5', success:'s-success' }
+
+window.goTo = function(n) {
+  // 準備各 step 的子區塊
+  if (n === 3) {
+    const isXfr = form.type === '轉帳'
+    document.getElementById('s3-normal').style.display = isXfr ? 'none' : 'flex'
+    document.getElementById('s3-xfr').style.display    = isXfr ? 'flex' : 'none'
+    if (!isXfr) document.getElementById('inp-date').value = form.date
+    else        document.getElementById('xfr-date').value = form.date
+  }
+  if (n === 4) {
+    const isXfr = form.type === '轉帳'
+    if (!isXfr) {
+      form.name = document.getElementById('inp-name').value.trim()
+      form.date = document.getElementById('inp-date').value || defaultDate
+      renderSummary()
+    } else {
+      form.note = document.getElementById('xfr-note').value.trim()
+      form.date = document.getElementById('xfr-date').value || defaultDate
+    }
+    document.getElementById('s4-acc').style.display  = isXfr ? 'none' : 'flex'
+    document.getElementById('s4-from').style.display = isXfr ? 'flex' : 'none'
+  }
+  if (n === 5 && form.type === '轉帳') {
+    renderXfrSummary()
+  }
+
+  Object.entries(slideIds).forEach(([k, id]) => {
+    const el = document.getElementById(id)
+    const ki = parseInt(k)
+    el.classList.remove('active', 'past')
+    if (!isNaN(ki)) {
+      if (ki < n) el.classList.add('past')
+      else if (ki === n) el.classList.add('active')
+    }
+  })
+  if (n === 'success') document.getElementById('s-success').classList.add('active')
+  if (typeof n === 'number') renderDots(n)
+  if (n === 3 && form.type !== '轉帳') setTimeout(() => document.getElementById('inp-name').focus(), 350)
+}
+
+// ── Type select ──
+window.selectType = function(type) {
+  form.type = type
+  // 更新 tab 樣式
+  document.getElementById('tab-expense').className  = 'type-tab' + (type === '支出' ? ' active-expense'  : '')
+  document.getElementById('tab-income').className   = 'type-tab' + (type === '收入' ? ' active-income'   : '')
+  document.getElementById('tab-transfer').className = 'type-tab' + (type === '轉帳' ? ' active-transfer' : '')
+  document.getElementById('topbar-title').textContent = '新增' + type
+
+  if (type === '轉帳') {
+    // 轉帳無分類，直接可進下一步
+    document.getElementById('cat-placeholder').style.display = 'flex'
+    document.getElementById('cat-placeholder').textContent = '轉帳無需選擇分類'
+    document.getElementById('cat-grid-wrap').style.display = 'none'
+    document.getElementById('btn-s2-next').disabled = false
+  } else {
+    // 顯示對應分類
+    const list = type === '支出' ? cats : incomeCats
+    document.getElementById('cat-placeholder').style.display = 'none'
+    document.getElementById('cat-grid-wrap').style.display = 'flex'
+    document.getElementById('cat-grid-wrap').style.flexDirection = 'column'
+    form.category = ''
+    document.getElementById('btn-s2-next').disabled = true
+    const grid = document.getElementById('cat-grid')
+    if (!list.length) {
+      grid.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:20px 0;grid-column:span 2">尚無分類</div>'
+    } else {
+      grid.innerHTML = list.map(c => {
+        const icon = resolveIcon(c)
+        return `<button class="choose-btn" data-name="${esc(c.name)}" onclick="selectCat('${esc(c.name)}')" style="text-align:left;display:flex;align-items:center;gap:8px"><span style="font-size:20px;flex-shrink:0">${icon}</span><span>${c.name}</span></button>`
+      }).join('')
+    }
+  }
+}
+
+window.selectCat = function(cat) {
+  form.category = cat
+  document.querySelectorAll('#cat-grid .choose-btn').forEach(b =>
+    b.classList.toggle('selected', b.dataset.name === cat))
+  document.getElementById('btn-s2-next').disabled = false
+  document.getElementById('inp-date').value = form.date
+  setTimeout(() => goTo(3), 160)
+}
+
+// ── Calculator ──
+function hasOp(e) { return /[+\-×÷]/.test(e.slice(1)) }
+function evalExpr(e) {
+  if (!e || !e.trim()) return null
+  const safe = e.replace(/×/g, '*').replace(/÷/g, '/')
+  if (!/^[\d+\-*/.()\s]+$/.test(safe)) return null
+  try {
+    const r = Function('"use strict"; return (' + safe + ')')()
+    if (!isFinite(r) || isNaN(r)) return null
+    return Math.round(r * 100) / 100
+  } catch { return null }
+}
+
+function refreshAmt() {
+  const num = hasOp(amtExpr) ? (evalExpr(amtExpr) ?? 0) : (parseFloat(amtExpr) || 0)
+  document.getElementById('amt-text').textContent = num ? num.toLocaleString() : '0'
+  document.getElementById('amt-display').className = 'amount-value' + (num ? '' : ' zero')
+  if (hasOp(amtExpr)) {
+    const r = evalExpr(amtExpr)
+    document.getElementById('amt-expr').textContent = amtExpr + (r !== null ? ' = ' + r.toLocaleString() : '')
+  } else {
+    document.getElementById('amt-expr').textContent = ''
+  }
+  form.amount = num
+}
+
+window.ck = function(v) {
+  if (v === '⌫') { amtExpr = amtExpr.slice(0, -1) }
+  else if (v === 'C') { amtExpr = '' }
+  else if (v === '=') { const r = evalExpr(amtExpr); if (r !== null) amtExpr = String(r) }
+  else if (v === '✓') {
+    if (hasOp(amtExpr)) { const r = evalExpr(amtExpr); if (r !== null) { amtExpr = String(r); refreshAmt() } }
+    if (form.amount > 0) goTo(2)
+    return
+  } else if (['+', '-', '×', '÷'].includes(v)) {
+    if (!amtExpr) return
+    if (/[+\-×÷]$/.test(amtExpr)) amtExpr = amtExpr.slice(0, -1) + v
+    else { const r = evalExpr(amtExpr); amtExpr = (r !== null ? String(r) : amtExpr) + v }
+  } else if (v === '.') {
+    const parts = amtExpr.split(/[+\-×÷]/)
+    if (!parts[parts.length - 1].includes('.')) amtExpr += '.'
+  } else if (v === '00') {
+    if (amtExpr && !/[+\-×÷]$/.test(amtExpr)) amtExpr += '00'
+  } else { amtExpr += v }
+  refreshAmt()
+}
+
+// ── Summary ──
+function renderSummary() {
+  document.getElementById('summary-preview').innerHTML = `
+    <div class="summary-row"><span class="key">類型</span><span class="val">${form.type}</span></div>
+    <div class="summary-row"><span class="key">日期</span><span class="val">${form.date}</span></div>
+    <div class="summary-row"><span class="key">分類</span><span class="val">${form.category}</span></div>
+    <div class="summary-row"><span class="key">金額</span><span class="val">NT$${form.amount.toLocaleString()}</span></div>
+    ${form.name ? `<div class="summary-row"><span class="key">名稱</span><span class="val">${form.name}</span></div>` : ''}
+  `
+}
+
+function renderXfrSummary() {
+  document.getElementById('xfr-summary-preview').innerHTML = `
+    <div class="summary-row"><span class="key">金額</span><span class="val">NT$${form.amount.toLocaleString()}</span></div>
+    <div class="summary-row"><span class="key">日期</span><span class="val">${form.date}</span></div>
+    <div class="summary-row"><span class="key">轉出</span><span class="val">${form.card}</span></div>
+    ${form.note ? `<div class="summary-row"><span class="key">備註</span><span class="val">${form.note}</span></div>` : ''}
+  `
+}
+
+// ── Accounts ──
+function renderAccs() {
+  const grid = document.getElementById('acc-grid')
+  if (!accs.length) { grid.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:20px 0;grid-column:span 2">尚無帳戶資料</div>'; return }
+  grid.innerHTML = accs.map(a => `<button class="choose-btn" onclick="selectAcc('${esc(a)}')">${a}</button>`).join('')
+}
+
+window.selectAcc = async function(acc) {
+  form.card = acc
+  document.querySelectorAll('#acc-grid .choose-btn').forEach(b => b.classList.toggle('selected', b.textContent === acc))
+  await submitNormal()
+}
+
+function renderXfrAccs() {
+  const html = accs.length
+    ? accs.map(a => `<button class="choose-btn">${a}</button>`).join('')
+    : '<div style="color:var(--muted);font-size:14px;padding:20px 0;grid-column:span 2">尚無帳戶資料</div>'
+  document.getElementById('from-grid').innerHTML = accs.map(a =>
+    `<button class="choose-btn" onclick="selectFrom('${esc(a)}')">${a}</button>`).join('') || html
+  document.getElementById('to-grid').innerHTML = accs.map(a =>
+    `<button class="choose-btn" onclick="selectTo('${esc(a)}')">${a}</button>`).join('') || html
+}
+
+window.selectFrom = function(acc) {
+  form.card = acc
+  document.querySelectorAll('#from-grid .choose-btn').forEach(b => b.classList.toggle('selected', b.textContent === acc))
+  renderXfrSummary()
+  setTimeout(() => goTo(5), 160)
+}
+
+window.selectTo = async function(acc) {
+  if (acc === form.card) { alert('轉出與轉入帳戶不能相同'); return }
+  form.toCard = acc
+  document.querySelectorAll('#to-grid .choose-btn').forEach(b => b.classList.toggle('selected', b.textContent === acc))
+  await submitTransfer()
+}
+
+// ── Submit ──
+async function submitNormal() {
+  try {
+    const res = await fetch(BASE + '/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _token },
+      body: JSON.stringify({
+        name: form.name, amount: form.amount, date: form.date,
+        category: form.category, card: form.card,
+        type: form.type, status: '待確認', source: '手動輸入',
+      }),
+    })
+    const json = await res.json()
+    if (json.ok) {
+      document.getElementById('success-detail').textContent =
+        `${form.type} NT$${form.amount.toLocaleString()}${form.name ? ' — ' + form.name : ''}`
+      goTo('success')
+    } else { alert('新增失敗：' + (json.error ?? '未知錯誤')) }
+  } catch { alert('網路錯誤，請重試') }
+}
+
+async function submitTransfer() {
+  try {
+    const res = await fetch(BASE + '/api/transfers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _token },
+      body: JSON.stringify({
+        from_account: form.card, to_account: form.toCard,
+        amount: form.amount, date: form.date, note: form.note || null,
+      }),
+    })
+    const json = await res.json()
+    if (json.ok) {
+      document.getElementById('success-detail').textContent =
+        `轉帳 NT$${form.amount.toLocaleString()} ${form.card} → ${form.toCard}`
+      goTo('success')
+    } else { alert('新增失敗：' + (json.error ?? '未知錯誤')) }
+  } catch { alert('網路錯誤，請重試') }
+}
+
+// ── Reset ──
+window.reset = function() {
+  const newTW = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
+  form = { type: '', amount: 0, name: '', date: newTW, category: '', card: '', note: '', toCard: '' }
+  amtExpr = ''
+  document.getElementById('amt-text').textContent = '0'
+  document.getElementById('amt-display').className = 'amount-value zero'
+  document.getElementById('amt-expr').textContent = ''
+  document.getElementById('inp-name').value = ''
+  document.getElementById('inp-date').value = newTW
+  document.getElementById('xfr-note').value = ''
+  document.getElementById('topbar-title').textContent = '新增記錄'
+  document.querySelectorAll('.choose-btn').forEach(b => b.classList.remove('selected'))
+  document.getElementById('tab-expense').className = 'type-tab'
+  document.getElementById('tab-income').className  = 'type-tab'
+  document.getElementById('tab-transfer').className= 'type-tab'
+  document.getElementById('cat-placeholder').style.display = 'flex'
+  document.getElementById('cat-placeholder').textContent = '選擇類型後顯示分類'
+  document.getElementById('cat-grid-wrap').style.display = 'none'
+  document.getElementById('btn-s2-next').disabled = true
+  goTo(1)
+}
+
+function esc(s) { return String(s).replace(/'/g, "\\'") }
+</script>
+</body>
+</html>

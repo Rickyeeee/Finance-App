@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>信用卡對帳 — 瑞奇財務</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="瑞奇財務">
+<meta name="theme-color" content="#161b22">
+<link rel="apple-touch-icon" href="/icons/icon.svg">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.rec-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  margin: 20px 0 10px;
+}
+
+/* 信用卡列 */
+.cc-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.cc-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.cc-card-name { font-weight: 600; font-size: 15px; }
+.cc-card-rows { display: flex; flex-direction: column; gap: 6px; }
+.cc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+.cc-row-label { color: var(--text-muted); }
+.cc-card-footer {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 帳戶列表 */
+.acct-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(48,54,61,.5);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.acct-row:last-child { border-bottom: none; }
+.acct-row:active { opacity: .7; }
+.acct-row-icon {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--surface2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+}
+.acct-row-info { flex: 1; min-width: 0; }
+.acct-row-name { font-size: 14px; font-weight: 500; }
+.acct-row-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.acct-row-balance { font-size: 14px; font-weight: 600; text-align: right; flex-shrink: 0; }
+
+/* ── 對帳 Modal ── */
+#rec-modal {
+  position: fixed; inset: 0;
+  z-index: 300;
+  display: none;
+  overscroll-behavior: contain;
+}
+#rec-modal.open { display: flex; }
+
+/* 浮動視窗：四面留邊，觸碰不穿透背景 */
+#rec-modal, #acct-view-modal {
+  background: rgba(0,0,0,.65);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* overlay padding 同時處理動態島（上）和 Home 條（下）安全區 */
+  padding: max(env(safe-area-inset-top) + 10px, 24px) 16px max(env(safe-area-inset-bottom) + 10px, 24px);
+  touch-action: none;
+}
+.rec-modal-inner, .acct-view-inner {
+  display: flex; flex-direction: column;
+  background: #0d1117;
+  width: 100%;
+  /* 撐滿 overlay 內可用高度，最高 720px；清單在裡面滾動 */
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 720px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 32px rgba(0,0,0,.6);
+}
+
+/* 桌面：更寬的浮動視窗 */
+@media (min-width: 769px) {
+  #rec-modal, #acct-view-modal {
+    backdrop-filter: blur(3px);
+    padding: 40px;
+    touch-action: auto;
+  }
+  .rec-modal-inner, .acct-view-inner {
+    width: 560px; max-width: 90vw;
+    max-height: 680px;
+  }
+}
+
+.rec-modal-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.rec-modal-close {
+  background: var(--surface2); border: none;
+  width: 30px; height: 30px; border-radius: 50%;
+  color: var(--text); font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0;
+}
+.rec-modal-title { flex: 1; min-width: 0; }
+.rec-modal-title-name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rec-modal-title-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.rec-modal-card-total { font-size: 16px; font-weight: 700; color: var(--danger); flex-shrink: 0; }
+.rec-modal-search {
+  padding: 7px 14px; flex-shrink: 0;
+}
+.rec-modal-search input {
+  width: 100%; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); padding: 7px 12px; font-size: 13px;
+  outline: none;
+}
+.rec-modal-list { flex: 1; overflow-y: auto; padding: 0 14px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.rec-modal-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 18px 12px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 16px 16px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.rec-modal-footer-item { display: flex; gap: 6px; align-items: baseline; }
+.rec-modal-footer-label { color: var(--text-muted); }
+.rec-modal-footer-val { font-weight: 600; font-size: 14px; }
+
+/* 日期群組 */
+.rec-date-header {
+  font-size: 11px; color: var(--text-muted);
+  padding: 10px 0 4px;
+  border-bottom: 1px solid rgba(48,54,61,.3);
+}
+
+/* MOZE 交易列 */
+.rec-txn-row {
+  position: relative;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(48,54,61,.35);
+}
+.rec-txn-row:last-child { border-bottom: none; }
+.rec-txn-row.decided { opacity: .42; }
+.rec-txn-row.decided::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--text-muted);
+  pointer-events: none;
+}
+.rec-txn-main {
+  display: flex; align-items: center; gap: 8px;
+}
+.rec-txn-icon {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--surface2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+}
+.rec-txn-info { flex: 1; min-width: 0; overflow: hidden; }
+.rec-txn-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rec-txn-sub { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+.rec-inline-actions {
+  display: flex; gap: 4px; flex-shrink: 0;
+  width: 60px; justify-content: flex-end;
+}
+.rec-act {
+  width: 26px; height: 26px; border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted);
+  font-size: 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+.rec-act.act-confirm { border-color: var(--success); color: var(--success); }
+.rec-act.act-defer { border-color: var(--warning); color: var(--warning); }
+.rec-act.active-confirm { background: var(--success); color: #fff; border-color: var(--success); }
+.rec-act.active-defer { background: rgba(210,153,34,.2); color: var(--warning); border-color: var(--warning); }
+.rec-txn-amount {
+  font-size: 14px; font-weight: 600;
+  text-align: right; flex-shrink: 0;
+  min-width: 90px; margin-left: 8px;
+}
+
+/* 帳戶 view modal */
+#acct-view-modal {
+  position: fixed; inset: 0;
+  z-index: 300;
+  display: none;
+  overscroll-behavior: contain;
+}
+#acct-view-modal.open { display: flex; }
+
+.acct-view-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.acct-view-list { flex: 1; overflow-y: auto; padding: 0 14px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.acct-view-footer {
+  padding: 10px 18px 12px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 16px 16px;
+  display: flex; justify-content: space-between;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.av-txn-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(48,54,61,.4);
+}
+.av-txn-row:last-child { border-bottom: none; }
+.av-txn-icon {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--surface2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; flex-shrink: 0;
+}
+.av-txn-info { flex: 1; min-width: 0; }
+.av-txn-name { font-size: 13px; font-weight: 500; }
+.av-txn-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.av-txn-amt { font-size: 14px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo"><span>💰</span><span>瑞奇財務</span></div>
+  <nav class="sidebar-nav">
+    <a href="/" class="nav-item"><span class="icon">🏠</span><span>資產總覽</span></a>
+    <a href="/transactions.html" class="nav-item"><span class="icon">📋</span><span>消費記錄</span></a>
+    <a href="/reconcile.html" class="nav-item active"><span class="icon">🔍</span><span>信用卡對帳</span></a>
+    <a href="/investments.html" class="nav-item"><span class="icon">📈</span><span>投資損益</span></a>
+  </nav>
+</aside>
+
+<div class="main">
+  <div class="header">
+    <h1>信用卡對帳</h1>
+  </div>
+
+  <div class="content">
+    <!-- 信用卡區 -->
+    <div class="rec-section-title">信用卡</div>
+    <div id="cc-section"><div class="loading">載入中…</div></div>
+
+    <!-- 帳戶記錄區 -->
+    <div class="rec-section-title" style="margin-top:24px">帳戶記錄</div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:12px">
+      <button id="month-prev" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">‹</button>
+      <div id="month-display" style="font-size:15px;font-weight:600;min-width:90px;text-align:center"></div>
+      <button id="month-next" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">›</button>
+    </div>
+    <div class="card" style="padding:0 16px">
+      <div id="acct-section"><div class="loading" style="padding:16px 0">載入中…</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 對帳 Modal ── -->
+<div id="rec-modal">
+  <div class="rec-modal-inner">
+    <div class="rec-modal-header">
+      <button class="rec-modal-close" onclick="closeRecModal()">✕</button>
+      <div class="rec-modal-title">
+        <div class="rec-modal-title-name" id="rec-modal-card-name"></div>
+        <div class="rec-modal-title-sub" id="rec-modal-period"></div>
+      </div>
+      <div class="rec-modal-card-total" id="rec-modal-card-total"></div>
+    </div>
+    <div class="rec-modal-search">
+      <input type="text" id="rec-search" placeholder="搜尋交易名稱 / 分類" oninput="filterRecTxns(this.value)">
+    </div>
+    <div class="rec-modal-list" id="rec-modal-list"></div>
+    <div class="rec-modal-footer">
+      <div class="rec-modal-footer-item">
+        <span class="rec-modal-footer-label">對帳筆數</span>
+        <span class="rec-modal-footer-val" id="rec-count">0/0</span>
+      </div>
+      <span id="rec-pending-hint" style="display:none;font-size:11px;color:var(--warning);font-weight:600;background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.3);border-radius:6px;padding:3px 8px"></span>
+      <div class="rec-modal-footer-item">
+        <span class="rec-modal-footer-label">對帳金額</span>
+        <span class="rec-modal-footer-val" id="rec-amount">NT$0</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 帳戶 View Modal ── -->
+<div id="acct-view-modal">
+  <div class="acct-view-inner">
+    <div class="acct-view-header">
+      <button class="rec-modal-close" onclick="closeAcctView()">✕</button>
+      <div class="rec-modal-title" id="acct-view-title"></div>
+      <a href="/add.html" class="rec-modal-close" style="text-decoration:none;font-size:20px;font-weight:300;line-height:1" title="新增記錄">+</a>
+    </div>
+    <div class="acct-view-list" id="acct-view-list"></div>
+    <div class="acct-view-footer">
+      <span style="color:var(--text-muted)">共 <span id="acct-view-count">0</span> 筆</span>
+      <span>合計 <strong id="acct-view-total">NT$0</strong></span>
+    </div>
+  </div>
+</div>
+
+<!-- ── 信用卡付款 Modal ── -->
+<div class="modal-overlay" id="payment-modal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">💳 新增信用卡付款</div>
+      <button class="modal-close" onclick="closePaymentModal()">×</button>
+    </div>
+    <div style="background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text-muted)">
+      建立一筆從銀行帳戶到信用卡的轉帳，代表本月帳單的繳款。
+    </div>
+    <div class="form-group">
+      <label class="form-label">付款帳戶（扣款銀行）</label>
+      <select id="pay-from-account"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">信用卡帳戶</label>
+      <input type="text" id="pay-to-account-display" readonly style="background:var(--surface2);cursor:default;color:var(--text-muted)">
+      <input type="hidden" id="pay-to-account">
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">付款金額 (NT$)</label>
+        <input type="number" id="pay-amount" placeholder="0" class="calc-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label">付款日期</label>
+        <input type="date" id="pay-date">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closePaymentModal()">取消</button>
+      <button class="btn btn-primary" onclick="confirmPayment()">建立付款轉帳</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/calc-keyboard.js"></script>
+<script type="module">
+import { api, toast, catIcon } from '/js/api.js'
+
+let allAccounts = []
+let recTxns = []       // 目前對帳 modal 裡的交易
+let recCardAcc = null  // 目前對帳的信用卡 account 物件
+let recSearchVal = ''
+// 暫存延後入帳變更，key=id, value={ originalStatus, needsApi }
+let pendingDeferrals = new Map()
+
+const WEEKDAYS = ['日','一','二','三','四','五','六']
+
+function fmtDateHeader(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00')
+  const w = WEEKDAYS[d.getDay()]
+  return `${dateStr.replace(/-/g,'/')} 週${w}`
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+
+// ── 帳戶記錄月份導覽 ──
+let currentMonth = (() => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+})()
+
+function getMonthValue() { return currentMonth }
+
+function setMonth(val) {
+  currentMonth = val
+  document.getElementById('month-display').textContent = val.replace('-', ' 年 ') + ' 月'
+  const month = getMonthValue()
+  renderAcctSection(month)
+}
+
+function initMonthSelect() {
+  const now = new Date()
+  const minMonth = (() => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 11, 1)
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+  })()
+  const maxMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+
+  document.getElementById('month-display').textContent = currentMonth.replace('-', ' 年 ') + ' 月'
+
+  document.getElementById('month-prev').addEventListener('click', () => {
+    const [y, m] = currentMonth.split('-').map(Number)
+    const prev = new Date(y, m - 2, 1)
+    const val = `${prev.getFullYear()}-${String(prev.getMonth()+1).padStart(2,'0')}`
+    if (val >= minMonth) setMonth(val)
+  })
+  document.getElementById('month-next').addEventListener('click', () => {
+    const [y, m] = currentMonth.split('-').map(Number)
+    const next = new Date(y, m, 1)
+    const val = `${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}`
+    if (val <= maxMonth) setMonth(val)
+  })
+}
+
+// ── 每張信用卡獨立的帳單期間狀態 ──
+const cardMonths = {}
+
+function getCardMonth(accId) {
+  if (!cardMonths[accId]) {
+    const now = new Date()
+    cardMonths[accId] = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+  }
+  return cardMonths[accId]
+}
+
+const _nowStr = (() => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+})()
+const _minMonth = (() => {
+  const now = new Date()
+  const d = new Date(now.getFullYear(), now.getMonth() - 23, 1)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+})()
+
+window.cardPeriodNav = async function(accId, dir) {
+  const [y, m] = getCardMonth(accId).split('-').map(Number)
+  const next = dir === 1 ? new Date(y, m, 1) : new Date(y, m - 2, 1)
+  const val = `${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}`
+  if (val > _nowStr || val < _minMonth) return
+  cardMonths[accId] = val
+  const acc = allAccounts.find(a => a.id === accId)
+  if (!acc) return
+  const el = document.getElementById('cc-card-' + accId)
+  if (el) el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">載入中…</div>'
+  const cardHtml = await buildCCCardHtml(acc)
+  if (el) el.outerHTML = cardHtml
+}
+
+// ── 取得帳單期間 ──
+function getBillingPeriod(billingDay, month) {
+  const [y, m] = month.split('-').map(Number)
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  // 選 5 月 + 結算日 9 → 4/10～5/9（上月結算日+1 到本月結算日）
+  const periodStart = new Date(y, m - 2, billingDay + 1)
+  const periodEnd   = new Date(y, m - 1, billingDay)
+  return { start: fmt(periodStart), end: fmt(periodEnd) }
+}
+
+// ── 取得帳單期間交易（含上期延後入帳） ──
+async function fetchBillingTxns(cardName, billingDay, month) {
+  const { start, end } = getBillingPeriod(billingDay, month)
+  // 上期起始（用來撈延後入帳紀錄）
+  const [y, m] = month.split('-').map(Number)
+  const prevMonthStr = new Date(y, m - 2, 1)
+  const prevMonthKey = `${prevMonthStr.getFullYear()}-${String(prevMonthStr.getMonth()+1).padStart(2,'0')}`
+  const { start: prevStart } = getBillingPeriod(billingDay, prevMonthKey)
+
+  // 一次撈完 prevStart～end 的全部資料，前端篩選，避免月份迴圈邊界問題
+  const res = await api.getTransactions({ date_from: prevStart, date_to: end, limit: 1000 })
+  if (!res.ok) return []
+
+  const txns = (res.data ?? []).filter(t =>
+    t.card === cardName &&
+    !t.transfer_id && (
+      // 當期：排除已標記延後入帳的（它們將出現在下期）
+      (t.date >= start && t.date <= end && t.status !== '延後入帳') ||
+      // 上期延後入帳：帶入當期顯示
+      (t.status === '延後入帳' && t.date >= prevStart && t.date < start)
+    )
+  )
+  // 標記上期延後入帳的紀錄
+  txns.forEach(t => {
+    if (t.date < start && t.status === '延後入帳') t._fromPrevPeriod = true
+  })
+  txns.sort((a, b) => b.date.localeCompare(a.date) || b.created_at?.localeCompare(a.created_at ?? '') || 0)
+  return txns
+}
+
+// ── 確認是否已繳款 ──
+async function checkPaymentDone(cardName, periodEnd) {
+  const d = new Date(periodEnd)
+  d.setDate(d.getDate() + 60)
+  const laterEnd = d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
+  const res = await api.getTransactions({ date_from: periodEnd, date_to: laterEnd, card: cardName, limit: 100 })
+  if (!res.ok) return false
+  return (res.data ?? []).some(t => (t.name === '手動繳款' || t.name === '自動扣繳') && t.transfer_id)
+}
+
+// ── 判斷對帳狀態 ──
+function getBillingStatus(txns) {
+  if (!txns.length) return null
+  const decided = txns.filter(t => t.status !== '待確認')
+  const confirmed = txns.filter(t => t.status === '已對帳')
+  const allDecided = decided.length === txns.length
+  const amount = confirmed.reduce((s, t) => s + t.amount, 0)
+  return { allDecided, confirmedCount: confirmed.length, total: txns.length, amount }
+}
+
+// ── 渲染全頁 ──
+async function renderAll() {
+  const res = await api.getAssets()
+  if (!res.ok) return
+  allAccounts = res.data.accounts ?? []
+  await renderCCSection()
+  renderAcctSection(getMonthValue())
+}
+
+// ── 單張信用卡 HTML 建構 ──
+async function buildCCCardHtml(acc) {
+  const month = getCardMonth(acc.id)
+  const now = new Date()
+  const [selY, selM] = month.split('-').map(Number)
+  const todayStr = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
+
+  function billingDateForMonth(day) {
+    const t = new Date(selY, selM - 1, day)
+    return { year: t.getFullYear(), month: t.getMonth() + 1, day, daysUntil: Math.ceil((t - now) / 86400000) }
+  }
+  function paymentDateForMonth(payDay, billDay) {
+    const sameMonth = payDay > billDay
+    const t = new Date(selY, sameMonth ? selM - 1 : selM, payDay)
+    return { year: t.getFullYear(), month: t.getMonth() + 1, day: payDay, daysUntil: Math.ceil((t - now) / 86400000) }
+  }
+  function payColor(days) {
+    if (days <= 1) return 'var(--danger)'
+    if (days <= 3) return 'var(--warning)'
+    if (days <= 5) return 'var(--success)'
+    return 'var(--text-muted)'
+  }
+
+  let billingStatus = null, isPaid = false, periodEnd = null
+  if (acc.billing_day) {
+    const { start, end } = getBillingPeriod(acc.billing_day, month)
+    periodEnd = end
+    const txns = await fetchBillingTxns(acc.name, acc.billing_day, month)
+    billingStatus = getBillingStatus(txns)
+    isPaid = await checkPaymentDone(acc.name, end)
+  }
+
+  // 無消費 → 只顯示空白提示，不隱藏卡片（用戶可能想切換到其他期間）
+  const isOverdue = periodEnd && periodEnd < todayStr && !isPaid && !!billingStatus
+
+  // 對帳狀態
+  let statusHtml = ''
+  if (!acc.billing_day) {
+    statusHtml = `<span style="color:var(--text-muted);font-size:12px">–</span>`
+  } else if (isPaid) {
+    statusHtml = `<span style="color:var(--success);font-size:13px;font-weight:600">已繳款</span>`
+  } else if (isOverdue) {
+    statusHtml = `<span style="color:var(--danger);font-size:13px;font-weight:600">已到期</span>`
+  } else if (billingStatus?.allDecided) {
+    statusHtml = `<span style="color:var(--success);font-size:13px;font-weight:600">NT$${billingStatus.amount.toLocaleString()} 應繳</span>`
+  } else if (billingStatus) {
+    statusHtml = `<span style="color:var(--warning);font-size:13px">未對帳</span>`
+  } else {
+    statusHtml = `<span style="color:var(--text-muted);font-size:12px">本期無消費</span>`
+  }
+
+  // 帳單期間導覽列（每張卡獨立）
+  let periodNav = ''
+  if (acc.billing_day) {
+    const { start, end } = getBillingPeriod(acc.billing_day, month)
+    const shortFmt = s => s.slice(5).replace('-', '/')
+    const canPrev = month > _minMonth
+    const canNext = month < _nowStr
+    periodNav = `<div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:8px 0 4px;border-bottom:1px solid var(--border);margin-bottom:8px">
+      <button onclick="cardPeriodNav('${escHtml(acc.id)}',-1)" style="background:none;border:none;color:${canPrev ? 'var(--text)' : 'var(--border)'};font-size:18px;cursor:${canPrev ? 'pointer' : 'default'};padding:0 4px;line-height:1">‹</button>
+      <span style="font-size:12px;color:var(--text-muted);min-width:120px;text-align:center">${shortFmt(start)} ～ ${shortFmt(end)}</span>
+      <button onclick="cardPeriodNav('${escHtml(acc.id)}',1)" style="background:none;border:none;color:${canNext ? 'var(--text)' : 'var(--border)'};font-size:18px;cursor:${canNext ? 'pointer' : 'default'};padding:0 4px;line-height:1">›</button>
+    </div>`
+  }
+
+  // 結算日列
+  let billingRow = ''
+  if (acc.billing_day) {
+    const b = billingDateForMonth(acc.billing_day)
+    const bLabel = b.daysUntil > 0 ? `（${b.daysUntil} 天後）` : b.daysUntil === 0 ? '（今天）' : ''
+    billingRow = `<div class="cc-row">
+      <span class="cc-row-label">結算日</span>
+      <span>${b.year} 年 ${b.month} 月 ${b.day} 日${bLabel}</span>
+    </div>`
+  }
+
+  // 扣款日列
+  let paymentRow = ''
+  if (acc.payment_day) {
+    const p = paymentDateForMonth(acc.payment_day, acc.billing_day)
+    const pLabel = p.daysUntil > 0 ? `（${p.daysUntil} 天後）` : p.daysUntil === 0 ? '（今天）' : ''
+    paymentRow = `<div class="cc-row">
+      <span class="cc-row-label">扣款日</span>
+      <span style="color:${p.daysUntil >= 0 ? payColor(p.daysUntil) : 'var(--text-muted)'};font-weight:600">${p.year} 年 ${p.month} 月 ${p.day} 日${pLabel}</span>
+    </div>`
+  }
+
+  if (!acc.billing_day && !acc.payment_day) {
+    billingRow = `<div class="cc-row"><span class="cc-row-label" style="font-style:italic">尚未設定結算日 / 扣款日</span></div>`
+  }
+
+  return `<div class="cc-card" id="cc-card-${escHtml(acc.id)}">
+    <div class="cc-card-header">
+      <div class="cc-card-name">💳 ${escHtml(acc.name)}</div>
+      <div>${statusHtml}</div>
+    </div>
+    ${periodNav}
+    <div class="cc-card-rows">
+      ${billingRow}${paymentRow}
+    </div>
+    ${acc.billing_day ? `<div class="cc-card-footer" style="display:flex;gap:8px;align-items:center">
+      ${acc.payment_method === 'auto'
+        ? `<span style="opacity:0.4;font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;cursor:default">自動扣繳</span>`
+        : isPaid
+          ? `<span style="opacity:0.4;font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;cursor:default">手動繳款</span>`
+          : billingStatus?.allDecided
+            ? `<button class="btn btn-primary btn-sm" onclick="openPaymentModal('${escHtml(acc.name)}',${billingStatus.amount})">手動繳款</button>`
+            : `<button class="btn btn-secondary btn-sm" style="opacity:0.4" onclick="paymentNotReady()">手動繳款</button>`
+      }
+      ${isPaid
+        ? `<button class="btn btn-secondary btn-sm" style="opacity:0.4;cursor:default">已繳款</button>`
+        : `<button class="btn btn-secondary btn-sm" onclick="openRecModal('${escHtml(acc.id)}')">開始對帳</button>`
+      }
+    </div>` : ''}
+  </div>`
+}
+
+// ── 信用卡區 ──
+async function renderCCSection() {
+  const ccAccs = allAccounts.filter(a => a.type === '信用卡')
+  const container = document.getElementById('cc-section')
+  if (!ccAccs.length) {
+    container.innerHTML = '<div class="empty-state" style="padding:16px 0">無信用卡帳戶</div>'
+    return
+  }
+  // 先放佔位，再逐一填入
+  container.innerHTML = ccAccs.map(acc =>
+    `<div id="cc-card-${escHtml(acc.id)}" class="cc-card"><div style="padding:20px;text-align:center;color:var(--text-muted)">載入中…</div></div>`
+  ).join('')
+  for (const acc of ccAccs) {
+    const html = await buildCCCardHtml(acc)
+    const el = document.getElementById('cc-card-' + acc.id)
+    if (el) el.outerHTML = html
+  }
+}
+
+// ── 帳戶記錄區 ──
+function renderAcctSection(month) {
+  const nonCC = allAccounts.filter(a => a.type !== '信用卡')
+  const container = document.getElementById('acct-section')
+  if (!nonCC.length) {
+    container.innerHTML = '<div class="empty-state" style="padding:16px 0">無帳戶</div>'
+    return
+  }
+  const iconMap = { '銀行':'🏦','銀行存款':'🏦','證券戶':'📈','投資帳戶':'📈','現金':'💵' }
+  container.innerHTML = nonCC.map(acc => {
+    const icon = iconMap[acc.type] ?? '💼'
+    const bal = acc.balance >= 0
+      ? `<span style="color:var(--success)">NT$${acc.balance.toLocaleString()}</span>`
+      : `<span style="color:var(--danger)">-NT${Math.abs(acc.balance).toLocaleString()}</span>`
+    return `<div class="acct-row" onclick="openAcctView('${escHtml(acc.id)}','${escHtml(acc.name)}','${month}')">
+      <div class="acct-row-icon">${icon}</div>
+      <div class="acct-row-info">
+        <div class="acct-row-name">${escHtml(acc.name)}</div>
+        <div class="acct-row-sub">${acc.type}</div>
+      </div>
+      <div class="acct-row-balance">${bal}</div>
+      <div style="color:var(--text-muted);font-size:18px;margin-left:4px">›</div>
+    </div>`
+  }).join('')
+}
+
+// ── 對帳 Modal ──
+window.openRecModal = async function(accId) {
+  recCardAcc = allAccounts.find(a => a.id === accId)
+  if (!recCardAcc) return
+  const month = getMonthValue()
+
+  const { start, end } = getBillingPeriod(recCardAcc.billing_day, month)
+  document.getElementById('rec-modal-card-name').textContent = recCardAcc.name
+  document.getElementById('rec-modal-period').textContent = `${start} ～ ${end}`
+  document.getElementById('rec-search').value = ''
+  recSearchVal = ''
+  document.getElementById('rec-modal').classList.add('open')
+  document.body.style.overflow = 'hidden'
+  document.getElementById('rec-modal-list').innerHTML = '<div style="padding:20px 0;color:var(--text-muted);text-align:center">載入中…</div>'
+
+  pendingDeferrals.clear()
+  recTxns = await fetchBillingTxns(recCardAcc.name, recCardAcc.billing_day, month)
+  renderRecModal()
+}
+
+window.closeRecModal = async function() {
+  if (pendingDeferrals.size > 0) {
+    const count = pendingDeferrals.size
+    const confirmed = confirm(`有 ${count} 筆紀錄標記為「延後入帳」，儲存後將移至下期。\n\n確認儲存？`)
+    if (confirmed) {
+      await savePendingDeferrals()
+    } else {
+      // 捨棄：還原本機暫存的狀態
+      for (const [id, info] of pendingDeferrals) {
+        const t = recTxns.find(x => x.id === id)
+        if (t) t.status = info.originalStatus
+      }
+      pendingDeferrals.clear()
+    }
+  }
+  document.getElementById('rec-modal').classList.remove('open')
+  if (!document.getElementById('acct-view-modal').classList.contains('open')) {
+    document.body.style.overflow = ''
+  }
+  // 只重新渲染被對帳的那張卡
+  if (recCardAcc) {
+    const html = await buildCCCardHtml(recCardAcc)
+    const el = document.getElementById('cc-card-' + recCardAcc.id)
+    if (el) el.outerHTML = html
+  }
+}
+
+async function savePendingDeferrals() {
+  for (const [id, info] of pendingDeferrals) {
+    if (info.needsApi) {
+      await api.updateTransaction(id, { status: '延後入帳' })
+    }
+  }
+  // 從當期顯示中移除已儲存的延後紀錄
+  const deferredIds = new Set(pendingDeferrals.keys())
+  recTxns = recTxns.filter(t => !deferredIds.has(t.id))
+  pendingDeferrals.clear()
+  renderRecModal()
+}
+
+function renderRecModal() {
+  // 總消費（支出）= 所有交易加總（皆為正數，但要顯示為負）
+  const totalExp = recTxns.filter(t => t.type !== '收入').reduce((s, t) => s + t.amount, 0)
+  document.getElementById('rec-modal-card-total').textContent = totalExp ? `-NT$${totalExp.toLocaleString()}` : 'NT$0'
+
+  const decided = recTxns.filter(t => t.status !== '待確認')
+  const confirmedAmt = recTxns.filter(t => t.status === '已對帳').reduce((s,t) => s+t.amount, 0)
+  document.getElementById('rec-count').textContent = `${decided.length}/${recTxns.length}`
+  document.getElementById('rec-amount').textContent = 'NT$' + confirmedAmt.toLocaleString()
+
+  // 待儲存提示
+  const pendingEl = document.getElementById('rec-pending-hint')
+  if (pendingDeferrals.size > 0) {
+    pendingEl.textContent = `↓ ${pendingDeferrals.size} 筆待儲存`
+    pendingEl.style.display = 'block'
+  } else {
+    pendingEl.style.display = 'none'
+  }
+
+  const filtered = recSearchVal
+    ? recTxns.filter(t => (t.name + t.category).toLowerCase().includes(recSearchVal.toLowerCase()))
+    : recTxns
+
+  if (!filtered.length) {
+    document.getElementById('rec-modal-list').innerHTML = '<div style="padding:20px 0;color:var(--text-muted);text-align:center">無符合記錄</div>'
+    return
+  }
+
+  // 依日期分組
+  const groups = {}
+  for (const t of filtered) {
+    if (!groups[t.date]) groups[t.date] = []
+    groups[t.date].push(t)
+  }
+
+  let html = ''
+  for (const date of Object.keys(groups).sort().reverse()) {
+    html += `<div class="rec-date-header">${fmtDateHeader(date)}</div>`
+    for (const t of groups[date]) {
+      const isConfirmed = t.status === '已對帳'
+      const isDeferred = t.status === '延後入帳'
+      const isPrevPeriod = !!t._fromPrevPeriod
+      const isIncome = t.type === '收入'
+
+      // 金額顏色：延後→淡黃，收入→綠，支出→紅
+      const amtColor = isDeferred && !isPrevPeriod ? '#d4b247' : isIncome ? 'var(--success)' : 'var(--danger)'
+      const amtSign = isIncome ? '+' : '-'
+      const amtDisplay = `${amtSign}NT$${t.amount.toLocaleString()}`
+
+      // 上期延後入帳是否已被操作（按過 ✓ 或 ↓）
+      const isPrevActedOn = isPrevPeriod && (isConfirmed || pendingDeferrals.has(t.id))
+
+      // 金額顏色修正：已決定的上期紀錄不再顯示橘黃
+      const amtColorFinal = isPrevActedOn ? (isConfirmed ? 'var(--success)' : '#d4b247') : amtColor
+
+      // 狀態標籤：上期延後入帳的備註接在後面
+      let subText = ''
+      if (isPrevPeriod) {
+        let suffix = ''
+        if (isConfirmed) suffix = ' · 已入帳'
+        else if (pendingDeferrals.has(t.id)) suffix = ' · 延後至下期'
+        subText = `<div class="rec-txn-sub" style="color:var(--warning)">上期延後入帳${suffix}</div>`
+      } else if (isConfirmed) {
+        subText = `<div class="rec-txn-sub">已入帳</div>`
+      } else if (isDeferred) {
+        subText = `<div class="rec-txn-sub">延後至下期</div>`
+      }
+
+      // 上期紀錄被操作後才顯示 decided 樣式（橫線＋淡化）
+      const isDecided = (!isPrevPeriod && (isConfirmed || isDeferred)) || isPrevActedOn
+      const rowClass = isDecided ? 'rec-txn-row decided' : 'rec-txn-row'
+      const btnConfirmClass = (isConfirmed && !isPrevPeriod) || (isPrevPeriod && isConfirmed) ? 'rec-act active-confirm' : 'rec-act act-confirm'
+      const btnDeferClass = (isDeferred && !isPrevPeriod) || (isPrevPeriod && pendingDeferrals.has(t.id)) ? 'rec-act active-defer' : 'rec-act act-defer'
+
+      html += `<div class="${rowClass}">
+        <div class="rec-txn-main">
+          <div class="rec-txn-icon">${catIcon(t.category)}</div>
+          <div class="rec-txn-info">
+            <div class="rec-txn-name">${escHtml(t.name || t.category)}</div>
+            ${subText}
+          </div>
+          <div class="rec-inline-actions">
+            <button class="${btnConfirmClass}" title="已入帳" onclick="recSetStatus(event,'${escHtml(t.id)}','已對帳')">✓</button>
+            <button class="${btnDeferClass}" title="延後至下期" onclick="recSetStatus(event,'${escHtml(t.id)}','延後入帳',null)">↓</button>
+          </div>
+          <div class="rec-txn-amount" style="color:${amtColorFinal}">${amtDisplay}</div>
+        </div>
+      </div>`
+    }
+  }
+  document.getElementById('rec-modal-list').innerHTML = html
+}
+
+window.recSetStatus = async function(e, id, status) {
+  e?.stopPropagation()
+  const t = recTxns.find(x => x.id === id)
+  if (!t) return
+
+  // 同狀態再按一次 → toggle 回待確認（所有紀錄一致）
+  const newStatus = (t.status === status) ? '待確認' : status
+
+  // ── 延後入帳：暫存，不立即呼叫 API ──
+  if (newStatus === '延後入帳') {
+    if (!pendingDeferrals.has(id)) {
+      // 上期已在 DB 為延後入帳的，不需要再次 API 更新
+      pendingDeferrals.set(id, { originalStatus: t.status, needsApi: !t._fromPrevPeriod })
+    }
+    t.status = '延後入帳'
+    renderRecModal()
+    return
+  }
+
+  // 若從暫存的延後入帳取消（toggle 回待確認）
+  if (pendingDeferrals.has(id) && newStatus === '待確認') {
+    const info = pendingDeferrals.get(id)
+    pendingDeferrals.delete(id)
+    t.status = info.originalStatus
+    renderRecModal()
+    return
+  }
+
+  // ── 其餘狀態（已對帳、待確認）：立即呼叫 API ──
+  // 若之前暫存為延後入帳，現在改為已對帳 → 清除暫存
+  if (pendingDeferrals.has(id)) pendingDeferrals.delete(id)
+
+  const body = { status: newStatus }
+  if (newStatus === '待確認') body.deferred_to = null
+
+  // 上期延後入帳確認已入帳時，把日期移到當期起始，讓金額計入當期
+  if (t._fromPrevPeriod && newStatus === '已對帳' && recCardAcc) {
+    const month = getMonthValue()
+    const { start } = getBillingPeriod(recCardAcc.billing_day, month)
+    body.date = start
+  }
+
+  const res = await api.updateTransaction(id, body)
+  if (!res.ok) { toast('更新失敗', 'error'); return }
+  t.status = newStatus
+  if (body.date) t.date = body.date
+  renderRecModal()
+}
+
+window.filterRecTxns = function(val) {
+  recSearchVal = val
+  renderRecModal()
+}
+
+// ── 帳戶 View Modal ──
+window.openAcctView = async function(accId, accName, month) {
+  document.getElementById('acct-view-title').textContent = `${accName} — ${month}`
+  document.getElementById('acct-view-list').innerHTML = '<div style="padding:20px 0;color:var(--text-muted);text-align:center">載入中…</div>'
+  document.getElementById('acct-view-modal').classList.add('open')
+  document.body.style.overflow = 'hidden'
+
+  const res = await api.getTransactions({ month, card: accName, limit: 500 })
+  if (!res.ok) {
+    document.getElementById('acct-view-list').innerHTML = '<div style="padding:20px 0;color:var(--danger);text-align:center">載入失敗</div>'
+    return
+  }
+  const txns = (res.data ?? []).sort((a, b) => b.date.localeCompare(a.date))
+
+  if (!txns.length) {
+    document.getElementById('acct-view-list').innerHTML = '<div style="padding:20px 0;color:var(--text-muted);text-align:center">本月無記錄</div>'
+    document.getElementById('acct-view-count').textContent = '0'
+    document.getElementById('acct-view-total').textContent = 'NT$0'
+    return
+  }
+
+  const incomeAmt = txns.filter(t => t.type === '收入').reduce((s, t) => s + t.amount, 0)
+  const expenseAmt = txns.filter(t => t.type !== '收入').reduce((s, t) => s + t.amount, 0)
+  const net = incomeAmt - expenseAmt
+  const totalEl = document.getElementById('acct-view-total')
+  totalEl.textContent = (net >= 0 ? '+' : '-') + 'NT$' + Math.abs(net).toLocaleString()
+  totalEl.style.color = net >= 0 ? 'var(--success)' : 'var(--danger)'
+  document.getElementById('acct-view-count').textContent = txns.length
+
+  let html = ''
+  let lastDate = ''
+  for (const t of txns) {
+    if (t.date !== lastDate) {
+      html += `<div style="font-size:11px;color:var(--text-muted);padding:10px 0 4px">${fmtDateHeader(t.date)}</div>`
+      lastDate = t.date
+    }
+    const amtColor = t.type === '收入' ? 'var(--success)' : 'var(--danger)'
+    const amtSign = t.type === '收入' ? '+' : '−'
+    html += `<div class="av-txn-row">
+      <div class="av-txn-icon">${catIcon(t.category)}</div>
+      <div class="av-txn-info">
+        <div class="av-txn-name">${escHtml(t.name || t.category)}</div>
+        <div class="av-txn-sub">${escHtml(t.category)}</div>
+      </div>
+      <div class="av-txn-amt" style="color:${amtColor}">${amtSign}NT$${t.amount.toLocaleString()}</div>
+    </div>`
+  }
+  document.getElementById('acct-view-list').innerHTML = html
+}
+
+window.closeAcctView = function() {
+  document.getElementById('acct-view-modal').classList.remove('open')
+  if (!document.getElementById('rec-modal').classList.contains('open')) {
+    document.body.style.overflow = ''
+  }
+}
+
+window.paymentNotReady = function() {
+  toast('請先完成對帳後再進行繳款', 'error')
+}
+
+// ── 付款 Modal ──
+window.openPaymentModal = async function(cardName, billedAmount) {
+  const accs = allAccounts
+  const nonCC = accs.filter(a => a.type !== '信用卡')
+  const cc = accs.find(a => a.name === cardName)
+  const bankOpts = nonCC.map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+  const fromSel = document.getElementById('pay-from-account')
+  fromSel.innerHTML = bankOpts || '<option>無可用帳戶</option>'
+  // 若信用卡有設定 payment_account，預選它
+  if (cc?.payment_account) {
+    const opt = [...fromSel.options].find(o => o.value === cc.payment_account)
+    if (opt) fromSel.value = cc.payment_account
+  }
+  document.getElementById('pay-to-account-display').value = cardName
+  document.getElementById('pay-to-account').value = cardName
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
+  document.getElementById('pay-amount').value = billedAmount ?? (cc ? Math.abs(cc.balance) : '')
+  document.getElementById('pay-date').value = today
+  document.getElementById('payment-modal').classList.add('open')
+}
+window.closePaymentModal = function() { document.getElementById('payment-modal').classList.remove('open') }
+window.confirmPayment = async function() {
+  const from_account = document.getElementById('pay-from-account').value
+  const to_account = document.getElementById('pay-to-account').value
+  const amount = parseInt(document.getElementById('pay-amount').value)
+  const date = document.getElementById('pay-date').value
+  if (!amount || !date) { toast('請填寫金額和日期', 'error'); return }
+  if (from_account === to_account) { toast('帳戶不能相同', 'error'); return }
+  const res = await api.addPayment({ from_account, to_account, amount, date })
+  if (res.ok) {
+    closePaymentModal()
+    toast(`付款轉帳已建立：${from_account} → ${to_account} NT$${amount.toLocaleString()}`)
+    renderAll()
+  } else toast(res.error ?? '操作失敗', 'error')
+}
+
+// 桌面版點 backdrop 關閉
+document.getElementById('rec-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('rec-modal')) closeRecModal()
+})
+document.getElementById('acct-view-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('acct-view-modal')) closeAcctView()
+})
+
+initMonthSelect()
+renderAll()
+</script>
+
+<nav class="bottom-nav">
+  <a href="/" class="bottom-nav-item"><span class="nav-icon">🏠</span><span>總覽</span></a>
+  <a href="/transactions.html" class="bottom-nav-item"><span class="nav-icon">📋</span><span>記錄</span></a>
+  <a href="/add.html" class="bottom-nav-item add-center"><span class="nav-icon">+</span></a>
+  <a href="/reconcile.html" class="bottom-nav-item active"><span class="nav-icon">🔍</span><span>對帳</span></a>
+  <a href="/investments.html" class="bottom-nav-item"><span class="nav-icon">📈</span><span>投資</span></a>
+</nav>
+</body>
+</html>

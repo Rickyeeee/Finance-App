@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>定期支出 — 瑞奇財務</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="瑞奇財務">
+<meta name="theme-color" content="#161b22">
+<link rel="apple-touch-icon" href="/icons/icon.svg">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.monthly-total {
+  display: flex; padding: 14px 16px;
+  background: var(--surface2); border-radius: 12px; margin-bottom: 20px;
+  flex-wrap: wrap; gap: 12px 20px;
+}
+.monthly-total-item { display: flex; flex-direction: column; gap: 2px; }
+.monthly-total-label { font-size: 11px; color: var(--text-muted); font-weight: 500; }
+.monthly-total-val { font-size: 16px; font-weight: 700; }
+
+.rec-empty { padding: 48px 24px; text-align: center; color: var(--text-muted); }
+.rec-empty-icon { font-size: 48px; margin-bottom: 12px; }
+.rec-empty-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+
+/* 收支分組標題 */
+.rec-group-header {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text-muted); padding: 12px 0 6px;
+  border-bottom: 1px solid var(--border); margin-bottom: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+/* 定期項目 — 覆蓋 global rec-item */
+.rec-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.rec-item:last-child { border-bottom: none; }
+.rec-item-info { flex: 1; min-width: 0; }
+.rec-item-name { font-weight: 600; font-size: 14px; }
+.rec-item-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.rec-meta-sep { display: inline; }
+.rec-meta-card { display: inline; }
+.rec-item-right { text-align: right; flex-shrink: 0; }
+.rec-item-amt { font-size: 15px; font-weight: 700; }
+.rec-item-next { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+@media (max-width: 768px) {
+  .header-actions { gap: 6px; }
+  .header-actions .btn-sm { font-size: 12px; padding: 5px 10px; }
+  .rec-meta-sep { display: none; }
+  .rec-meta-card { display: block; }
+}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo"><span>💰</span><span>瑞奇財務</span></div>
+  <nav class="sidebar-nav">
+    <a href="/" class="nav-item"><span class="icon">🏠</span><span>資產總覽</span></a>
+    <a href="/transactions.html" class="nav-item"><span class="icon">📋</span><span>消費記錄</span></a>
+    <a href="/recurring.html" class="nav-item active"><span class="icon">🔄</span><span>定期支出</span></a>
+    <a href="/reconcile.html" class="nav-item"><span class="icon">🔍</span><span>信用卡對帳</span></a>
+    <a href="/investments.html" class="nav-item"><span class="icon">📈</span><span>投資損益</span></a>
+  </nav>
+</aside>
+
+<div class="main">
+  <div class="header">
+    <h1>定期支出</h1>
+    <div class="header-actions">
+      <button class="btn btn-secondary btn-sm" onclick="triggerProcess()" id="btn-process">⚡ 立即生成</button>
+      <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ 新增</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- 每月統計 -->
+    <div class="monthly-total" id="monthly-total"></div>
+
+    <!-- 定期清單 -->
+    <div class="card">
+      <div id="rec-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 新增/編輯 Modal -->
+<div class="modal-overlay" id="rec-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="rec-modal-title">新增定期支出</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <input type="hidden" id="rec-edit-id">
+    <div class="type-toggle">
+      <button id="btn-exp" class="active-expense" onclick="setType('支出')">支出</button>
+      <button id="btn-inc" onclick="setType('收入')">收入</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">名稱 *</label>
+      <input type="text" id="r-name" placeholder="例：Netflix、房租、Spotify">
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">金額 (NT$) *</label>
+        <input type="number" id="r-amount" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">頻率 *</label>
+        <select id="r-frequency" onchange="onFreqChange()">
+          <option value="monthly">每月</option>
+          <option value="weekly">每週</option>
+          <option value="yearly">每年</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" id="day-group">
+      <label class="form-label">每月幾號</label>
+      <select id="r-day">
+        <option value="1">1 日</option>
+        <option value="2">2 日</option>
+        <option value="3">3 日</option>
+        <option value="4">4 日</option>
+        <option value="5">5 日</option>
+        <option value="6">6 日</option>
+        <option value="7">7 日</option>
+        <option value="8">8 日</option>
+        <option value="9">9 日</option>
+        <option value="10">10 日</option>
+        <option value="11">11 日</option>
+        <option value="12">12 日</option>
+        <option value="13">13 日</option>
+        <option value="14">14 日</option>
+        <option value="15">15 日</option>
+        <option value="16">16 日</option>
+        <option value="17">17 日</option>
+        <option value="18">18 日</option>
+        <option value="19">19 日</option>
+        <option value="20">20 日</option>
+        <option value="21">21 日</option>
+        <option value="22">22 日</option>
+        <option value="23">23 日</option>
+        <option value="24">24 日</option>
+        <option value="25">25 日</option>
+        <option value="26">26 日</option>
+        <option value="27">27 日</option>
+        <option value="28">28 日</option>
+        <option value="29">29 日</option>
+        <option value="30">30 日</option>
+        <option value="31">31 日</option>
+      </select>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">分類 *</label>
+        <select id="r-category"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">帳戶</label>
+        <select id="r-card"></select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">下次觸發日期 *</label>
+      <input type="date" id="r-next-date">
+    </div>
+    <div class="form-group">
+      <label class="form-label">備註</label>
+      <input type="text" id="r-note" placeholder="選填">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveRecurring()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { api, toast, catIcon, catIconHtml, fmtSigned, amtColor, freqLabel } from '/js/api.js'
+
+let allItems = [], allCategories = [], allAccounts = []
+let currentType = '支出'
+
+async function init() {
+  const [rr, cr, ar] = await Promise.all([api.getRecurring(), api.getCategories(), api.getAssets()])
+  if (cr.ok) allCategories = cr.data
+  if (ar.ok) allAccounts = ar.data.accounts ?? []
+  if (rr.ok) { allItems = rr.data; render() }
+}
+
+function render() {
+  const filtered = allItems
+  const active = filtered.filter(i => i.is_active)
+  const inactive = filtered.filter(i => !i.is_active)
+
+  // 月度統計
+  const monthlyExp = calcMonthlyEquiv(allItems.filter(i => i.is_active && i.type !== '收入'))
+  const monthlyInc = calcMonthlyEquiv(allItems.filter(i => i.is_active && i.type === '收入'))
+  const net = monthlyInc - monthlyExp
+  document.getElementById('monthly-total').innerHTML = `
+    <div class="monthly-total-item">
+      <div class="monthly-total-label">月均支出</div>
+      <div class="monthly-total-val" style="color:var(--danger)">−NT$${monthlyExp.toLocaleString()}</div>
+    </div>
+    <div class="monthly-total-item">
+      <div class="monthly-total-label">月均收入</div>
+      <div class="monthly-total-val" style="color:var(--success)">+NT$${monthlyInc.toLocaleString()}</div>
+    </div>
+    <div class="monthly-total-item">
+      <div class="monthly-total-label">月均淨額</div>
+      <div class="monthly-total-val" style="color:${net >= 0 ? 'var(--success)' : 'var(--danger)'}">
+        ${net >= 0 ? '+' : '−'}NT$${Math.abs(net).toLocaleString()}
+      </div>
+    </div>
+    <div class="monthly-total-item" style="margin-left:auto;text-align:right">
+      <div class="monthly-total-label">定期項目數</div>
+      <div class="monthly-total-val">${active.length} 個啟用</div>
+    </div>
+  `
+
+  const list = document.getElementById('rec-list')
+  if (!filtered.length) {
+    list.innerHTML = `<div class="rec-empty">
+      <div class="rec-empty-icon">🔄</div>
+      <div class="rec-empty-title">尚無定期項目</div>
+      <div style="font-size:13px;margin-top:4px">點選右上角「新增定期」開始設定</div>
+    </div>`
+    return
+  }
+
+  let html = ''
+
+  const groups = [
+    { label: '啟用中', items: active },
+    { label: '已停用', items: inactive },
+  ]
+
+  for (const g of groups) {
+    if (!g.items.length) continue
+    const groupTotal = g.items.filter(i => i.type !== '收入').reduce((s, i) => s + calcMonthlyEquiv([i]), 0)
+    html += `<div class="rec-group-header">
+      <span>${g.label}（${g.items.length}）</span>
+      ${g.label === '啟用中' && groupTotal > 0 ? `<span style="color:var(--danger)">月均 −NT$${groupTotal.toLocaleString()}</span>` : ''}
+    </div>`
+    for (const item of g.items) {
+      const isInc = item.type === '收入'
+      const today = new Date().toISOString().slice(0, 10)
+      const daysUntil = Math.ceil((new Date(item.next_date) - new Date(today)) / 86400000)
+      const dueSoon = daysUntil <= 3 && daysUntil >= 0
+      html += `<div class="rec-item" style="${!item.is_active ? 'opacity:0.45' : ''}">
+        ${catIconHtml(item.category, 40)}
+        <div class="rec-item-info">
+          <div class="rec-item-name">${escHtml(item.name)}</div>
+          <div class="rec-item-meta">
+            ${escHtml(item.category)} · ${freqLabel(item.frequency, item.day_of_month)}${item.card ? `<span class="rec-meta-sep"> · </span><span class="rec-meta-card">${escHtml(item.card)}</span>` : ''}
+          </div>
+        </div>
+        <div class="rec-item-right">
+          <div class="rec-item-amt" style="color:${isInc ? 'var(--success)' : 'var(--danger)'}">
+            ${isInc ? '+' : '−'}NT$${item.amount.toLocaleString()}
+          </div>
+          <div class="rec-item-next" style="${dueSoon ? 'color:var(--warning)' : ''}">
+            ${dueSoon ? '⚠️ ' : ''}下次 ${item.next_date}
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;align-items:center">
+          <label class="switch" title="${item.is_active ? '停用' : '啟用'}">
+            <input type="checkbox" ${item.is_active ? 'checked' : ''} onchange="toggleActive('${item.id}', this.checked)">
+            <span class="slider"></span>
+          </label>
+          <button class="btn btn-secondary btn-sm" onclick="openEditModal('${item.id}')">編輯</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteItem('${item.id}','${escJs(item.name)}')">刪</button>
+        </div>
+      </div>`
+    }
+  }
+  list.innerHTML = html
+}
+
+// 計算月均等值（weekly → ×4.33, yearly → ÷12）
+function calcMonthlyEquiv(items) {
+  return Math.round(items.reduce((s, i) => {
+    if (i.frequency === 'weekly') return s + i.amount * 4.33
+    if (i.frequency === 'yearly') return s + i.amount / 12
+    return s + i.amount
+  }, 0))
+}
+
+window.triggerProcess = async function() {
+  const btn = document.getElementById('btn-process')
+  btn.disabled = true; btn.textContent = '生成中…'
+  const res = await api.processRecurring()
+  if (res.ok) {
+    toast(`已生成 ${res.count} 筆定期記錄`)
+    const rr = await api.getRecurring()
+    if (rr.ok) { allItems = rr.data; render() }
+  } else toast(res.error ?? '生成失敗', 'error')
+  btn.disabled = false; btn.textContent = '⚡ 立即生成'
+}
+
+window.toggleActive = async function(id, active) {
+  await api.updateRecurring(id, { is_active: active ? 1 : 0 })
+  const item = allItems.find(i => i.id === id)
+  if (item) item.is_active = active ? 1 : 0
+  render()
+}
+
+// ── Modal ──
+window.setType = function(type) {
+  currentType = type
+  document.getElementById('btn-exp').className = type === '支出' ? 'active-expense' : ''
+  document.getElementById('btn-inc').className = type === '收入' ? 'active-income' : ''
+  renderCategorySelect()
+}
+
+window.onFreqChange = function() {
+  const freq = document.getElementById('r-frequency').value
+  document.getElementById('day-group').style.display = freq === 'monthly' ? 'block' : 'none'
+}
+
+function renderCategorySelect() {
+  document.getElementById('r-category').innerHTML = allCategories.filter(c => c.type === currentType)
+    .map(c => `<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('')
+}
+
+function renderAccountSelect() {
+  document.getElementById('r-card').innerHTML = allAccounts
+    .map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+}
+
+function nextDateForDay(day) {
+  const now = new Date()
+  const y = now.getFullYear(), m = now.getMonth() + 1
+  const d = String(day).padStart(2, '0')
+  const candidate = `${y}-${String(m).padStart(2,'0')}-${d}`
+  if (candidate >= now.toISOString().slice(0,10)) return candidate
+  const nm = m === 12 ? 1 : m + 1, ny = m === 12 ? y + 1 : y
+  return `${ny}-${String(nm).padStart(2,'0')}-${d}`
+}
+
+window.openAddModal = function() {
+  document.getElementById('rec-edit-id').value = ''
+  document.getElementById('rec-modal-title').textContent = '新增定期支出'
+  document.getElementById('r-name').value = ''
+  document.getElementById('r-amount').value = ''
+  document.getElementById('r-frequency').value = 'monthly'
+  document.getElementById('r-day').value = '1'
+  document.getElementById('r-note').value = ''
+  document.getElementById('r-next-date').value = nextDateForDay(1)
+  document.getElementById('day-group').style.display = 'block'
+  setType('支出')
+  renderAccountSelect()
+  document.getElementById('rec-modal').classList.add('open')
+  setTimeout(() => document.getElementById('r-name').focus(), 50)
+}
+
+document.getElementById('r-day').addEventListener('change', function() {
+  if (document.getElementById('r-frequency').value === 'monthly') {
+    document.getElementById('r-next-date').value = nextDateForDay(parseInt(this.value))
+  }
+})
+
+window.openEditModal = function(id) {
+  const item = allItems.find(i => i.id === id)
+  if (!item) return
+  document.getElementById('rec-edit-id').value = id
+  document.getElementById('rec-modal-title').textContent = '編輯定期支出'
+  document.getElementById('r-name').value = item.name
+  document.getElementById('r-amount').value = item.amount
+  document.getElementById('r-frequency').value = item.frequency
+  document.getElementById('r-day').value = item.day_of_month ?? 1
+  document.getElementById('r-note').value = item.note ?? ''
+  document.getElementById('r-next-date').value = item.next_date
+  document.getElementById('day-group').style.display = item.frequency === 'monthly' ? 'block' : 'none'
+  setType(item.type)
+  renderAccountSelect()
+  const cs = document.getElementById('r-category')
+  for (let i = 0; i < cs.options.length; i++) if (cs.options[i].value === item.category) { cs.selectedIndex = i; break }
+  const as = document.getElementById('r-card')
+  for (let i = 0; i < as.options.length; i++) if (as.options[i].value === item.card) { as.selectedIndex = i; break }
+  document.getElementById('rec-modal').classList.add('open')
+}
+
+window.closeModal = function() { document.getElementById('rec-modal').classList.remove('open') }
+
+window.saveRecurring = async function() {
+  const id = document.getElementById('rec-edit-id').value
+  const freq = document.getElementById('r-frequency').value
+  const day = parseInt(document.getElementById('r-day').value)
+  const data = {
+    name: document.getElementById('r-name').value.trim(),
+    amount: parseInt(document.getElementById('r-amount').value),
+    type: currentType,
+    category: document.getElementById('r-category').value,
+    card: document.getElementById('r-card').value,
+    frequency: freq,
+    day_of_month: freq === 'monthly' ? day : 1,
+    next_date: document.getElementById('r-next-date').value,
+    note: document.getElementById('r-note').value.trim() || null,
+  }
+  if (!data.name || !data.amount || !data.next_date) {
+    toast('請填寫名稱、金額和日期', 'error'); return
+  }
+  const res = id ? await api.updateRecurring(id, data) : await api.addRecurring(data)
+  if (res.ok) {
+    closeModal(); toast(id ? '已更新' : '已新增')
+    const rr = await api.getRecurring()
+    if (rr.ok) { allItems = rr.data; render() }
+  } else toast(res.error ?? '操作失敗', 'error')
+}
+
+window.deleteItem = async function(id, name) {
+  if (!confirm(`確定要刪除「${name}」？`)) return
+  const res = await api.deleteRecurring(id)
+  if (res.ok) {
+    toast(`已刪除「${name}」`)
+    allItems = allItems.filter(i => i.id !== id)
+    render()
+  } else toast(res.error ?? '刪除失敗', 'error')
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+function escJs(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'") }
+
+init()
+</script>
+
+<nav class="bottom-nav">
+  <a href="/" class="bottom-nav-item"><span class="nav-icon">🏠</span><span>總覽</span></a>
+  <a href="/transactions.html" class="bottom-nav-item"><span class="nav-icon">📋</span><span>記錄</span></a>
+  <a href="/add.html" class="bottom-nav-item add-center"><span class="nav-icon">+</span></a>
+  <a href="/recurring.html" class="bottom-nav-item active"><span class="nav-icon">🔄</span><span>定期</span></a>
+  <a href="/investments.html" class="bottom-nav-item"><span class="nav-icon">📈</span><span>投資</span></a>
+</nav>
+</body>
+</html>

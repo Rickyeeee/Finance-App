@@ -1,0 +1,26 @@
+name = "ricky-finance"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ricky-finance-db"
+database_id = "47fdce15-7ba5-409d-aa1f-f171b02e070e"
+
+[triggers]
+crons = ["0 14 * * *"]
+
+[vars]
+GMAIL_CLIENT_ID = ""
+GMAIL_CLIENT_SECRET = ""
+GMAIL_REFRESH_TOKEN = ""
+
+[[rules]]
+type = "Text"
+globs = ["**/*.sql"]
+fallthrough = true

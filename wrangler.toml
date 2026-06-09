@@ -10,7 +10,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "ricky-finance-db"
-database_id = "your-database-id-here"
+database_id = "47fdce15-7ba5-409d-aa1f-f171b02e070e"
 
 [triggers]
 crons = ["0 16 * * *"]

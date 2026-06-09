@@ -112,11 +112,6 @@ finance-app/
 - 關聯欄位：`investment_trades.transfer_id`
 - 邏輯位置：`src/routes/transactions.ts` DELETE handler
 
-### wrangler.toml 的 database_id
-- GitHub 上用 placeholder：`your-database-id-here`
-- **deploy 前必須換回真實 ID**：`47fdce15-7ba5-409d-aa1f-f171b02e070e`
-- deploy 完記得換回 placeholder 再 commit
-
 ### iCloud Drive 衝突
 - iCloud 同步有時會把 `transactions.html`、`investments.html` 改名成 `*2.html`，造成 404
 - 修法：`Rename-Item "...filename 2.html" "filename.html"` 後重新 deploy

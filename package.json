@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "build:installer": "node scripts/build-installer.js",
+    "predeploy": "npm run build:installer",
     "db:init": "wrangler d1 execute ricky-finance-db --file=schema.sql --local",
     "db:init:remote": "wrangler d1 execute ricky-finance-db --file=schema.sql",
     "db:create": "wrangler d1 create ricky-finance-db"

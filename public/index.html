@@ -65,8 +65,7 @@
   <div class="header">
     <h1>資產總覽</h1>
     <div class="header-actions">
-      <button class="btn btn-secondary btn-sm" onclick="syncGmail()">🔄 同步 Gmail</button>
-      <button class="btn btn-secondary btn-sm" onclick="takeSnapshot()">📸 快照</button>
+      <button class="btn btn-secondary btn-sm" onclick="load()">↻ 重新整理</button>
     </div>
   </div>
 
@@ -80,7 +79,7 @@
       </div>
       <div class="card">
         <div class="card-title">投資市值</div>
-        <div class="card-value" id="total-investments">–</div>
+        <div class="card-value blue" id="total-investments">–</div>
         <div class="card-sub" id="investment-pnl">–</div>
       </div>
       <div class="card">
@@ -282,7 +281,7 @@
 </div>
 
 <script type="module">
-import { api, toast, formatMoney, fmtSigned, amtColor, formatDate, badgeHtml, catIcon } from '/js/api.js'
+import { api, toast, formatMoney, fmtSigned, amtColor, formatDate, badgeHtml, catIcon, initAppName } from '/js/api.js'
 
 const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
 let trendChart = null
@@ -329,7 +328,7 @@ async function load() {
 
   // 本月總支出
   const mExp = document.getElementById('monthly-expense')
-  mExp.textContent = d.monthly_expense > 0 ? '−NT$' + d.monthly_expense.toLocaleString() : 'NT$0'
+  mExp.textContent = d.monthly_expense > 0 ? 'NT$' + d.monthly_expense.toLocaleString() : 'NT$0'
   mExp.style.color = d.monthly_expense > 0 ? 'var(--danger)' : 'var(--text)'
 
   // 盈餘 / 虧損
@@ -355,7 +354,7 @@ async function load() {
 
   const pnl = d.investment_pnl
   const pnlEl = document.getElementById('investment-pnl')
-  pnlEl.textContent = (pnl >= 0 ? '+' : '') + formatMoney(pnl) + ' 損益'
+  pnlEl.textContent = formatMoney(pnl) + ' 損益'
   pnlEl.style.color = pnl >= 0 ? 'var(--success)' : 'var(--danger)'
 
   if (d.total_credit_used > 0) {
@@ -366,8 +365,8 @@ async function load() {
   // 帳戶列表
   renderAccounts()
 
-  // 趨勢圖
-  renderTrendChart(historyRes.data ?? [])
+  // 趨勢圖（傳入即時資產作為今天的點）
+  renderTrendChart(historyRes.data ?? [], d.total_net_worth ?? 0)
 
   renderCountdowns()  // async, runs in parallel with daily summary
   loadDailySummary()
@@ -402,7 +401,7 @@ function renderAccounts() {
     const groupTotal = included.reduce((s, a) => s + (type === '證券戶' ? (invByAccount[a.name] ?? a.balance) : a.balance), 0)
     const groupTotalDisplay = groupTotal < 0
       ? `<span style="color:var(--danger)">-${formatMoney(groupTotal)}</span>`
-      : `<span>${formatMoney(groupTotal)}</span>`
+      : `<span style="color:var(--accent)">${formatMoney(groupTotal)}</span>`
     html += `<div class="account-group">
       <div class="account-group-title">
         <span>${TYPE_ICON[type] ?? ''} ${type}</span>
@@ -411,7 +410,7 @@ function renderAccounts() {
 
     for (const acc of accs) {
       const displayBalance = (type === '證券戶') ? (invByAccount[acc.name] ?? acc.balance) : acc.balance
-      const balanceColor = displayBalance < 0 ? 'var(--danger)' : 'var(--text)'
+      const balanceColor = displayBalance < 0 ? 'var(--danger)' : 'var(--accent)'
       const balanceSign = displayBalance < 0 ? '-' : ''
       const excluded = (acc.include_in_total ?? 1) === 0
       html += `<div class="account-row" style="${excluded ? 'opacity:0.5' : ''}" onclick="openEditModal('${acc.id}','${escJs(acc.name)}',${acc.balance},'${acc.type}',${acc.include_in_total ?? 1},${acc.billing_day ?? 'null'},${acc.payment_day ?? 'null'},${acc.credit_limit ?? 0},'${acc.payment_method ?? 'manual'}','${escJs(acc.payment_account ?? '')}')">
@@ -437,37 +436,65 @@ function renderAccounts() {
   container.innerHTML = html
 }
 
-function renderTrendChart(history) {
+function renderTrendChart(history, liveTotalAssets) {
   const ctx = document.getElementById('trendChart').getContext('2d')
   if (trendChart) trendChart.destroy()
 
-  if (!history.length) {
-    ctx.canvas.parentElement.innerHTML = '<div class="empty-state">尚無歷史資料<p>點擊「快照」儲存今日資產狀態</p></div>'
+  // 建立快照索引（以 YYYY-MM 為 key）
+  const snapMap = {}
+  for (const h of history) snapMap[h.snapshot_date.slice(0, 7)] = h.total_assets
+
+  // 產生近 12 個月的完整月份格子
+  const nowTaipei = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  const labels = [], values = []
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(nowTaipei)
+    d.setUTCMonth(d.getUTCMonth() - i)
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`
+    const label = `${d.getUTCFullYear()}/${String(d.getUTCMonth()+1).padStart(2,'0')}`
+    labels.push(label)
+    values.push(snapMap[key] ?? null)
+  }
+
+  // 今天的即時資產永遠補在最右邊（覆蓋本月）
+  values[values.length - 1] = liveTotalAssets
+
+  // 用前一個已知值填補空白（carry forward）
+  let _last = null
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] !== null) _last = values[i]
+    else if (_last !== null) values[i] = _last
+  }
+
+  if (values.every(v => v === null)) {
+    ctx.canvas.parentElement.innerHTML = '<div class="empty-state">尚無歷史資料<p>系統每日午夜自動記錄，或手動點「快照」</p></div>'
     return
   }
 
   trendChart = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: history.map(h => h.snapshot_date.slice(0, 7)),
+      labels,
       datasets: [{
         label: '總資產',
-        data: history.map(h => h.total_assets),
+        data: values,
         borderColor: '#58a6ff',
         backgroundColor: 'rgba(88,166,255,0.1)',
-        fill: true, tension: 0.3, pointRadius: 3,
+        fill: true, tension: 0.3, pointRadius: 3, pointHoverRadius: 5,
+        spanGaps: false,
       }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: {
-        callbacks: { label: ctx => 'NT$' + ctx.raw.toLocaleString() }
+        callbacks: { label: ctx => ctx.raw != null ? 'NT$' + ctx.raw.toLocaleString() : '無資料' }
       }},
       scales: {
         x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 11 } } },
         y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 11 },
-          callback: v => 'NT$' + (v / 10000).toFixed(0) + 'W' } }
-      }
+          callback: v => 'NT$' + (Math.abs(v) >= 10000 ? (v/10000).toFixed(0)+'W' : v.toLocaleString()) } }
+      },
+      interaction: { mode: 'index', intersect: false },
     }
   })
 }
@@ -516,7 +543,7 @@ async function renderCountdowns() {
       )
     )
 
-    if (!txns.length) return null
+    if (!txns.length) return { noTxns: true, endStr }
     const reconciled = txns.every(t => t.status !== '待確認')
     const amount = txns.filter(t => t.status === '已對帳').reduce((s, t) => s + t.amount, 0)
     return { reconciled, amount, endStr }
@@ -558,7 +585,7 @@ async function renderCountdowns() {
   for (const acc of ccAccounts) {
     // 對帳狀態
     const status = acc.billing_day ? await getBillingStatus(acc.name, acc.billing_day) : null
-    const isPaid = status ? await checkPaymentDone(acc.name, status.endStr) : false
+    const isPaid = (status && !status.noTxns) ? await checkPaymentDone(acc.name, status.endStr) : false
 
     // 判斷扣款日是否已過
     let paymentPast = false
@@ -567,9 +594,14 @@ async function renderCountdowns() {
       paymentPast = payDateStr < today
     }
 
+    // 扣款日已過且已繳款或無消費 → 回到空窗期，顯示 –
+    const backToIdle = paymentPast && (isPaid || status?.noTxns)
+
     let statusHtml = ''
-    if (status === null) {
+    if (status === null || backToIdle) {
       statusHtml = `<span style="color:var(--text-muted);font-size:12px">–</span>`
+    } else if (status.noTxns) {
+      statusHtml = `<span style="color:var(--text-muted);font-size:12px">本期無消費</span>`
     } else if (isPaid) {
       statusHtml = `<span style="color:var(--success);font-size:13px;font-weight:600">已繳款</span>`
     } else if (paymentPast) {
@@ -621,6 +653,23 @@ async function renderCountdowns() {
   document.getElementById('upcoming-bills').innerHTML = html
 }
 
+function mergeTransferPairs(txns) {
+  const result = []
+  const seen = new Set()
+  for (const t of txns) {
+    if (t.transfer_id) {
+      if (seen.has(t.transfer_id)) continue
+      seen.add(t.transfer_id)
+      const out = txns.find(x => x.transfer_id === t.transfer_id && x.type === '支出') || t
+      const inc = txns.find(x => x.transfer_id === t.transfer_id && x.type === '收入') || t
+      result.push({ ...out, _isMergedTransfer: true, _xfrFrom: out.card, _xfrTo: inc.card })
+    } else {
+      result.push(t)
+    }
+  }
+  return result
+}
+
 async function loadDailySummary() {
   const el = document.getElementById('daily-summary')
   const month = today.slice(0, 7)
@@ -629,19 +678,29 @@ async function loadDailySummary() {
   const txns = res.data.filter(t => t.date === today)
   if (!txns.length) { el.innerHTML = '<div class="empty-state" style="padding:16px 0">今日無消費記錄</div>'; return }
 
-  const expTotal = txns.filter(t => t.type !== '收入' && !t.transfer_id).reduce((s,t) => s+t.amount, 0)
-  const incTotal = txns.filter(t => t.type === '收入' && !t.transfer_id).reduce((s,t) => s+t.amount, 0)
+  const realTxns = txns.filter(t => !t.transfer_id)
+  const expTotal = realTxns.filter(t => t.type !== '收入').reduce((s,t) => s+t.amount, 0)
+  const incTotal = realTxns.filter(t => t.type === '收入').reduce((s,t) => s+t.amount, 0)
 
-  let html = txns.map(t => {
-    const xfr = t.category === '轉帳' || t.transfer_id
-    const icon = xfr
-      ? `<div style="width:36px;height:36px;border-radius:50%;background:rgba(88,166,255,0.12);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">↔️</div>`
-      : catCircleHtml(t.category, 36)
+  let html = mergeTransferPairs(txns).map(t => {
+    if (t._isMergedTransfer) {
+      const icon = `<div style="width:36px;height:36px;border-radius:50%;background:rgba(208,112,48,0.15);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">↔</div>`
+      return `<div class="txn-row">
+        ${icon}
+        <div class="txn-info">
+          <div class="txn-name">${escHtml(t.note || '轉帳')}</div>
+          <div class="txn-meta">${escHtml(t._xfrFrom)} → ${escHtml(t._xfrTo)}</div>
+        </div>
+        <div class="txn-right">
+          <span class="txn-amt" style="color:#d07030">NT$${t.amount.toLocaleString()}</span>
+        </div>
+      </div>`
+    }
     const recBadge = t.source === '定期' ? ' <span style="font-size:12px">🔁</span>' : ''
     return `<div class="txn-row">
-      ${icon}
+      ${catCircleHtml(t.category, 36)}
       <div class="txn-info">
-        <div class="txn-name">${escHtml(t.name || t.category)}${xfr?' · 轉帳':''}${recBadge}</div>
+        <div class="txn-name">${escHtml(t.name || t.category)}${recBadge}</div>
         <div class="txn-meta">${t.card ? escHtml(t.card) : ''}</div>
       </div>
       <div class="txn-right">
@@ -652,8 +711,8 @@ async function loadDailySummary() {
 
   if (txns.length > 1) {
     const parts = []
-    if (expTotal > 0) parts.push(`支出 <b style="color:#e06c75">-$${expTotal.toLocaleString()}</b>`)
-    if (incTotal > 0) parts.push(`收入 <b style="color:#3fb950">+$${incTotal.toLocaleString()}</b>`)
+    if (expTotal > 0) parts.push(`支出 <b style="color:var(--danger)">$${expTotal.toLocaleString()}</b>`)
+    if (incTotal > 0) parts.push(`收入 <b style="color:#3fb950">$${incTotal.toLocaleString()}</b>`)
     if (parts.length) html += `<div style="padding:6px 0 0;font-size:12px;color:var(--text-muted);display:flex;gap:14px">${parts.join('')}</div>`
   }
   el.innerHTML = html
@@ -760,9 +819,8 @@ window.previewAdjustment = function() {
   const preview = document.getElementById('adjustment-preview')
   if (isNaN(newVal) || newVal === orig) { preview.style.display = 'none'; return }
   const diff = newVal - orig
-  const sign = diff >= 0 ? '+' : ''
   preview.style.display = 'block'
-  preview.innerHTML = `餘額調整：<strong style="color:${diff >= 0 ? 'var(--success)' : 'var(--danger)'}">${sign}NT$${Math.abs(diff).toLocaleString()}</strong>`
+  preview.innerHTML = `餘額調整：<strong style="color:${diff >= 0 ? 'var(--success)' : 'var(--danger)'}">NT$${Math.abs(diff).toLocaleString()}</strong>`
 }
 
 window.previewInclude = function() {
@@ -808,24 +866,13 @@ window.deleteAccountFromModal = async function() {
   else toast(res.error ?? '刪除失敗', 'error')
 }
 
-window.syncGmail = async function() {
-  toast('正在同步 Gmail…')
-  const res = await api.syncGmail()
-  if (res.ok) { toast(`同步完成：新增 ${res.synced} 筆`); load() }
-  else toast(res.error ?? '同步失敗', 'error')
-}
-
-window.takeSnapshot = async function() {
-  const res = await api.takeSnapshot()
-  if (res.ok) { toast('資產快照已儲存'); load() }
-  else toast(res.error ?? '快照失敗', 'error')
-}
 
 function escJs(s) { return s.replace(/'/g, "\\'").replace(/"/g, '\\"') }
 
 document.getElementById('last-sync').textContent =
   '今天 ' + new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
 
+initAppName()
 load()
 </script>
 <script src="/js/calc-keyboard.js"></script>

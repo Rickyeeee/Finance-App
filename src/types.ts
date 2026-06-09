@@ -7,6 +7,8 @@ export type Bindings = {
   CRON_SECRET: string
   AUTH_PIN: string
   AUTH_TOKEN: string
+  APP_NAME?: string
+  STATIC_ORIGIN?: string  // installer worker 用：proxy 靜態檔案的來源
 }
 
 export type Transaction = {
@@ -74,6 +76,9 @@ export type InvestmentTrade = {
   amount: number
   date: string
   account: string
+  to_account: string | null
+  realized_pnl: number
+  transfer_id: string | null
   note: string | null
   created_at: string
 }

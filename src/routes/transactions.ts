@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { Bindings } from '../types'
-import { getTransactions, createTransaction, updateTransaction, deleteTransaction, createTransfer, deleteTransferPair } from '../db/queries'
+import { getTransactions, createTransaction, updateTransaction, deleteTransaction, createTransfer, deleteTransferPair, getInvestmentTrades, getInvestments, deleteInvestmentTrade, upsertInvestment, deleteInvestment } from '../db/queries'
+import type { InvestmentTrade } from '../types'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -118,6 +119,65 @@ app.delete('/:id', async (c) => {
   const txn = await c.env.DB.prepare('SELECT transfer_id FROM transactions WHERE id = ?').bind(id).first<{ transfer_id: string | null }>()
 
   if (txn?.transfer_id) {
+    // 檢查是否有關聯的投資交易（賣出產生的轉帳）
+    const linkedTrade = await c.env.DB
+      .prepare('SELECT * FROM investment_trades WHERE transfer_id = ?')
+      .bind(txn.transfer_id)
+      .first<InvestmentTrade>()
+
+    if (linkedTrade) {
+      // 有關聯投資交易 → 刪除交易 + 轉帳 + 還原股票持倉
+      const allForPair = await getInvestmentTrades(c.env.DB, linkedTrade.symbol, linkedTrade.account)
+      const allInv = await getInvestments(c.env.DB)
+
+      await deleteInvestmentTrade(c.env.DB, linkedTrade.id)
+      await deleteTransferPair(c.env.DB, txn.transfer_id)
+
+      const remaining = allForPair.filter(t => t.id !== linkedTrade.id)
+      const inv = allInv.find(i => i.symbol === linkedTrade.symbol && i.account === linkedTrade.account)
+      const today = new Date().toISOString().slice(0, 10)
+
+      if (remaining.length === 0) {
+        if (inv) await deleteInvestment(c.env.DB, inv.id)
+        return c.json({ ok: true })
+      }
+
+      const sorted = [...remaining].sort((a, b) => a.date.localeCompare(b.date))
+      let shares = 0, avgCost = 0, realizedPnl = 0
+      for (const t of sorted) {
+        if (t.type === '買入') {
+          const newShares = shares + t.shares
+          avgCost = newShares > 0 ? (shares * avgCost + t.shares * t.price) / newShares : t.price
+          shares = newShares
+        } else {
+          realizedPnl += (t.price - avgCost) * t.shares
+          shares = Math.max(0, shares - t.shares)
+        }
+      }
+
+      if (shares === 0) {
+        if (inv) await deleteInvestment(c.env.DB, inv.id)
+        return c.json({ ok: true })
+      }
+
+      const currentPerShare = inv
+        ? (inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : avgCost))
+        : avgCost
+      const newMarketValue = Math.round(shares * currentPerShare)
+      const newTotalCost = Math.round(shares * avgCost)
+      const newProfitLoss = newMarketValue - newTotalCost
+      const newReturnRate = newTotalCost > 0 ? Math.round((newProfitLoss / newTotalCost) * 10000) / 100 : 0
+
+      await upsertInvestment(c.env.DB, {
+        ...(inv ?? { id: undefined, name: linkedTrade.name, symbol: linkedTrade.symbol, account: linkedTrade.account, current_price: avgCost, previous_close: 0 }),
+        shares, avg_cost: Math.round(avgCost * 100) / 100,
+        market_value: newMarketValue, profit_loss: newProfitLoss,
+        return_rate: newReturnRate, realized_pnl: Math.round(realizedPnl), updated_at: today,
+      })
+      return c.json({ ok: true })
+    }
+
+    // 一般轉帳（無投資關聯）→ 只刪轉帳對
     await deleteTransferPair(c.env.DB, txn.transfer_id)
     return c.json({ ok: true, deleted_transfer: true })
   }

@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { Bindings, InvestmentTrade } from '../types'
-import { getInvestments, upsertInvestment, deleteInvestment, getInvestmentTrades, createInvestmentTrade, deleteInvestmentTrade } from '../db/queries'
+import { getInvestments, upsertInvestment, deleteInvestment, getInvestmentTrades, createInvestmentTrade, deleteInvestmentTrade, createTransfer, deleteTransferPair } from '../db/queries'
 import { parseHoldaryCSV } from '../services/csv-parser'
 
 const app = new Hono<{ Bindings: Bindings }>()
@@ -229,25 +229,51 @@ app.post('/price/:symbol/refresh', async (c) => {
 app.get('/history', async (c) => {
   const range = c.req.query('range') ?? 'month'
 
-  if (range === 'year') {
-    // 每月最後一筆，取最近 12 個月
+  // 台北時間（UTC+8）
+  const taipeiNow = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  const today = taipeiNow.toISOString().slice(0, 10)
+
+  if (range === 'week') {
+    // 過去 7 天（含今天）
+    const start = new Date(taipeiNow)
+    start.setUTCDate(start.getUTCDate() - 6)
+    const startDate = start.toISOString().slice(0, 10)
     const { results } = await c.env.DB.prepare(`
-      SELECT snapshot_date, total_investments
-      FROM asset_history
-      WHERE snapshot_date IN (
-        SELECT MAX(snapshot_date) FROM asset_history GROUP BY substr(snapshot_date, 1, 7)
-      )
-      ORDER BY snapshot_date DESC LIMIT 12
-    `).all<{ snapshot_date: string; total_investments: number }>()
-    return c.json({ ok: true, data: results.reverse() })
+      SELECT snapshot_date, total_investments FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      ORDER BY snapshot_date ASC
+    `).bind(startDate, today).all<{ snapshot_date: string; total_investments: number }>()
+    return c.json({ ok: true, data: results, start: startDate, end: today })
   }
 
-  const limit = range === 'week' ? 7 : 30
+  if (range === 'month') {
+    // 過去 30 天（含今天）
+    const start = new Date(taipeiNow)
+    start.setUTCDate(start.getUTCDate() - 29)
+    const startDate = start.toISOString().slice(0, 10)
+    const { results } = await c.env.DB.prepare(`
+      SELECT snapshot_date, total_investments FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      ORDER BY snapshot_date ASC
+    `).bind(startDate, today).all<{ snapshot_date: string; total_investments: number }>()
+    return c.json({ ok: true, data: results, start: startDate, end: today })
+  }
+
+  // year：過去 365 天，每月取最後一筆
+  const start = new Date(taipeiNow)
+  start.setUTCDate(start.getUTCDate() - 364)
+  const startDate = start.toISOString().slice(0, 10)
   const { results } = await c.env.DB.prepare(`
-    SELECT snapshot_date, total_investments FROM asset_history
-    ORDER BY snapshot_date DESC LIMIT ?
-  `).bind(limit).all<{ snapshot_date: string; total_investments: number }>()
-  return c.json({ ok: true, data: results.reverse() })
+    SELECT snapshot_date, total_investments
+    FROM asset_history
+    WHERE snapshot_date IN (
+      SELECT MAX(snapshot_date) FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      GROUP BY substr(snapshot_date, 1, 7)
+    )
+    ORDER BY snapshot_date ASC
+  `).bind(startDate, today).all<{ snapshot_date: string; total_investments: number }>()
+  return c.json({ ok: true, data: results, start: startDate, end: today })
 })
 
 // 取得交易記錄
@@ -257,12 +283,21 @@ app.get('/trades', async (c) => {
   return c.json({ ok: true, data: trades })
 })
 
+// 已實現損益記錄（所有賣出交易）
+app.get('/pnl', async (c) => {
+  const { results } = await c.env.DB
+    .prepare(`SELECT * FROM investment_trades WHERE type = '賣出' ORDER BY date DESC, created_at DESC`)
+    .all<InvestmentTrade>()
+  const total = results.reduce((s, t) => s + (t.realized_pnl ?? 0), 0)
+  return c.json({ ok: true, data: results, total_realized_pnl: total })
+})
+
 // 新增交易
 app.post('/trades', async (c) => {
   const body = await c.req.json<{
     symbol: string; name: string; type: string;
     shares: number; price: number; date: string;
-    account?: string; note?: string;
+    account?: string; to_account?: string; fee?: number; note?: string;
   }>()
 
   if (!body.symbol || !body.type || !body.shares || !body.price || !body.date) {
@@ -273,6 +308,34 @@ app.post('/trades', async (c) => {
   }
 
   const amount = Math.round(body.shares * body.price)
+  const fee = body.fee ?? 0
+
+  // 更新持倉（按 symbol + account 分開計算）—— 需先讀取以取得 avg_cost
+  const investments = await getInvestments(c.env.DB)
+  const account = body.account ?? ''
+  const inv = investments.find(i => i.symbol === body.symbol && i.account === account)
+  const today = body.date
+
+  // 賣出時計算每筆已實現損益
+  const tradeRealizedPnl = body.type === '賣出' && inv
+    ? Math.round((body.price - inv.avg_cost) * body.shares) - fee
+    : 0
+
+  // 賣出且有指定入帳帳戶 → 先建立轉帳，再存 transfer_id 到 trade
+  let tradeTransferId: string | null = null
+  if (body.type === '賣出' && body.to_account && body.account) {
+    const proceeds = amount - fee
+    tradeTransferId = await createTransfer(c.env.DB, {
+      from_account: body.account,
+      to_account: body.to_account,
+      amount: proceeds,
+      date: body.date,
+      note: `賣出 ${body.symbol} ${body.name} ×${body.shares}`,
+      outName: `賣出 ${body.symbol} ${body.name}`,
+      inName: `賣出 ${body.symbol} ${body.name}`,
+    })
+  }
+
   const id = await createInvestmentTrade(c.env.DB, {
     symbol: body.symbol,
     name: body.name,
@@ -282,14 +345,11 @@ app.post('/trades', async (c) => {
     amount,
     date: body.date,
     account: body.account ?? '',
+    to_account: body.type === '賣出' ? (body.to_account ?? null) : null,
+    realized_pnl: tradeRealizedPnl,
+    transfer_id: tradeTransferId,
     note: body.note ?? null,
   })
-
-  // 更新持倉（按 symbol + account 分開計算）
-  const investments = await getInvestments(c.env.DB)
-  const account = body.account ?? ''
-  const inv = investments.find(i => i.symbol === body.symbol && i.account === account)
-  const today = body.date
 
   if (inv) {
     let newShares: number
@@ -304,7 +364,7 @@ app.post('/trades', async (c) => {
     } else {
       newShares = Math.max(0, inv.shares - body.shares)
       newAvgCost = inv.avg_cost
-      newRealizedPnl += (body.price - inv.avg_cost) * body.shares
+      newRealizedPnl += tradeRealizedPnl
     }
 
     const currentPerShare = inv.shares > 0 ? (inv.current_price || inv.market_value / inv.shares) : body.price
@@ -313,16 +373,20 @@ app.post('/trades', async (c) => {
     const newProfitLoss = newMarketValue - newTotalCost
     const newReturnRate = newTotalCost > 0 ? Math.round((newProfitLoss / newTotalCost) * 10000) / 100 : 0
 
-    await upsertInvestment(c.env.DB, {
-      ...inv,
-      shares: newShares,
-      avg_cost: Math.round(newAvgCost * 100) / 100,
-      market_value: newMarketValue,
-      profit_loss: newProfitLoss,
-      return_rate: newReturnRate,
-      realized_pnl: Math.round(newRealizedPnl),
-      updated_at: today,
-    })
+    if (newShares === 0 && body.type === '賣出') {
+      await deleteInvestment(c.env.DB, inv.id)
+    } else {
+      await upsertInvestment(c.env.DB, {
+        ...inv,
+        shares: newShares,
+        avg_cost: Math.round(newAvgCost * 100) / 100,
+        market_value: newMarketValue,
+        profit_loss: newProfitLoss,
+        return_rate: newReturnRate,
+        realized_pnl: Math.round(newRealizedPnl),
+        updated_at: today,
+      })
+    }
   } else if (body.type === '買入') {
     // 全新持股：建立記錄
     await upsertInvestment(c.env.DB, {
@@ -427,20 +491,22 @@ app.delete('/trades/:id', async (c) => {
   const allForPair = await getInvestmentTrades(c.env.DB, trade.symbol, trade.account)
   const allInv = await getInvestments(c.env.DB)
 
-  // 執行刪除
+  // 執行刪除（若有關聯轉帳，一併刪除）
   await deleteInvestmentTrade(c.env.DB, id)
+  if (trade.transfer_id) {
+    await deleteTransferPair(c.env.DB, trade.transfer_id)
+  }
 
   // 手動排除剛刪的那筆，不依賴 read-after-write
   const remaining = allForPair.filter(t => t.id !== id)
 
   const inv = allInv.find(i => i.symbol === trade.symbol && i.account === trade.account)
-  if (!inv) return c.json({ ok: true })
 
   const today = new Date().toISOString().slice(0, 10)
 
   if (remaining.length === 0) {
-    // 無剩餘交易，直接刪除持倉記錄
-    await deleteInvestment(c.env.DB, inv.id)
+    // 無剩餘交易：如果持倉存在則刪除
+    if (inv) await deleteInvestment(c.env.DB, inv.id)
     return c.json({ ok: true })
   }
 
@@ -460,14 +526,30 @@ app.delete('/trades/:id', async (c) => {
     }
   }
 
-  const currentPerShare = inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : 0)
+  if (shares === 0) {
+    // 重算後股數為 0：如果持倉存在則刪除
+    if (inv) await deleteInvestment(c.env.DB, inv.id)
+    return c.json({ ok: true })
+  }
+
+  // 重算後股數 > 0，需要 upsert 持倉（可能是從已刪除狀態恢復）
+  const currentPerShare = inv
+    ? (inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : avgCost))
+    : avgCost
   const newMarketValue = Math.round(shares * currentPerShare)
   const newTotalCost = Math.round(shares * avgCost)
   const newProfitLoss = newMarketValue - newTotalCost
   const newReturnRate = newTotalCost > 0 ? Math.round((newProfitLoss / newTotalCost) * 10000) / 100 : 0
 
   await upsertInvestment(c.env.DB, {
-    ...inv,
+    ...(inv ?? {
+      id: undefined,
+      name: trade.name,
+      symbol: trade.symbol,
+      account: trade.account,
+      current_price: avgCost,
+      previous_close: 0,
+    }),
     shares,
     avg_cost: Math.round(avgCost * 100) / 100,
     market_value: newMarketValue,

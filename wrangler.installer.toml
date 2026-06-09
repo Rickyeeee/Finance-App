@@ -1,0 +1,16 @@
+name = "finance-installer-build"
+main = "src/installer-entry.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# 注意：這個 config 沒有 ASSETS binding（靜態檔案用 proxy）
+# 用途：build 出 installer-worker.js 供安裝程式使用
+
+[[d1_databases]]
+binding = "DB"
+database_name = "placeholder-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[vars]
+APP_NAME = "我的財務"
+STATIC_ORIGIN = "https://ricky-finance.ke877857.workers.dev"

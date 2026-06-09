@@ -235,9 +235,9 @@ export async function getInvestmentTrades(db: D1Database, symbol?: string, accou
 export async function createInvestmentTrade(db: D1Database, data: Omit<InvestmentTrade, 'id' | 'created_at'>) {
   const id = generateId('trd')
   await db.prepare(`
-    INSERT INTO investment_trades (id, symbol, name, type, shares, price, amount, date, account, note)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(id, data.symbol, data.name, data.type, data.shares, data.price, data.amount, data.date, data.account ?? '', data.note ?? null).run()
+    INSERT INTO investment_trades (id, symbol, name, type, shares, price, amount, date, account, to_account, realized_pnl, transfer_id, note)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(id, data.symbol, data.name, data.type, data.shares, data.price, data.amount, data.date, data.account ?? '', data.to_account ?? null, data.realized_pnl ?? 0, data.transfer_id ?? null, data.note ?? null).run()
   return id
 }
 
@@ -384,12 +384,17 @@ export async function updateReconciliationItem(db: D1Database, id: string, data:
 // --- Asset History ---
 
 export async function getAssetHistory(db: D1Database, months = 12) {
+  // 每月取最後一筆，顯示近 N 個月的月度趨勢
   const { results } = await db.prepare(`
     SELECT * FROM asset_history
-    ORDER BY snapshot_date DESC
-    LIMIT ?
+    WHERE snapshot_date IN (
+      SELECT MAX(snapshot_date) FROM asset_history
+      WHERE snapshot_date >= date('now', '-' || ? || ' months')
+      GROUP BY substr(snapshot_date, 1, 7)
+    )
+    ORDER BY snapshot_date ASC
   `).bind(months).all<AssetHistory>()
-  return results.reverse()
+  return results
 }
 
 export async function recordAssetSnapshot(db: D1Database, data: Omit<AssetHistory, 'id' | 'created_at'>) {

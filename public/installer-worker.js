@@ -1,12 +1,19 @@
 var __defProp = Object.defineProperty;
+var __getOwnPropNames = Object.getOwnPropertyNames;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+var __esm = (fn, res) => function __init() {
+  return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
 
 // node_modules/unenv/dist/runtime/_internal/utils.mjs
 // @__NO_SIDE_EFFECTS__
 function createNotImplementedError(name) {
   return new Error(`[unenv] ${name} is not implemented yet!`);
 }
-__name(createNotImplementedError, "createNotImplementedError");
 // @__NO_SIDE_EFFECTS__
 function notImplemented(name) {
   const fn = /* @__PURE__ */ __name(() => {
@@ -14,7 +21,6 @@ function notImplemented(name) {
   }, "fn");
   return Object.assign(fn, { __unenv__: true });
 }
-__name(notImplemented, "notImplemented");
 // @__NO_SIDE_EFFECTS__
 function notImplementedClass(name) {
   return class {
@@ -24,911 +30,1622 @@ function notImplementedClass(name) {
     }
   };
 }
-__name(notImplementedClass, "notImplementedClass");
+var init_utils = __esm({
+  "node_modules/unenv/dist/runtime/_internal/utils.mjs"() {
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    __name(createNotImplementedError, "createNotImplementedError");
+    __name(notImplemented, "notImplemented");
+    __name(notImplementedClass, "notImplementedClass");
+  }
+});
 
 // node_modules/unenv/dist/runtime/node/internal/perf_hooks/performance.mjs
-var _timeOrigin = globalThis.performance?.timeOrigin ?? Date.now();
-var _performanceNow = globalThis.performance?.now ? globalThis.performance.now.bind(globalThis.performance) : () => Date.now() - _timeOrigin;
-var nodeTiming = {
-  name: "node",
-  entryType: "node",
-  startTime: 0,
-  duration: 0,
-  nodeStart: 0,
-  v8Start: 0,
-  bootstrapComplete: 0,
-  environment: 0,
-  loopStart: 0,
-  loopExit: 0,
-  idleTime: 0,
-  uvMetricsInfo: {
-    loopCount: 0,
-    events: 0,
-    eventsWaiting: 0
-  },
-  detail: void 0,
-  toJSON() {
-    return this;
-  }
-};
-var PerformanceEntry = class {
-  static {
-    __name(this, "PerformanceEntry");
-  }
-  __unenv__ = true;
-  detail;
-  entryType = "event";
-  name;
-  startTime;
-  constructor(name, options) {
-    this.name = name;
-    this.startTime = options?.startTime || _performanceNow();
-    this.detail = options?.detail;
-  }
-  get duration() {
-    return _performanceNow() - this.startTime;
-  }
-  toJSON() {
-    return {
-      name: this.name,
-      entryType: this.entryType,
-      startTime: this.startTime,
-      duration: this.duration,
-      detail: this.detail
-    };
-  }
-};
-var PerformanceMark = class PerformanceMark2 extends PerformanceEntry {
-  static {
-    __name(this, "PerformanceMark");
-  }
-  entryType = "mark";
-  constructor() {
-    super(...arguments);
-  }
-  get duration() {
-    return 0;
-  }
-};
-var PerformanceMeasure = class extends PerformanceEntry {
-  static {
-    __name(this, "PerformanceMeasure");
-  }
-  entryType = "measure";
-};
-var PerformanceResourceTiming = class extends PerformanceEntry {
-  static {
-    __name(this, "PerformanceResourceTiming");
-  }
-  entryType = "resource";
-  serverTiming = [];
-  connectEnd = 0;
-  connectStart = 0;
-  decodedBodySize = 0;
-  domainLookupEnd = 0;
-  domainLookupStart = 0;
-  encodedBodySize = 0;
-  fetchStart = 0;
-  initiatorType = "";
-  name = "";
-  nextHopProtocol = "";
-  redirectEnd = 0;
-  redirectStart = 0;
-  requestStart = 0;
-  responseEnd = 0;
-  responseStart = 0;
-  secureConnectionStart = 0;
-  startTime = 0;
-  transferSize = 0;
-  workerStart = 0;
-  responseStatus = 0;
-};
-var PerformanceObserverEntryList = class {
-  static {
-    __name(this, "PerformanceObserverEntryList");
-  }
-  __unenv__ = true;
-  getEntries() {
-    return [];
-  }
-  getEntriesByName(_name, _type) {
-    return [];
-  }
-  getEntriesByType(type) {
-    return [];
-  }
-};
-var Performance = class {
-  static {
-    __name(this, "Performance");
-  }
-  __unenv__ = true;
-  timeOrigin = _timeOrigin;
-  eventCounts = /* @__PURE__ */ new Map();
-  _entries = [];
-  _resourceTimingBufferSize = 0;
-  navigation = void 0;
-  timing = void 0;
-  timerify(_fn, _options) {
-    throw createNotImplementedError("Performance.timerify");
-  }
-  get nodeTiming() {
-    return nodeTiming;
-  }
-  eventLoopUtilization() {
-    return {};
-  }
-  markResourceTiming() {
-    return new PerformanceResourceTiming("");
-  }
-  onresourcetimingbufferfull = null;
-  now() {
-    if (this.timeOrigin === _timeOrigin) {
-      return _performanceNow();
-    }
-    return Date.now() - this.timeOrigin;
-  }
-  clearMarks(markName) {
-    this._entries = markName ? this._entries.filter((e) => e.name !== markName) : this._entries.filter((e) => e.entryType !== "mark");
-  }
-  clearMeasures(measureName) {
-    this._entries = measureName ? this._entries.filter((e) => e.name !== measureName) : this._entries.filter((e) => e.entryType !== "measure");
-  }
-  clearResourceTimings() {
-    this._entries = this._entries.filter((e) => e.entryType !== "resource" || e.entryType !== "navigation");
-  }
-  getEntries() {
-    return this._entries;
-  }
-  getEntriesByName(name, type) {
-    return this._entries.filter((e) => e.name === name && (!type || e.entryType === type));
-  }
-  getEntriesByType(type) {
-    return this._entries.filter((e) => e.entryType === type);
-  }
-  mark(name, options) {
-    const entry = new PerformanceMark(name, options);
-    this._entries.push(entry);
-    return entry;
-  }
-  measure(measureName, startOrMeasureOptions, endMark) {
-    let start;
-    let end;
-    if (typeof startOrMeasureOptions === "string") {
-      start = this.getEntriesByName(startOrMeasureOptions, "mark")[0]?.startTime;
-      end = this.getEntriesByName(endMark, "mark")[0]?.startTime;
-    } else {
-      start = Number.parseFloat(startOrMeasureOptions?.start) || this.now();
-      end = Number.parseFloat(startOrMeasureOptions?.end) || this.now();
-    }
-    const entry = new PerformanceMeasure(measureName, {
-      startTime: start,
-      detail: {
-        start,
-        end
+var _timeOrigin, _performanceNow, nodeTiming, PerformanceEntry, PerformanceMark, PerformanceMeasure, PerformanceResourceTiming, PerformanceObserverEntryList, Performance, PerformanceObserver, performance;
+var init_performance = __esm({
+  "node_modules/unenv/dist/runtime/node/internal/perf_hooks/performance.mjs"() {
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_utils();
+    _timeOrigin = globalThis.performance?.timeOrigin ?? Date.now();
+    _performanceNow = globalThis.performance?.now ? globalThis.performance.now.bind(globalThis.performance) : () => Date.now() - _timeOrigin;
+    nodeTiming = {
+      name: "node",
+      entryType: "node",
+      startTime: 0,
+      duration: 0,
+      nodeStart: 0,
+      v8Start: 0,
+      bootstrapComplete: 0,
+      environment: 0,
+      loopStart: 0,
+      loopExit: 0,
+      idleTime: 0,
+      uvMetricsInfo: {
+        loopCount: 0,
+        events: 0,
+        eventsWaiting: 0
+      },
+      detail: void 0,
+      toJSON() {
+        return this;
       }
-    });
-    this._entries.push(entry);
-    return entry;
+    };
+    PerformanceEntry = class {
+      static {
+        __name(this, "PerformanceEntry");
+      }
+      __unenv__ = true;
+      detail;
+      entryType = "event";
+      name;
+      startTime;
+      constructor(name, options) {
+        this.name = name;
+        this.startTime = options?.startTime || _performanceNow();
+        this.detail = options?.detail;
+      }
+      get duration() {
+        return _performanceNow() - this.startTime;
+      }
+      toJSON() {
+        return {
+          name: this.name,
+          entryType: this.entryType,
+          startTime: this.startTime,
+          duration: this.duration,
+          detail: this.detail
+        };
+      }
+    };
+    PerformanceMark = class PerformanceMark2 extends PerformanceEntry {
+      static {
+        __name(this, "PerformanceMark");
+      }
+      entryType = "mark";
+      constructor() {
+        super(...arguments);
+      }
+      get duration() {
+        return 0;
+      }
+    };
+    PerformanceMeasure = class extends PerformanceEntry {
+      static {
+        __name(this, "PerformanceMeasure");
+      }
+      entryType = "measure";
+    };
+    PerformanceResourceTiming = class extends PerformanceEntry {
+      static {
+        __name(this, "PerformanceResourceTiming");
+      }
+      entryType = "resource";
+      serverTiming = [];
+      connectEnd = 0;
+      connectStart = 0;
+      decodedBodySize = 0;
+      domainLookupEnd = 0;
+      domainLookupStart = 0;
+      encodedBodySize = 0;
+      fetchStart = 0;
+      initiatorType = "";
+      name = "";
+      nextHopProtocol = "";
+      redirectEnd = 0;
+      redirectStart = 0;
+      requestStart = 0;
+      responseEnd = 0;
+      responseStart = 0;
+      secureConnectionStart = 0;
+      startTime = 0;
+      transferSize = 0;
+      workerStart = 0;
+      responseStatus = 0;
+    };
+    PerformanceObserverEntryList = class {
+      static {
+        __name(this, "PerformanceObserverEntryList");
+      }
+      __unenv__ = true;
+      getEntries() {
+        return [];
+      }
+      getEntriesByName(_name, _type) {
+        return [];
+      }
+      getEntriesByType(type) {
+        return [];
+      }
+    };
+    Performance = class {
+      static {
+        __name(this, "Performance");
+      }
+      __unenv__ = true;
+      timeOrigin = _timeOrigin;
+      eventCounts = /* @__PURE__ */ new Map();
+      _entries = [];
+      _resourceTimingBufferSize = 0;
+      navigation = void 0;
+      timing = void 0;
+      timerify(_fn, _options) {
+        throw createNotImplementedError("Performance.timerify");
+      }
+      get nodeTiming() {
+        return nodeTiming;
+      }
+      eventLoopUtilization() {
+        return {};
+      }
+      markResourceTiming() {
+        return new PerformanceResourceTiming("");
+      }
+      onresourcetimingbufferfull = null;
+      now() {
+        if (this.timeOrigin === _timeOrigin) {
+          return _performanceNow();
+        }
+        return Date.now() - this.timeOrigin;
+      }
+      clearMarks(markName) {
+        this._entries = markName ? this._entries.filter((e) => e.name !== markName) : this._entries.filter((e) => e.entryType !== "mark");
+      }
+      clearMeasures(measureName) {
+        this._entries = measureName ? this._entries.filter((e) => e.name !== measureName) : this._entries.filter((e) => e.entryType !== "measure");
+      }
+      clearResourceTimings() {
+        this._entries = this._entries.filter((e) => e.entryType !== "resource" || e.entryType !== "navigation");
+      }
+      getEntries() {
+        return this._entries;
+      }
+      getEntriesByName(name, type) {
+        return this._entries.filter((e) => e.name === name && (!type || e.entryType === type));
+      }
+      getEntriesByType(type) {
+        return this._entries.filter((e) => e.entryType === type);
+      }
+      mark(name, options) {
+        const entry = new PerformanceMark(name, options);
+        this._entries.push(entry);
+        return entry;
+      }
+      measure(measureName, startOrMeasureOptions, endMark) {
+        let start;
+        let end;
+        if (typeof startOrMeasureOptions === "string") {
+          start = this.getEntriesByName(startOrMeasureOptions, "mark")[0]?.startTime;
+          end = this.getEntriesByName(endMark, "mark")[0]?.startTime;
+        } else {
+          start = Number.parseFloat(startOrMeasureOptions?.start) || this.now();
+          end = Number.parseFloat(startOrMeasureOptions?.end) || this.now();
+        }
+        const entry = new PerformanceMeasure(measureName, {
+          startTime: start,
+          detail: {
+            start,
+            end
+          }
+        });
+        this._entries.push(entry);
+        return entry;
+      }
+      setResourceTimingBufferSize(maxSize) {
+        this._resourceTimingBufferSize = maxSize;
+      }
+      addEventListener(type, listener, options) {
+        throw createNotImplementedError("Performance.addEventListener");
+      }
+      removeEventListener(type, listener, options) {
+        throw createNotImplementedError("Performance.removeEventListener");
+      }
+      dispatchEvent(event) {
+        throw createNotImplementedError("Performance.dispatchEvent");
+      }
+      toJSON() {
+        return this;
+      }
+    };
+    PerformanceObserver = class {
+      static {
+        __name(this, "PerformanceObserver");
+      }
+      __unenv__ = true;
+      static supportedEntryTypes = [];
+      _callback = null;
+      constructor(callback) {
+        this._callback = callback;
+      }
+      takeRecords() {
+        return [];
+      }
+      disconnect() {
+        throw createNotImplementedError("PerformanceObserver.disconnect");
+      }
+      observe(options) {
+        throw createNotImplementedError("PerformanceObserver.observe");
+      }
+      bind(fn) {
+        return fn;
+      }
+      runInAsyncScope(fn, thisArg, ...args) {
+        return fn.call(thisArg, ...args);
+      }
+      asyncId() {
+        return 0;
+      }
+      triggerAsyncId() {
+        return 0;
+      }
+      emitDestroy() {
+        return this;
+      }
+    };
+    performance = globalThis.performance && "addEventListener" in globalThis.performance ? globalThis.performance : new Performance();
   }
-  setResourceTimingBufferSize(maxSize) {
-    this._resourceTimingBufferSize = maxSize;
+});
+
+// node_modules/unenv/dist/runtime/node/perf_hooks.mjs
+var init_perf_hooks = __esm({
+  "node_modules/unenv/dist/runtime/node/perf_hooks.mjs"() {
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_performance();
   }
-  addEventListener(type, listener, options) {
-    throw createNotImplementedError("Performance.addEventListener");
-  }
-  removeEventListener(type, listener, options) {
-    throw createNotImplementedError("Performance.removeEventListener");
-  }
-  dispatchEvent(event) {
-    throw createNotImplementedError("Performance.dispatchEvent");
-  }
-  toJSON() {
-    return this;
-  }
-};
-var PerformanceObserver = class {
-  static {
-    __name(this, "PerformanceObserver");
-  }
-  __unenv__ = true;
-  static supportedEntryTypes = [];
-  _callback = null;
-  constructor(callback) {
-    this._callback = callback;
-  }
-  takeRecords() {
-    return [];
-  }
-  disconnect() {
-    throw createNotImplementedError("PerformanceObserver.disconnect");
-  }
-  observe(options) {
-    throw createNotImplementedError("PerformanceObserver.observe");
-  }
-  bind(fn) {
-    return fn;
-  }
-  runInAsyncScope(fn, thisArg, ...args) {
-    return fn.call(thisArg, ...args);
-  }
-  asyncId() {
-    return 0;
-  }
-  triggerAsyncId() {
-    return 0;
-  }
-  emitDestroy() {
-    return this;
-  }
-};
-var performance = globalThis.performance && "addEventListener" in globalThis.performance ? globalThis.performance : new Performance();
+});
 
 // node_modules/@cloudflare/unenv-preset/dist/runtime/polyfill/performance.mjs
-if (!("__unenv__" in performance)) {
-  const proto = Performance.prototype;
-  for (const key of Object.getOwnPropertyNames(proto)) {
-    if (key !== "constructor" && !(key in performance)) {
-      const desc = Object.getOwnPropertyDescriptor(proto, key);
-      if (desc) {
-        Object.defineProperty(performance, key, desc);
+var init_performance2 = __esm({
+  "node_modules/@cloudflare/unenv-preset/dist/runtime/polyfill/performance.mjs"() {
+    init_perf_hooks();
+    if (!("__unenv__" in performance)) {
+      const proto = Performance.prototype;
+      for (const key of Object.getOwnPropertyNames(proto)) {
+        if (key !== "constructor" && !(key in performance)) {
+          const desc = Object.getOwnPropertyDescriptor(proto, key);
+          if (desc) {
+            Object.defineProperty(performance, key, desc);
+          }
+        }
       }
     }
+    globalThis.performance = performance;
+    globalThis.Performance = Performance;
+    globalThis.PerformanceEntry = PerformanceEntry;
+    globalThis.PerformanceMark = PerformanceMark;
+    globalThis.PerformanceMeasure = PerformanceMeasure;
+    globalThis.PerformanceObserver = PerformanceObserver;
+    globalThis.PerformanceObserverEntryList = PerformanceObserverEntryList;
+    globalThis.PerformanceResourceTiming = PerformanceResourceTiming;
   }
-}
-globalThis.performance = performance;
-globalThis.Performance = Performance;
-globalThis.PerformanceEntry = PerformanceEntry;
-globalThis.PerformanceMark = PerformanceMark;
-globalThis.PerformanceMeasure = PerformanceMeasure;
-globalThis.PerformanceObserver = PerformanceObserver;
-globalThis.PerformanceObserverEntryList = PerformanceObserverEntryList;
-globalThis.PerformanceResourceTiming = PerformanceResourceTiming;
+});
+
+// node_modules/unenv/dist/runtime/mock/noop.mjs
+var noop_default;
+var init_noop = __esm({
+  "node_modules/unenv/dist/runtime/mock/noop.mjs"() {
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    noop_default = Object.assign(() => {
+    }, { __unenv__: true });
+  }
+});
 
 // node_modules/unenv/dist/runtime/node/console.mjs
 import { Writable } from "node:stream";
-
-// node_modules/unenv/dist/runtime/mock/noop.mjs
-var noop_default = Object.assign(() => {
-}, { __unenv__: true });
-
-// node_modules/unenv/dist/runtime/node/console.mjs
-var _console = globalThis.console;
-var _ignoreErrors = true;
-var _stderr = new Writable();
-var _stdout = new Writable();
-var log = _console?.log ?? noop_default;
-var info = _console?.info ?? log;
-var trace = _console?.trace ?? info;
-var debug = _console?.debug ?? log;
-var table = _console?.table ?? log;
-var error = _console?.error ?? log;
-var warn = _console?.warn ?? error;
-var createTask = _console?.createTask ?? /* @__PURE__ */ notImplemented("console.createTask");
-var clear = _console?.clear ?? noop_default;
-var count = _console?.count ?? noop_default;
-var countReset = _console?.countReset ?? noop_default;
-var dir = _console?.dir ?? noop_default;
-var dirxml = _console?.dirxml ?? noop_default;
-var group = _console?.group ?? noop_default;
-var groupEnd = _console?.groupEnd ?? noop_default;
-var groupCollapsed = _console?.groupCollapsed ?? noop_default;
-var profile = _console?.profile ?? noop_default;
-var profileEnd = _console?.profileEnd ?? noop_default;
-var time = _console?.time ?? noop_default;
-var timeEnd = _console?.timeEnd ?? noop_default;
-var timeLog = _console?.timeLog ?? noop_default;
-var timeStamp = _console?.timeStamp ?? noop_default;
-var Console = _console?.Console ?? /* @__PURE__ */ notImplementedClass("console.Console");
-var _times = /* @__PURE__ */ new Map();
-var _stdoutErrorHandler = noop_default;
-var _stderrErrorHandler = noop_default;
+var _console, _ignoreErrors, _stderr, _stdout, log, info, trace, debug, table, error, warn, createTask, clear, count, countReset, dir, dirxml, group, groupEnd, groupCollapsed, profile, profileEnd, time, timeEnd, timeLog, timeStamp, Console, _times, _stdoutErrorHandler, _stderrErrorHandler;
+var init_console = __esm({
+  "node_modules/unenv/dist/runtime/node/console.mjs"() {
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_noop();
+    init_utils();
+    _console = globalThis.console;
+    _ignoreErrors = true;
+    _stderr = new Writable();
+    _stdout = new Writable();
+    log = _console?.log ?? noop_default;
+    info = _console?.info ?? log;
+    trace = _console?.trace ?? info;
+    debug = _console?.debug ?? log;
+    table = _console?.table ?? log;
+    error = _console?.error ?? log;
+    warn = _console?.warn ?? error;
+    createTask = _console?.createTask ?? /* @__PURE__ */ notImplemented("console.createTask");
+    clear = _console?.clear ?? noop_default;
+    count = _console?.count ?? noop_default;
+    countReset = _console?.countReset ?? noop_default;
+    dir = _console?.dir ?? noop_default;
+    dirxml = _console?.dirxml ?? noop_default;
+    group = _console?.group ?? noop_default;
+    groupEnd = _console?.groupEnd ?? noop_default;
+    groupCollapsed = _console?.groupCollapsed ?? noop_default;
+    profile = _console?.profile ?? noop_default;
+    profileEnd = _console?.profileEnd ?? noop_default;
+    time = _console?.time ?? noop_default;
+    timeEnd = _console?.timeEnd ?? noop_default;
+    timeLog = _console?.timeLog ?? noop_default;
+    timeStamp = _console?.timeStamp ?? noop_default;
+    Console = _console?.Console ?? /* @__PURE__ */ notImplementedClass("console.Console");
+    _times = /* @__PURE__ */ new Map();
+    _stdoutErrorHandler = noop_default;
+    _stderrErrorHandler = noop_default;
+  }
+});
 
 // node_modules/@cloudflare/unenv-preset/dist/runtime/node/console.mjs
-var workerdConsole = globalThis["console"];
-var {
-  assert,
-  clear: clear2,
-  // @ts-expect-error undocumented public API
-  context,
-  count: count2,
-  countReset: countReset2,
-  // @ts-expect-error undocumented public API
-  createTask: createTask2,
-  debug: debug2,
-  dir: dir2,
-  dirxml: dirxml2,
-  error: error2,
-  group: group2,
-  groupCollapsed: groupCollapsed2,
-  groupEnd: groupEnd2,
-  info: info2,
-  log: log2,
-  profile: profile2,
-  profileEnd: profileEnd2,
-  table: table2,
-  time: time2,
-  timeEnd: timeEnd2,
-  timeLog: timeLog2,
-  timeStamp: timeStamp2,
-  trace: trace2,
-  warn: warn2
-} = workerdConsole;
-Object.assign(workerdConsole, {
-  Console,
-  _ignoreErrors,
-  _stderr,
-  _stderrErrorHandler,
-  _stdout,
-  _stdoutErrorHandler,
-  _times
+var workerdConsole, assert, clear2, context, count2, countReset2, createTask2, debug2, dir2, dirxml2, error2, group2, groupCollapsed2, groupEnd2, info2, log2, profile2, profileEnd2, table2, time2, timeEnd2, timeLog2, timeStamp2, trace2, warn2, console_default;
+var init_console2 = __esm({
+  "node_modules/@cloudflare/unenv-preset/dist/runtime/node/console.mjs"() {
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_console();
+    workerdConsole = globalThis["console"];
+    ({
+      assert,
+      clear: clear2,
+      context: (
+        // @ts-expect-error undocumented public API
+        context
+      ),
+      count: count2,
+      countReset: countReset2,
+      createTask: (
+        // @ts-expect-error undocumented public API
+        createTask2
+      ),
+      debug: debug2,
+      dir: dir2,
+      dirxml: dirxml2,
+      error: error2,
+      group: group2,
+      groupCollapsed: groupCollapsed2,
+      groupEnd: groupEnd2,
+      info: info2,
+      log: log2,
+      profile: profile2,
+      profileEnd: profileEnd2,
+      table: table2,
+      time: time2,
+      timeEnd: timeEnd2,
+      timeLog: timeLog2,
+      timeStamp: timeStamp2,
+      trace: trace2,
+      warn: warn2
+    } = workerdConsole);
+    Object.assign(workerdConsole, {
+      Console,
+      _ignoreErrors,
+      _stderr,
+      _stderrErrorHandler,
+      _stdout,
+      _stdoutErrorHandler,
+      _times
+    });
+    console_default = workerdConsole;
+  }
 });
-var console_default = workerdConsole;
 
 // node_modules/wrangler/_virtual_unenv_global_polyfill-@cloudflare-unenv-preset-node-console
-globalThis.console = console_default;
+var init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console = __esm({
+  "node_modules/wrangler/_virtual_unenv_global_polyfill-@cloudflare-unenv-preset-node-console"() {
+    init_console2();
+    globalThis.console = console_default;
+  }
+});
 
 // node_modules/unenv/dist/runtime/node/internal/process/hrtime.mjs
-var hrtime = /* @__PURE__ */ Object.assign(/* @__PURE__ */ __name(function hrtime2(startTime) {
-  const now = Date.now();
-  const seconds = Math.trunc(now / 1e3);
-  const nanos = now % 1e3 * 1e6;
-  if (startTime) {
-    let diffSeconds = seconds - startTime[0];
-    let diffNanos = nanos - startTime[0];
-    if (diffNanos < 0) {
-      diffSeconds = diffSeconds - 1;
-      diffNanos = 1e9 + diffNanos;
-    }
-    return [diffSeconds, diffNanos];
+var hrtime;
+var init_hrtime = __esm({
+  "node_modules/unenv/dist/runtime/node/internal/process/hrtime.mjs"() {
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    hrtime = /* @__PURE__ */ Object.assign(/* @__PURE__ */ __name(function hrtime2(startTime) {
+      const now = Date.now();
+      const seconds = Math.trunc(now / 1e3);
+      const nanos = now % 1e3 * 1e6;
+      if (startTime) {
+        let diffSeconds = seconds - startTime[0];
+        let diffNanos = nanos - startTime[0];
+        if (diffNanos < 0) {
+          diffSeconds = diffSeconds - 1;
+          diffNanos = 1e9 + diffNanos;
+        }
+        return [diffSeconds, diffNanos];
+      }
+      return [seconds, nanos];
+    }, "hrtime"), { bigint: /* @__PURE__ */ __name(function bigint() {
+      return BigInt(Date.now() * 1e6);
+    }, "bigint") });
   }
-  return [seconds, nanos];
-}, "hrtime"), { bigint: /* @__PURE__ */ __name(function bigint() {
-  return BigInt(Date.now() * 1e6);
-}, "bigint") });
+});
+
+// node_modules/unenv/dist/runtime/node/internal/tty/read-stream.mjs
+var ReadStream;
+var init_read_stream = __esm({
+  "node_modules/unenv/dist/runtime/node/internal/tty/read-stream.mjs"() {
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    ReadStream = class {
+      static {
+        __name(this, "ReadStream");
+      }
+      fd;
+      isRaw = false;
+      isTTY = false;
+      constructor(fd) {
+        this.fd = fd;
+      }
+      setRawMode(mode) {
+        this.isRaw = mode;
+        return this;
+      }
+    };
+  }
+});
+
+// node_modules/unenv/dist/runtime/node/internal/tty/write-stream.mjs
+var WriteStream;
+var init_write_stream = __esm({
+  "node_modules/unenv/dist/runtime/node/internal/tty/write-stream.mjs"() {
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    WriteStream = class {
+      static {
+        __name(this, "WriteStream");
+      }
+      fd;
+      columns = 80;
+      rows = 24;
+      isTTY = false;
+      constructor(fd) {
+        this.fd = fd;
+      }
+      clearLine(dir3, callback) {
+        callback && callback();
+        return false;
+      }
+      clearScreenDown(callback) {
+        callback && callback();
+        return false;
+      }
+      cursorTo(x, y, callback) {
+        callback && typeof callback === "function" && callback();
+        return false;
+      }
+      moveCursor(dx, dy, callback) {
+        callback && callback();
+        return false;
+      }
+      getColorDepth(env2) {
+        return 1;
+      }
+      hasColors(count3, env2) {
+        return false;
+      }
+      getWindowSize() {
+        return [this.columns, this.rows];
+      }
+      write(str, encoding, cb) {
+        if (str instanceof Uint8Array) {
+          str = new TextDecoder().decode(str);
+        }
+        try {
+          console.log(str);
+        } catch {
+        }
+        cb && typeof cb === "function" && cb();
+        return false;
+      }
+    };
+  }
+});
+
+// node_modules/unenv/dist/runtime/node/tty.mjs
+var init_tty = __esm({
+  "node_modules/unenv/dist/runtime/node/tty.mjs"() {
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_read_stream();
+    init_write_stream();
+  }
+});
+
+// node_modules/unenv/dist/runtime/node/internal/process/node-version.mjs
+var NODE_VERSION;
+var init_node_version = __esm({
+  "node_modules/unenv/dist/runtime/node/internal/process/node-version.mjs"() {
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    NODE_VERSION = "22.14.0";
+  }
+});
 
 // node_modules/unenv/dist/runtime/node/internal/process/process.mjs
 import { EventEmitter } from "node:events";
-
-// node_modules/unenv/dist/runtime/node/internal/tty/read-stream.mjs
-var ReadStream = class {
-  static {
-    __name(this, "ReadStream");
-  }
-  fd;
-  isRaw = false;
-  isTTY = false;
-  constructor(fd) {
-    this.fd = fd;
-  }
-  setRawMode(mode) {
-    this.isRaw = mode;
-    return this;
-  }
-};
-
-// node_modules/unenv/dist/runtime/node/internal/tty/write-stream.mjs
-var WriteStream = class {
-  static {
-    __name(this, "WriteStream");
-  }
-  fd;
-  columns = 80;
-  rows = 24;
-  isTTY = false;
-  constructor(fd) {
-    this.fd = fd;
-  }
-  clearLine(dir3, callback) {
-    callback && callback();
-    return false;
-  }
-  clearScreenDown(callback) {
-    callback && callback();
-    return false;
-  }
-  cursorTo(x, y, callback) {
-    callback && typeof callback === "function" && callback();
-    return false;
-  }
-  moveCursor(dx, dy, callback) {
-    callback && callback();
-    return false;
-  }
-  getColorDepth(env2) {
-    return 1;
-  }
-  hasColors(count3, env2) {
-    return false;
-  }
-  getWindowSize() {
-    return [this.columns, this.rows];
-  }
-  write(str, encoding, cb) {
-    if (str instanceof Uint8Array) {
-      str = new TextDecoder().decode(str);
-    }
-    try {
-      console.log(str);
-    } catch {
-    }
-    cb && typeof cb === "function" && cb();
-    return false;
-  }
-};
-
-// node_modules/unenv/dist/runtime/node/internal/process/node-version.mjs
-var NODE_VERSION = "22.14.0";
-
-// node_modules/unenv/dist/runtime/node/internal/process/process.mjs
-var Process = class _Process extends EventEmitter {
-  static {
-    __name(this, "Process");
-  }
-  env;
-  hrtime;
-  nextTick;
-  constructor(impl) {
-    super();
-    this.env = impl.env;
-    this.hrtime = impl.hrtime;
-    this.nextTick = impl.nextTick;
-    for (const prop of [...Object.getOwnPropertyNames(_Process.prototype), ...Object.getOwnPropertyNames(EventEmitter.prototype)]) {
-      const value = this[prop];
-      if (typeof value === "function") {
-        this[prop] = value.bind(this);
+var Process;
+var init_process = __esm({
+  "node_modules/unenv/dist/runtime/node/internal/process/process.mjs"() {
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_tty();
+    init_utils();
+    init_node_version();
+    Process = class _Process extends EventEmitter {
+      static {
+        __name(this, "Process");
       }
-    }
+      env;
+      hrtime;
+      nextTick;
+      constructor(impl) {
+        super();
+        this.env = impl.env;
+        this.hrtime = impl.hrtime;
+        this.nextTick = impl.nextTick;
+        for (const prop of [...Object.getOwnPropertyNames(_Process.prototype), ...Object.getOwnPropertyNames(EventEmitter.prototype)]) {
+          const value = this[prop];
+          if (typeof value === "function") {
+            this[prop] = value.bind(this);
+          }
+        }
+      }
+      // --- event emitter ---
+      emitWarning(warning, type, code) {
+        console.warn(`${code ? `[${code}] ` : ""}${type ? `${type}: ` : ""}${warning}`);
+      }
+      emit(...args) {
+        return super.emit(...args);
+      }
+      listeners(eventName) {
+        return super.listeners(eventName);
+      }
+      // --- stdio (lazy initializers) ---
+      #stdin;
+      #stdout;
+      #stderr;
+      get stdin() {
+        return this.#stdin ??= new ReadStream(0);
+      }
+      get stdout() {
+        return this.#stdout ??= new WriteStream(1);
+      }
+      get stderr() {
+        return this.#stderr ??= new WriteStream(2);
+      }
+      // --- cwd ---
+      #cwd = "/";
+      chdir(cwd2) {
+        this.#cwd = cwd2;
+      }
+      cwd() {
+        return this.#cwd;
+      }
+      // --- dummy props and getters ---
+      arch = "";
+      platform = "";
+      argv = [];
+      argv0 = "";
+      execArgv = [];
+      execPath = "";
+      title = "";
+      pid = 200;
+      ppid = 100;
+      get version() {
+        return `v${NODE_VERSION}`;
+      }
+      get versions() {
+        return { node: NODE_VERSION };
+      }
+      get allowedNodeEnvironmentFlags() {
+        return /* @__PURE__ */ new Set();
+      }
+      get sourceMapsEnabled() {
+        return false;
+      }
+      get debugPort() {
+        return 0;
+      }
+      get throwDeprecation() {
+        return false;
+      }
+      get traceDeprecation() {
+        return false;
+      }
+      get features() {
+        return {};
+      }
+      get release() {
+        return {};
+      }
+      get connected() {
+        return false;
+      }
+      get config() {
+        return {};
+      }
+      get moduleLoadList() {
+        return [];
+      }
+      constrainedMemory() {
+        return 0;
+      }
+      availableMemory() {
+        return 0;
+      }
+      uptime() {
+        return 0;
+      }
+      resourceUsage() {
+        return {};
+      }
+      // --- noop methods ---
+      ref() {
+      }
+      unref() {
+      }
+      // --- unimplemented methods ---
+      umask() {
+        throw createNotImplementedError("process.umask");
+      }
+      getBuiltinModule() {
+        return void 0;
+      }
+      getActiveResourcesInfo() {
+        throw createNotImplementedError("process.getActiveResourcesInfo");
+      }
+      exit() {
+        throw createNotImplementedError("process.exit");
+      }
+      reallyExit() {
+        throw createNotImplementedError("process.reallyExit");
+      }
+      kill() {
+        throw createNotImplementedError("process.kill");
+      }
+      abort() {
+        throw createNotImplementedError("process.abort");
+      }
+      dlopen() {
+        throw createNotImplementedError("process.dlopen");
+      }
+      setSourceMapsEnabled() {
+        throw createNotImplementedError("process.setSourceMapsEnabled");
+      }
+      loadEnvFile() {
+        throw createNotImplementedError("process.loadEnvFile");
+      }
+      disconnect() {
+        throw createNotImplementedError("process.disconnect");
+      }
+      cpuUsage() {
+        throw createNotImplementedError("process.cpuUsage");
+      }
+      setUncaughtExceptionCaptureCallback() {
+        throw createNotImplementedError("process.setUncaughtExceptionCaptureCallback");
+      }
+      hasUncaughtExceptionCaptureCallback() {
+        throw createNotImplementedError("process.hasUncaughtExceptionCaptureCallback");
+      }
+      initgroups() {
+        throw createNotImplementedError("process.initgroups");
+      }
+      openStdin() {
+        throw createNotImplementedError("process.openStdin");
+      }
+      assert() {
+        throw createNotImplementedError("process.assert");
+      }
+      binding() {
+        throw createNotImplementedError("process.binding");
+      }
+      // --- attached interfaces ---
+      permission = { has: /* @__PURE__ */ notImplemented("process.permission.has") };
+      report = {
+        directory: "",
+        filename: "",
+        signal: "SIGUSR2",
+        compact: false,
+        reportOnFatalError: false,
+        reportOnSignal: false,
+        reportOnUncaughtException: false,
+        getReport: /* @__PURE__ */ notImplemented("process.report.getReport"),
+        writeReport: /* @__PURE__ */ notImplemented("process.report.writeReport")
+      };
+      finalization = {
+        register: /* @__PURE__ */ notImplemented("process.finalization.register"),
+        unregister: /* @__PURE__ */ notImplemented("process.finalization.unregister"),
+        registerBeforeExit: /* @__PURE__ */ notImplemented("process.finalization.registerBeforeExit")
+      };
+      memoryUsage = Object.assign(() => ({
+        arrayBuffers: 0,
+        rss: 0,
+        external: 0,
+        heapTotal: 0,
+        heapUsed: 0
+      }), { rss: /* @__PURE__ */ __name(() => 0, "rss") });
+      // --- undefined props ---
+      mainModule = void 0;
+      domain = void 0;
+      // optional
+      send = void 0;
+      exitCode = void 0;
+      channel = void 0;
+      getegid = void 0;
+      geteuid = void 0;
+      getgid = void 0;
+      getgroups = void 0;
+      getuid = void 0;
+      setegid = void 0;
+      seteuid = void 0;
+      setgid = void 0;
+      setgroups = void 0;
+      setuid = void 0;
+      // internals
+      _events = void 0;
+      _eventsCount = void 0;
+      _exiting = void 0;
+      _maxListeners = void 0;
+      _debugEnd = void 0;
+      _debugProcess = void 0;
+      _fatalException = void 0;
+      _getActiveHandles = void 0;
+      _getActiveRequests = void 0;
+      _kill = void 0;
+      _preload_modules = void 0;
+      _rawDebug = void 0;
+      _startProfilerIdleNotifier = void 0;
+      _stopProfilerIdleNotifier = void 0;
+      _tickCallback = void 0;
+      _disconnect = void 0;
+      _handleQueue = void 0;
+      _pendingMessage = void 0;
+      _channel = void 0;
+      _send = void 0;
+      _linkedBinding = void 0;
+    };
   }
-  // --- event emitter ---
-  emitWarning(warning, type, code) {
-    console.warn(`${code ? `[${code}] ` : ""}${type ? `${type}: ` : ""}${warning}`);
-  }
-  emit(...args) {
-    return super.emit(...args);
-  }
-  listeners(eventName) {
-    return super.listeners(eventName);
-  }
-  // --- stdio (lazy initializers) ---
-  #stdin;
-  #stdout;
-  #stderr;
-  get stdin() {
-    return this.#stdin ??= new ReadStream(0);
-  }
-  get stdout() {
-    return this.#stdout ??= new WriteStream(1);
-  }
-  get stderr() {
-    return this.#stderr ??= new WriteStream(2);
-  }
-  // --- cwd ---
-  #cwd = "/";
-  chdir(cwd2) {
-    this.#cwd = cwd2;
-  }
-  cwd() {
-    return this.#cwd;
-  }
-  // --- dummy props and getters ---
-  arch = "";
-  platform = "";
-  argv = [];
-  argv0 = "";
-  execArgv = [];
-  execPath = "";
-  title = "";
-  pid = 200;
-  ppid = 100;
-  get version() {
-    return `v${NODE_VERSION}`;
-  }
-  get versions() {
-    return { node: NODE_VERSION };
-  }
-  get allowedNodeEnvironmentFlags() {
-    return /* @__PURE__ */ new Set();
-  }
-  get sourceMapsEnabled() {
-    return false;
-  }
-  get debugPort() {
-    return 0;
-  }
-  get throwDeprecation() {
-    return false;
-  }
-  get traceDeprecation() {
-    return false;
-  }
-  get features() {
-    return {};
-  }
-  get release() {
-    return {};
-  }
-  get connected() {
-    return false;
-  }
-  get config() {
-    return {};
-  }
-  get moduleLoadList() {
-    return [];
-  }
-  constrainedMemory() {
-    return 0;
-  }
-  availableMemory() {
-    return 0;
-  }
-  uptime() {
-    return 0;
-  }
-  resourceUsage() {
-    return {};
-  }
-  // --- noop methods ---
-  ref() {
-  }
-  unref() {
-  }
-  // --- unimplemented methods ---
-  umask() {
-    throw createNotImplementedError("process.umask");
-  }
-  getBuiltinModule() {
-    return void 0;
-  }
-  getActiveResourcesInfo() {
-    throw createNotImplementedError("process.getActiveResourcesInfo");
-  }
-  exit() {
-    throw createNotImplementedError("process.exit");
-  }
-  reallyExit() {
-    throw createNotImplementedError("process.reallyExit");
-  }
-  kill() {
-    throw createNotImplementedError("process.kill");
-  }
-  abort() {
-    throw createNotImplementedError("process.abort");
-  }
-  dlopen() {
-    throw createNotImplementedError("process.dlopen");
-  }
-  setSourceMapsEnabled() {
-    throw createNotImplementedError("process.setSourceMapsEnabled");
-  }
-  loadEnvFile() {
-    throw createNotImplementedError("process.loadEnvFile");
-  }
-  disconnect() {
-    throw createNotImplementedError("process.disconnect");
-  }
-  cpuUsage() {
-    throw createNotImplementedError("process.cpuUsage");
-  }
-  setUncaughtExceptionCaptureCallback() {
-    throw createNotImplementedError("process.setUncaughtExceptionCaptureCallback");
-  }
-  hasUncaughtExceptionCaptureCallback() {
-    throw createNotImplementedError("process.hasUncaughtExceptionCaptureCallback");
-  }
-  initgroups() {
-    throw createNotImplementedError("process.initgroups");
-  }
-  openStdin() {
-    throw createNotImplementedError("process.openStdin");
-  }
-  assert() {
-    throw createNotImplementedError("process.assert");
-  }
-  binding() {
-    throw createNotImplementedError("process.binding");
-  }
-  // --- attached interfaces ---
-  permission = { has: /* @__PURE__ */ notImplemented("process.permission.has") };
-  report = {
-    directory: "",
-    filename: "",
-    signal: "SIGUSR2",
-    compact: false,
-    reportOnFatalError: false,
-    reportOnSignal: false,
-    reportOnUncaughtException: false,
-    getReport: /* @__PURE__ */ notImplemented("process.report.getReport"),
-    writeReport: /* @__PURE__ */ notImplemented("process.report.writeReport")
-  };
-  finalization = {
-    register: /* @__PURE__ */ notImplemented("process.finalization.register"),
-    unregister: /* @__PURE__ */ notImplemented("process.finalization.unregister"),
-    registerBeforeExit: /* @__PURE__ */ notImplemented("process.finalization.registerBeforeExit")
-  };
-  memoryUsage = Object.assign(() => ({
-    arrayBuffers: 0,
-    rss: 0,
-    external: 0,
-    heapTotal: 0,
-    heapUsed: 0
-  }), { rss: /* @__PURE__ */ __name(() => 0, "rss") });
-  // --- undefined props ---
-  mainModule = void 0;
-  domain = void 0;
-  // optional
-  send = void 0;
-  exitCode = void 0;
-  channel = void 0;
-  getegid = void 0;
-  geteuid = void 0;
-  getgid = void 0;
-  getgroups = void 0;
-  getuid = void 0;
-  setegid = void 0;
-  seteuid = void 0;
-  setgid = void 0;
-  setgroups = void 0;
-  setuid = void 0;
-  // internals
-  _events = void 0;
-  _eventsCount = void 0;
-  _exiting = void 0;
-  _maxListeners = void 0;
-  _debugEnd = void 0;
-  _debugProcess = void 0;
-  _fatalException = void 0;
-  _getActiveHandles = void 0;
-  _getActiveRequests = void 0;
-  _kill = void 0;
-  _preload_modules = void 0;
-  _rawDebug = void 0;
-  _startProfilerIdleNotifier = void 0;
-  _stopProfilerIdleNotifier = void 0;
-  _tickCallback = void 0;
-  _disconnect = void 0;
-  _handleQueue = void 0;
-  _pendingMessage = void 0;
-  _channel = void 0;
-  _send = void 0;
-  _linkedBinding = void 0;
-};
+});
 
 // node_modules/@cloudflare/unenv-preset/dist/runtime/node/process.mjs
-var globalProcess = globalThis["process"];
-var getBuiltinModule = globalProcess.getBuiltinModule;
-var workerdProcess = getBuiltinModule("node:process");
-var unenvProcess = new Process({
-  env: globalProcess.env,
-  hrtime,
-  // `nextTick` is available from workerd process v1
-  nextTick: workerdProcess.nextTick
+var globalProcess, getBuiltinModule, workerdProcess, unenvProcess, exit, features, platform, _channel, _debugEnd, _debugProcess, _disconnect, _events, _eventsCount, _exiting, _fatalException, _getActiveHandles, _getActiveRequests, _handleQueue, _kill, _linkedBinding, _maxListeners, _pendingMessage, _preload_modules, _rawDebug, _send, _startProfilerIdleNotifier, _stopProfilerIdleNotifier, _tickCallback, abort, addListener, allowedNodeEnvironmentFlags, arch, argv, argv0, assert2, availableMemory, binding, channel, chdir, config, connected, constrainedMemory, cpuUsage, cwd, debugPort, disconnect, dlopen, domain, emit, emitWarning, env, eventNames, execArgv, execPath, exitCode, finalization, getActiveResourcesInfo, getegid, geteuid, getgid, getgroups, getMaxListeners, getuid, hasUncaughtExceptionCaptureCallback, hrtime3, initgroups, kill, listenerCount, listeners, loadEnvFile, mainModule, memoryUsage, moduleLoadList, nextTick, off, on, once, openStdin, permission, pid, ppid, prependListener, prependOnceListener, rawListeners, reallyExit, ref, release, removeAllListeners, removeListener, report, resourceUsage, send, setegid, seteuid, setgid, setgroups, setMaxListeners, setSourceMapsEnabled, setuid, setUncaughtExceptionCaptureCallback, sourceMapsEnabled, stderr, stdin, stdout, throwDeprecation, title, traceDeprecation, umask, unref, uptime, version, versions, _process, process_default;
+var init_process2 = __esm({
+  "node_modules/@cloudflare/unenv-preset/dist/runtime/node/process.mjs"() {
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    init_hrtime();
+    init_process();
+    globalProcess = globalThis["process"];
+    getBuiltinModule = globalProcess.getBuiltinModule;
+    workerdProcess = getBuiltinModule("node:process");
+    unenvProcess = new Process({
+      env: globalProcess.env,
+      hrtime,
+      // `nextTick` is available from workerd process v1
+      nextTick: workerdProcess.nextTick
+    });
+    ({ exit, features, platform } = workerdProcess);
+    ({
+      _channel,
+      _debugEnd,
+      _debugProcess,
+      _disconnect,
+      _events,
+      _eventsCount,
+      _exiting,
+      _fatalException,
+      _getActiveHandles,
+      _getActiveRequests,
+      _handleQueue,
+      _kill,
+      _linkedBinding,
+      _maxListeners,
+      _pendingMessage,
+      _preload_modules,
+      _rawDebug,
+      _send,
+      _startProfilerIdleNotifier,
+      _stopProfilerIdleNotifier,
+      _tickCallback,
+      abort,
+      addListener,
+      allowedNodeEnvironmentFlags,
+      arch,
+      argv,
+      argv0,
+      assert: assert2,
+      availableMemory,
+      binding,
+      channel,
+      chdir,
+      config,
+      connected,
+      constrainedMemory,
+      cpuUsage,
+      cwd,
+      debugPort,
+      disconnect,
+      dlopen,
+      domain,
+      emit,
+      emitWarning,
+      env,
+      eventNames,
+      execArgv,
+      execPath,
+      exitCode,
+      finalization,
+      getActiveResourcesInfo,
+      getegid,
+      geteuid,
+      getgid,
+      getgroups,
+      getMaxListeners,
+      getuid,
+      hasUncaughtExceptionCaptureCallback,
+      hrtime: hrtime3,
+      initgroups,
+      kill,
+      listenerCount,
+      listeners,
+      loadEnvFile,
+      mainModule,
+      memoryUsage,
+      moduleLoadList,
+      nextTick,
+      off,
+      on,
+      once,
+      openStdin,
+      permission,
+      pid,
+      ppid,
+      prependListener,
+      prependOnceListener,
+      rawListeners,
+      reallyExit,
+      ref,
+      release,
+      removeAllListeners,
+      removeListener,
+      report,
+      resourceUsage,
+      send,
+      setegid,
+      seteuid,
+      setgid,
+      setgroups,
+      setMaxListeners,
+      setSourceMapsEnabled,
+      setuid,
+      setUncaughtExceptionCaptureCallback,
+      sourceMapsEnabled,
+      stderr,
+      stdin,
+      stdout,
+      throwDeprecation,
+      title,
+      traceDeprecation,
+      umask,
+      unref,
+      uptime,
+      version,
+      versions
+    } = unenvProcess);
+    _process = {
+      abort,
+      addListener,
+      allowedNodeEnvironmentFlags,
+      hasUncaughtExceptionCaptureCallback,
+      setUncaughtExceptionCaptureCallback,
+      loadEnvFile,
+      sourceMapsEnabled,
+      arch,
+      argv,
+      argv0,
+      chdir,
+      config,
+      connected,
+      constrainedMemory,
+      availableMemory,
+      cpuUsage,
+      cwd,
+      debugPort,
+      dlopen,
+      disconnect,
+      emit,
+      emitWarning,
+      env,
+      eventNames,
+      execArgv,
+      execPath,
+      exit,
+      finalization,
+      features,
+      getBuiltinModule,
+      getActiveResourcesInfo,
+      getMaxListeners,
+      hrtime: hrtime3,
+      kill,
+      listeners,
+      listenerCount,
+      memoryUsage,
+      nextTick,
+      on,
+      off,
+      once,
+      pid,
+      platform,
+      ppid,
+      prependListener,
+      prependOnceListener,
+      rawListeners,
+      release,
+      removeAllListeners,
+      removeListener,
+      report,
+      resourceUsage,
+      setMaxListeners,
+      setSourceMapsEnabled,
+      stderr,
+      stdin,
+      stdout,
+      title,
+      throwDeprecation,
+      traceDeprecation,
+      umask,
+      uptime,
+      version,
+      versions,
+      // @ts-expect-error old API
+      domain,
+      initgroups,
+      moduleLoadList,
+      reallyExit,
+      openStdin,
+      assert: assert2,
+      binding,
+      send,
+      exitCode,
+      channel,
+      getegid,
+      geteuid,
+      getgid,
+      getgroups,
+      getuid,
+      setegid,
+      seteuid,
+      setgid,
+      setgroups,
+      setuid,
+      permission,
+      mainModule,
+      _events,
+      _eventsCount,
+      _exiting,
+      _maxListeners,
+      _debugEnd,
+      _debugProcess,
+      _fatalException,
+      _getActiveHandles,
+      _getActiveRequests,
+      _kill,
+      _preload_modules,
+      _rawDebug,
+      _startProfilerIdleNotifier,
+      _stopProfilerIdleNotifier,
+      _tickCallback,
+      _disconnect,
+      _handleQueue,
+      _pendingMessage,
+      _channel,
+      _send,
+      _linkedBinding
+    };
+    process_default = _process;
+  }
 });
-var { exit, features, platform } = workerdProcess;
-var {
-  _channel,
-  _debugEnd,
-  _debugProcess,
-  _disconnect,
-  _events,
-  _eventsCount,
-  _exiting,
-  _fatalException,
-  _getActiveHandles,
-  _getActiveRequests,
-  _handleQueue,
-  _kill,
-  _linkedBinding,
-  _maxListeners,
-  _pendingMessage,
-  _preload_modules,
-  _rawDebug,
-  _send,
-  _startProfilerIdleNotifier,
-  _stopProfilerIdleNotifier,
-  _tickCallback,
-  abort,
-  addListener,
-  allowedNodeEnvironmentFlags,
-  arch,
-  argv,
-  argv0,
-  assert: assert2,
-  availableMemory,
-  binding,
-  channel,
-  chdir,
-  config,
-  connected,
-  constrainedMemory,
-  cpuUsage,
-  cwd,
-  debugPort,
-  disconnect,
-  dlopen,
-  domain,
-  emit,
-  emitWarning,
-  env,
-  eventNames,
-  execArgv,
-  execPath,
-  exitCode,
-  finalization,
-  getActiveResourcesInfo,
-  getegid,
-  geteuid,
-  getgid,
-  getgroups,
-  getMaxListeners,
-  getuid,
-  hasUncaughtExceptionCaptureCallback,
-  hrtime: hrtime3,
-  initgroups,
-  kill,
-  listenerCount,
-  listeners,
-  loadEnvFile,
-  mainModule,
-  memoryUsage,
-  moduleLoadList,
-  nextTick,
-  off,
-  on,
-  once,
-  openStdin,
-  permission,
-  pid,
-  ppid,
-  prependListener,
-  prependOnceListener,
-  rawListeners,
-  reallyExit,
-  ref,
-  release,
-  removeAllListeners,
-  removeListener,
-  report,
-  resourceUsage,
-  send,
-  setegid,
-  seteuid,
-  setgid,
-  setgroups,
-  setMaxListeners,
-  setSourceMapsEnabled,
-  setuid,
-  setUncaughtExceptionCaptureCallback,
-  sourceMapsEnabled,
-  stderr,
-  stdin,
-  stdout,
-  throwDeprecation,
-  title,
-  traceDeprecation,
-  umask,
-  unref,
-  uptime,
-  version,
-  versions
-} = unenvProcess;
-var _process = {
-  abort,
-  addListener,
-  allowedNodeEnvironmentFlags,
-  hasUncaughtExceptionCaptureCallback,
-  setUncaughtExceptionCaptureCallback,
-  loadEnvFile,
-  sourceMapsEnabled,
-  arch,
-  argv,
-  argv0,
-  chdir,
-  config,
-  connected,
-  constrainedMemory,
-  availableMemory,
-  cpuUsage,
-  cwd,
-  debugPort,
-  dlopen,
-  disconnect,
-  emit,
-  emitWarning,
-  env,
-  eventNames,
-  execArgv,
-  execPath,
-  exit,
-  finalization,
-  features,
-  getBuiltinModule,
-  getActiveResourcesInfo,
-  getMaxListeners,
-  hrtime: hrtime3,
-  kill,
-  listeners,
-  listenerCount,
-  memoryUsage,
-  nextTick,
-  on,
-  off,
-  once,
-  pid,
-  platform,
-  ppid,
-  prependListener,
-  prependOnceListener,
-  rawListeners,
-  release,
-  removeAllListeners,
-  removeListener,
-  report,
-  resourceUsage,
-  setMaxListeners,
-  setSourceMapsEnabled,
-  stderr,
-  stdin,
-  stdout,
-  title,
-  throwDeprecation,
-  traceDeprecation,
-  umask,
-  uptime,
-  version,
-  versions,
-  // @ts-expect-error old API
-  domain,
-  initgroups,
-  moduleLoadList,
-  reallyExit,
-  openStdin,
-  assert: assert2,
-  binding,
-  send,
-  exitCode,
-  channel,
-  getegid,
-  geteuid,
-  getgid,
-  getgroups,
-  getuid,
-  setegid,
-  seteuid,
-  setgid,
-  setgroups,
-  setuid,
-  permission,
-  mainModule,
-  _events,
-  _eventsCount,
-  _exiting,
-  _maxListeners,
-  _debugEnd,
-  _debugProcess,
-  _fatalException,
-  _getActiveHandles,
-  _getActiveRequests,
-  _kill,
-  _preload_modules,
-  _rawDebug,
-  _startProfilerIdleNotifier,
-  _stopProfilerIdleNotifier,
-  _tickCallback,
-  _disconnect,
-  _handleQueue,
-  _pendingMessage,
-  _channel,
-  _send,
-  _linkedBinding
-};
-var process_default = _process;
 
 // node_modules/wrangler/_virtual_unenv_global_polyfill-@cloudflare-unenv-preset-node-process
-globalThis.process = process_default;
+var init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process = __esm({
+  "node_modules/wrangler/_virtual_unenv_global_polyfill-@cloudflare-unenv-preset-node-process"() {
+    init_process2();
+    globalThis.process = process_default;
+  }
+});
+
+// src/db/queries.ts
+var queries_exports = {};
+__export(queries_exports, {
+  createAsset: () => createAsset,
+  createCategory: () => createCategory,
+  createInvestmentTrade: () => createInvestmentTrade,
+  createReconciliationItem: () => createReconciliationItem,
+  createRecurring: () => createRecurring,
+  createTransaction: () => createTransaction,
+  createTransfer: () => createTransfer,
+  deleteAsset: () => deleteAsset,
+  deleteCategory: () => deleteCategory,
+  deleteInvestment: () => deleteInvestment,
+  deleteInvestmentTrade: () => deleteInvestmentTrade,
+  deleteRecurring: () => deleteRecurring,
+  deleteTransaction: () => deleteTransaction,
+  deleteTransferPair: () => deleteTransferPair,
+  findDuplicateTransaction: () => findDuplicateTransaction,
+  generateId: () => generateId,
+  getAssetById: () => getAssetById,
+  getAssetHistory: () => getAssetHistory,
+  getAssets: () => getAssets,
+  getCategories: () => getCategories,
+  getDailySummary: () => getDailySummary,
+  getInvestmentTrades: () => getInvestmentTrades,
+  getInvestments: () => getInvestments,
+  getMonthlySummary: () => getMonthlySummary,
+  getReconciliations: () => getReconciliations,
+  getRecurring: () => getRecurring,
+  getTransactions: () => getTransactions,
+  processRecurring: () => processRecurring,
+  recordAssetSnapshot: () => recordAssetSnapshot,
+  updateAsset: () => updateAsset,
+  updateAssetFull: () => updateAssetFull,
+  updateCategory: () => updateCategory,
+  updateInvestment: () => updateInvestment,
+  updateReconciliationItem: () => updateReconciliationItem,
+  updateRecurring: () => updateRecurring,
+  updateTransaction: () => updateTransaction,
+  upsertDailySummary: () => upsertDailySummary,
+  upsertInvestment: () => upsertInvestment
+});
+function generateId(prefix = "tx") {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+async function getTransactions(db, opts) {
+  const conditions = [];
+  const params = [];
+  if (opts.date) {
+    conditions.push("date = ?");
+    params.push(opts.date);
+  }
+  if (opts.month) {
+    conditions.push("strftime('%Y-%m', date) = ?");
+    params.push(opts.month);
+  }
+  if (opts.date_from) {
+    conditions.push("date >= ?");
+    params.push(opts.date_from);
+  }
+  if (opts.date_to) {
+    conditions.push("date <= ?");
+    params.push(opts.date_to);
+  }
+  if (opts.category) {
+    conditions.push("category = ?");
+    params.push(opts.category);
+  }
+  if (opts.status) {
+    conditions.push("status = ?");
+    params.push(opts.status);
+  }
+  if (opts.type) {
+    conditions.push("type = ?");
+    params.push(opts.type);
+  }
+  if (opts.card) {
+    conditions.push("card = ?");
+    params.push(opts.card);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const limit = opts.limit ?? 50;
+  const offset = opts.offset ?? 0;
+  const { results } = await db.prepare(`SELECT * FROM transactions ${where} ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?`).bind(...params, limit, offset).all();
+  const countRow = await db.prepare(`SELECT COUNT(*) as total FROM transactions ${where}`).bind(...params).first();
+  return { data: results, total: countRow?.total ?? 0 };
+}
+async function adjustAssetBalance(db, accountName, delta) {
+  if (!accountName) return;
+  await db.prepare("UPDATE assets SET balance = balance + ?, updated_at = date('now') WHERE name = ?").bind(delta, accountName).run();
+}
+async function calcAssetDelta(db, accountName, amount, type) {
+  const asset = await db.prepare("SELECT type FROM assets WHERE name = ?").bind(accountName).first();
+  if (!asset) return 0;
+  const isIncome = type === "\u6536\u5165";
+  return isIncome ? amount : -amount;
+}
+async function createTransaction(db, data) {
+  const id = generateId("tx");
+  await db.prepare("INSERT INTO transactions (id, name, amount, date, category, card, type, status, source, note, transfer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(id, data.name, data.amount, data.date, data.category, data.card, data.type ?? "\u652F\u51FA", data.status, data.source, data.note ?? null, data.transfer_id ?? null).run();
+  if (data.source !== "\u9918\u984D\u8ABF\u6574" && data.card) {
+    const delta = await calcAssetDelta(db, data.card, data.amount, data.type ?? "\u652F\u51FA");
+    await adjustAssetBalance(db, data.card, delta);
+  }
+  return id;
+}
+async function createTransfer(db, data) {
+  const transferId = generateId("xfr");
+  await createTransaction(db, {
+    name: data.outName ?? `\u8F49\u5E33 \u2192 ${data.to_account}`,
+    amount: data.amount,
+    date: data.date,
+    category: "\u8F49\u5E33",
+    card: data.from_account,
+    type: "\u652F\u51FA",
+    status: "\u5DF2\u5C0D\u5E33",
+    source: "\u624B\u52D5\u8F38\u5165",
+    note: data.note ?? null,
+    transfer_id: transferId
+  });
+  await createTransaction(db, {
+    name: data.inName ?? `\u8F49\u5E33 \u2190 ${data.from_account}`,
+    amount: data.amount,
+    date: data.date,
+    category: "\u8F49\u5E33",
+    card: data.to_account,
+    type: "\u6536\u5165",
+    status: "\u5DF2\u5C0D\u5E33",
+    source: "\u624B\u52D5\u8F38\u5165",
+    note: data.note ?? null,
+    transfer_id: transferId
+  });
+  if (data.fee && data.fee > 0) {
+    await createTransaction(db, {
+      name: `\u624B\u7E8C\u8CBB\uFF08\u8F49\u5E33\u81F3 ${data.to_account}\uFF09`,
+      amount: data.fee,
+      date: data.date,
+      category: "\u624B\u7E8C\u8CBB",
+      card: data.from_account,
+      type: "\u652F\u51FA",
+      status: "\u5DF2\u5C0D\u5E33",
+      source: "\u624B\u52D5\u8F38\u5165",
+      note: null,
+      transfer_id: null
+    });
+  }
+  return transferId;
+}
+async function deleteTransferPair(db, transferId) {
+  const { results } = await db.prepare("SELECT card, amount, type FROM transactions WHERE transfer_id = ?").bind(transferId).all();
+  await db.prepare("DELETE FROM transactions WHERE transfer_id = ?").bind(transferId).run();
+  for (const txn of results) {
+    if (txn.card) {
+      const delta = await calcAssetDelta(db, txn.card, txn.amount, txn.type);
+      await adjustAssetBalance(db, txn.card, -delta);
+    }
+  }
+}
+async function updateTransaction(db, id, data) {
+  const old = await db.prepare("SELECT card, amount, type, source FROM transactions WHERE id = ?").bind(id).first();
+  const fields = Object.keys(data).filter((k) => data[k] !== void 0);
+  if (!fields.length) return false;
+  const sets = fields.map((f) => `${f} = ?`).join(", ");
+  const values = fields.map((f) => data[f]);
+  const result = await db.prepare(`UPDATE transactions SET ${sets} WHERE id = ?`).bind(...values, id).run();
+  if (result.meta.changes > 0 && old) {
+    const newCard = (data.card !== void 0 ? data.card : old.card) || "";
+    const newAmount = data.amount !== void 0 ? data.amount : old.amount;
+    const newType = data.type !== void 0 ? data.type : old.type;
+    if (old.card) {
+      const oldDelta = await calcAssetDelta(db, old.card, old.amount, old.type);
+      await adjustAssetBalance(db, old.card, -oldDelta);
+    }
+    if (newCard) {
+      const newDelta = await calcAssetDelta(db, newCard, newAmount, newType);
+      await adjustAssetBalance(db, newCard, newDelta);
+    }
+  }
+  return result.meta.changes > 0;
+}
+async function deleteTransaction(db, id) {
+  const txn = await db.prepare("SELECT card, amount, type, source FROM transactions WHERE id = ?").bind(id).first();
+  const result = await db.prepare("DELETE FROM transactions WHERE id = ?").bind(id).run();
+  if (result.meta.changes > 0 && txn && txn.card) {
+    const delta = await calcAssetDelta(db, txn.card, txn.amount, txn.type);
+    await adjustAssetBalance(db, txn.card, -delta);
+  }
+  return result.meta.changes > 0;
+}
+async function findDuplicateTransaction(db, name, amount, date) {
+  return db.prepare("SELECT id FROM transactions WHERE name = ? AND amount = ? AND date = ? AND source = 'Gmail\u81EA\u52D5'").bind(name, amount, date).first();
+}
+async function getInvestments(db) {
+  const { results } = await db.prepare("SELECT * FROM investments ORDER BY name").all();
+  return results;
+}
+async function deleteInvestment(db, id) {
+  const result = await db.prepare("DELETE FROM investments WHERE id = ?").bind(id).run();
+  return result.meta.changes > 0;
+}
+async function updateInvestment(db, id, data) {
+  const fields = ["shares", "avg_cost", "market_value", "profit_loss", "return_rate", "updated_at"].filter((f) => data[f] !== void 0);
+  if (!fields.length) return false;
+  const sets = fields.map((f) => `${f} = ?`).join(", ");
+  const values = fields.map((f) => data[f]);
+  const result = await db.prepare(`UPDATE investments SET ${sets} WHERE id = ?`).bind(...values, id).run();
+  return result.meta.changes > 0;
+}
+async function upsertInvestment(db, data) {
+  const id = data.id ?? generateId("inv");
+  await db.prepare(`
+    INSERT INTO investments (id, name, symbol, shares, avg_cost, market_value, profit_loss, return_rate, realized_pnl, current_price, previous_close, updated_at, account)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      shares=excluded.shares, avg_cost=excluded.avg_cost, market_value=excluded.market_value,
+      profit_loss=excluded.profit_loss, return_rate=excluded.return_rate,
+      realized_pnl=excluded.realized_pnl,
+      current_price=excluded.current_price, previous_close=excluded.previous_close,
+      updated_at=excluded.updated_at
+  `).bind(id, data.name, data.symbol, data.shares, data.avg_cost, data.market_value, data.profit_loss, data.return_rate, data.realized_pnl ?? 0, data.current_price ?? 0, data.previous_close ?? 0, data.updated_at, data.account).run();
+  return id;
+}
+async function getInvestmentTrades(db, symbol, account) {
+  let where = "";
+  const params = [];
+  if (symbol && account !== void 0) {
+    where = "WHERE symbol = ? AND account = ?";
+    params.push(symbol, account);
+  } else if (symbol) {
+    where = "WHERE symbol = ?";
+    params.push(symbol);
+  }
+  const { results } = await db.prepare(`SELECT * FROM investment_trades ${where} ORDER BY date DESC, created_at DESC`).bind(...params).all();
+  return results;
+}
+async function createInvestmentTrade(db, data) {
+  const id = generateId("trd");
+  await db.prepare(`
+    INSERT INTO investment_trades (id, symbol, name, type, shares, price, amount, date, account, to_account, realized_pnl, transfer_id, note)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(id, data.symbol, data.name, data.type, data.shares, data.price, data.amount, data.date, data.account ?? "", data.to_account ?? null, data.realized_pnl ?? 0, data.transfer_id ?? null, data.note ?? null).run();
+  return id;
+}
+async function deleteInvestmentTrade(db, id) {
+  const result = await db.prepare("DELETE FROM investment_trades WHERE id = ?").bind(id).run();
+  return result.meta.changes > 0;
+}
+async function getAssets(db) {
+  const { results } = await db.prepare("SELECT * FROM assets ORDER BY type, name").all();
+  return results;
+}
+async function createAsset(db, data) {
+  const id = generateId("acc");
+  await db.prepare("INSERT INTO assets (id, name, type, bank, balance, include_in_total, billing_day, payment_day, credit_limit, payment_method, payment_account, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, date('now'))").bind(id, data.name, data.type, data.bank, data.balance, data.include_in_total ?? 1, data.billing_day ?? null, data.payment_day ?? null, data.credit_limit ?? 0, data.payment_method ?? "manual", data.payment_account ?? null).run();
+  return id;
+}
+async function updateAsset(db, id, balance) {
+  const result = await db.prepare("UPDATE assets SET balance = ?, updated_at = date('now') WHERE id = ?").bind(balance, id).run();
+  return result.meta.changes > 0;
+}
+async function updateAssetFull(db, id, data) {
+  const fields = [];
+  const values = [];
+  if (data.name !== void 0) {
+    fields.push("name");
+    values.push(data.name);
+  }
+  if (data.type !== void 0) {
+    fields.push("type");
+    values.push(data.type);
+  }
+  if (data.balance !== void 0) {
+    fields.push("balance");
+    values.push(data.balance);
+  }
+  if (data.include_in_total !== void 0) {
+    fields.push("include_in_total");
+    values.push(data.include_in_total);
+  }
+  if ("billing_day" in data) {
+    fields.push("billing_day");
+    values.push(data.billing_day ?? null);
+  }
+  if ("payment_day" in data) {
+    fields.push("payment_day");
+    values.push(data.payment_day ?? null);
+  }
+  if ("credit_limit" in data) {
+    fields.push("credit_limit");
+    values.push(data.credit_limit ?? null);
+  }
+  if ("payment_method" in data) {
+    fields.push("payment_method");
+    values.push(data.payment_method ?? "manual");
+  }
+  if ("payment_account" in data) {
+    fields.push("payment_account");
+    values.push(data.payment_account ?? null);
+  }
+  if (!fields.length) return null;
+  const sets = [...fields.map((f) => `${f} = ?`), "updated_at = date('now')"].join(", ");
+  await db.prepare(`UPDATE assets SET ${sets} WHERE id = ?`).bind(...values, id).run();
+  return db.prepare("SELECT * FROM assets WHERE id = ?").bind(id).first();
+}
+async function getAssetById(db, id) {
+  return db.prepare("SELECT * FROM assets WHERE id = ?").bind(id).first();
+}
+async function deleteAsset(db, id) {
+  const result = await db.prepare("DELETE FROM assets WHERE id = ?").bind(id).run();
+  return result.meta.changes > 0;
+}
+async function getDailySummary(db, date) {
+  return db.prepare("SELECT * FROM daily_summaries WHERE date = ?").bind(date).first();
+}
+async function upsertDailySummary(db, date, data) {
+  const id = generateId("sum");
+  await db.prepare(`
+    INSERT INTO daily_summaries (id, date, total_amount, transaction_count, summary_text)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(date) DO UPDATE SET
+      total_amount=excluded.total_amount, transaction_count=excluded.transaction_count, summary_text=excluded.summary_text
+  `).bind(id, date, data.total_amount, data.transaction_count, data.summary_text).run();
+}
+async function getMonthlySummary(db, month) {
+  const rows = await db.prepare(`
+    SELECT category, SUM(amount) as total, COUNT(*) as count
+    FROM transactions
+    WHERE strftime('%Y-%m', date) = ?
+    GROUP BY category
+    ORDER BY total DESC
+  `).bind(month).all();
+  const totals = await db.prepare(`
+    SELECT SUM(amount) as total, COUNT(*) as count
+    FROM transactions
+    WHERE strftime('%Y-%m', date) = ?
+      AND type = '\u652F\u51FA'
+      AND transfer_id IS NULL
+  `).bind(month).first();
+  const incomeTotals = await db.prepare(`
+    SELECT SUM(amount) as total
+    FROM transactions
+    WHERE strftime('%Y-%m', date) = ?
+      AND type = '\u6536\u5165'
+      AND transfer_id IS NULL
+  `).bind(month).first();
+  return {
+    byCategory: rows.results,
+    total: totals?.total ?? 0,
+    count: totals?.count ?? 0,
+    income: incomeTotals?.total ?? 0
+  };
+}
+async function getReconciliations(db, billMonth) {
+  const where = billMonth ? "WHERE bill_month = ?" : "";
+  const params = billMonth ? [billMonth] : [];
+  const { results } = await db.prepare(`SELECT * FROM reconciliation ${where} ORDER BY date DESC`).bind(...params).all();
+  return results;
+}
+async function createReconciliationItem(db, data) {
+  const id = generateId("rec");
+  await db.prepare(`
+    INSERT INTO reconciliation (id, name, bill_amount, record_amount, date, category, status, bill_month, transaction_id, note)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(id, data.name, data.bill_amount, data.record_amount ?? null, data.date, data.category ?? "\u5176\u4ED6", data.status, data.bill_month, data.transaction_id ?? null, data.note ?? null).run();
+  return id;
+}
+async function updateReconciliationItem(db, id, data) {
+  const fields = ["status", "note", "transaction_id", "record_amount"].filter((f) => data[f] !== void 0);
+  if (!fields.length) return false;
+  const sets = fields.map((f) => `${f} = ?`).join(", ");
+  const values = fields.map((f) => data[f]);
+  const result = await db.prepare(`UPDATE reconciliation SET ${sets} WHERE id = ?`).bind(...values, id).run();
+  return result.meta.changes > 0;
+}
+async function getAssetHistory(db, months = 12) {
+  const { results } = await db.prepare(`
+    SELECT * FROM asset_history
+    WHERE snapshot_date IN (
+      SELECT MAX(snapshot_date) FROM asset_history
+      WHERE snapshot_date >= date('now', '-' || ? || ' months')
+      GROUP BY substr(snapshot_date, 1, 7)
+    )
+    ORDER BY snapshot_date ASC
+  `).bind(months).all();
+  return results;
+}
+async function recordAssetSnapshot(db, data) {
+  const id = generateId("snap");
+  await db.prepare(`
+    INSERT OR REPLACE INTO asset_history (id, snapshot_date, total_assets, total_investments, total_cash, monthly_expense)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(id, data.snapshot_date, data.total_assets, data.total_investments, data.total_cash, data.monthly_expense).run();
+}
+async function getCategories(db) {
+  const { results } = await db.prepare("SELECT * FROM categories ORDER BY sort_order ASC, name ASC").all();
+  return results;
+}
+async function createCategory(db, name, type = "\u652F\u51FA", sort_order, icon) {
+  const id = generateId("cat");
+  const order = sort_order ?? 0;
+  await db.prepare("INSERT INTO categories (id, name, type, sort_order, icon) VALUES (?, ?, ?, ?, ?)").bind(id, name, type, order, icon ?? null).run();
+  return id;
+}
+async function updateCategory(db, id, data) {
+  let oldName = null;
+  if (data.name !== void 0) {
+    const row = await db.prepare("SELECT name FROM categories WHERE id = ?").bind(id).first();
+    oldName = row?.name ?? null;
+  }
+  const fields = [];
+  const values = [];
+  if (data.name !== void 0) {
+    fields.push("name");
+    values.push(data.name);
+  }
+  if (data.sort_order !== void 0) {
+    fields.push("sort_order");
+    values.push(data.sort_order);
+  }
+  if ("icon" in data) {
+    fields.push("icon");
+    values.push(data.icon ?? null);
+  }
+  if (!fields.length) return false;
+  const sets = fields.map((f) => `${f} = ?`).join(", ");
+  const result = await db.prepare(`UPDATE categories SET ${sets} WHERE id = ?`).bind(...values, id).run();
+  if (result.meta.changes > 0 && data.name !== void 0 && oldName && oldName !== data.name) {
+    await db.prepare("UPDATE transactions SET category = ? WHERE category = ?").bind(data.name, oldName).run();
+    await db.prepare("UPDATE recurring_transactions SET category = ? WHERE category = ?").bind(data.name, oldName).run();
+  }
+  return result.meta.changes > 0;
+}
+async function deleteCategory(db, id) {
+  const result = await db.prepare("DELETE FROM categories WHERE id = ?").bind(id).run();
+  return result.meta.changes > 0;
+}
+async function getRecurring(db) {
+  const { results } = await db.prepare("SELECT * FROM recurring_transactions ORDER BY next_date ASC, name ASC").all();
+  return results;
+}
+async function createRecurring(db, data) {
+  const id = generateId("rcr");
+  const startDate = data.start_date ?? data.next_date;
+  await db.prepare(`
+    INSERT INTO recurring_transactions (id, name, amount, type, category, card, note, frequency, day_of_month, next_date, start_date, end_date, fee, is_active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(id, data.name, data.amount, data.type ?? "\u652F\u51FA", data.category, data.card ?? "", data.note ?? null, data.frequency ?? "monthly", data.day_of_month ?? 1, data.next_date, startDate, data.end_date ?? null, data.fee ?? 0, data.is_active ?? 1).run();
+  return id;
+}
+async function updateRecurring(db, id, data) {
+  const allowed = ["name", "amount", "type", "category", "card", "note", "frequency", "day_of_month", "next_date", "start_date", "end_date", "fee", "is_active", "last_generated"];
+  const fields = allowed.filter((f) => data[f] !== void 0);
+  if (!fields.length) return false;
+  const sets = fields.map((f) => `${f} = ?`).join(", ");
+  const values = fields.map((f) => data[f]);
+  await db.prepare(`UPDATE recurring_transactions SET ${sets} WHERE id = ?`).bind(...values, id).run();
+  return true;
+}
+async function deleteRecurring(db, id) {
+  const result = await db.prepare("DELETE FROM recurring_transactions WHERE id = ?").bind(id).run();
+  return result.meta.changes > 0;
+}
+async function processRecurring(db) {
+  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const { results } = await db.prepare("SELECT * FROM recurring_transactions WHERE is_active = 1 AND next_date <= ? AND (end_date IS NULL OR end_date >= ?)").bind(today, today).all();
+  let count3 = 0;
+  for (const item of results) {
+    const fee = item.fee ?? 0;
+    await createTransaction(db, {
+      name: item.name,
+      amount: item.amount + fee,
+      date: item.next_date,
+      category: item.category,
+      card: item.card ?? "",
+      type: item.type,
+      status: "\u5F85\u78BA\u8A8D",
+      source: "\u5B9A\u671F",
+      note: fee > 0 ? `\u542B\u624B\u7E8C\u8CBB NT$${fee.toLocaleString()}` : item.note,
+      transfer_id: null
+    });
+    const next = calcNextDate(item.next_date, item.frequency, item.day_of_month);
+    await updateRecurring(db, item.id, { next_date: next, last_generated: today });
+    count3++;
+  }
+  return count3;
+}
+function calcNextDate(dateStr, frequency, dayOfMonth = 1) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  if (frequency === "weekly") {
+    const dt = new Date(y, m - 1, d + 7);
+    return dt.toISOString().slice(0, 10);
+  }
+  if (frequency === "yearly") {
+    const maxD2 = new Date(y + 1, m, 0).getDate();
+    return `${y + 1}-${String(m).padStart(2, "0")}-${String(Math.min(d, maxD2)).padStart(2, "0")}`;
+  }
+  let ny = y, nm = m + 1;
+  if (nm > 12) {
+    nm = 1;
+    ny++;
+  }
+  const maxD = new Date(ny, nm, 0).getDate();
+  return `${ny}-${String(nm).padStart(2, "0")}-${String(Math.min(dayOfMonth, maxD)).padStart(2, "0")}`;
+}
+var init_queries = __esm({
+  "src/db/queries.ts"() {
+    "use strict";
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+    init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+    init_performance2();
+    __name(generateId, "generateId");
+    __name(getTransactions, "getTransactions");
+    __name(adjustAssetBalance, "adjustAssetBalance");
+    __name(calcAssetDelta, "calcAssetDelta");
+    __name(createTransaction, "createTransaction");
+    __name(createTransfer, "createTransfer");
+    __name(deleteTransferPair, "deleteTransferPair");
+    __name(updateTransaction, "updateTransaction");
+    __name(deleteTransaction, "deleteTransaction");
+    __name(findDuplicateTransaction, "findDuplicateTransaction");
+    __name(getInvestments, "getInvestments");
+    __name(deleteInvestment, "deleteInvestment");
+    __name(updateInvestment, "updateInvestment");
+    __name(upsertInvestment, "upsertInvestment");
+    __name(getInvestmentTrades, "getInvestmentTrades");
+    __name(createInvestmentTrade, "createInvestmentTrade");
+    __name(deleteInvestmentTrade, "deleteInvestmentTrade");
+    __name(getAssets, "getAssets");
+    __name(createAsset, "createAsset");
+    __name(updateAsset, "updateAsset");
+    __name(updateAssetFull, "updateAssetFull");
+    __name(getAssetById, "getAssetById");
+    __name(deleteAsset, "deleteAsset");
+    __name(getDailySummary, "getDailySummary");
+    __name(upsertDailySummary, "upsertDailySummary");
+    __name(getMonthlySummary, "getMonthlySummary");
+    __name(getReconciliations, "getReconciliations");
+    __name(createReconciliationItem, "createReconciliationItem");
+    __name(updateReconciliationItem, "updateReconciliationItem");
+    __name(getAssetHistory, "getAssetHistory");
+    __name(recordAssetSnapshot, "recordAssetSnapshot");
+    __name(getCategories, "getCategories");
+    __name(createCategory, "createCategory");
+    __name(updateCategory, "updateCategory");
+    __name(deleteCategory, "deleteCategory");
+    __name(getRecurring, "getRecurring");
+    __name(createRecurring, "createRecurring");
+    __name(updateRecurring, "updateRecurring");
+    __name(deleteRecurring, "deleteRecurring");
+    __name(processRecurring, "processRecurring");
+    __name(calcNextDate, "calcNextDate");
+  }
+});
+
+// src/installer-entry.ts
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+
+// node_modules/hono/dist/index.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+
+// node_modules/hono/dist/hono.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+
+// node_modules/hono/dist/hono-base.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
 
 // node_modules/hono/dist/compose.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
 var compose = /* @__PURE__ */ __name((middleware, onError, onNotFound) => {
   return (context2, next) => {
     let index = -1;
@@ -973,10 +1690,31 @@ var compose = /* @__PURE__ */ __name((middleware, onError, onNotFound) => {
   };
 }, "compose");
 
+// node_modules/hono/dist/context.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+
+// node_modules/hono/dist/request.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+
+// node_modules/hono/dist/http-exception.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+
 // node_modules/hono/dist/request/constants.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
 var GET_MATCH_RESULT = /* @__PURE__ */ Symbol();
 
 // node_modules/hono/dist/utils/body.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
 var parseBody = /* @__PURE__ */ __name(async (request, options = /* @__PURE__ */ Object.create(null)) => {
   const { all = false, dot = false } = options;
   const headers = request instanceof HonoRequest ? request.raw.headers : request.headers;
@@ -1051,6 +1789,9 @@ var handleParsingNestedValues = /* @__PURE__ */ __name((form, key, value) => {
 }, "handleParsingNestedValues");
 
 // node_modules/hono/dist/utils/url.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
 var splitPath = /* @__PURE__ */ __name((path) => {
   const paths = path.split("/");
   if (paths[0] === "") {
@@ -1541,6 +2282,9 @@ var HonoRequest = class {
 };
 
 // node_modules/hono/dist/utils/html.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
 var HtmlEscapedCallbackPhase = {
   Stringify: 1,
   BeforeStream: 2,
@@ -1993,6 +2737,9 @@ var Context = class {
 };
 
 // node_modules/hono/dist/router.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
 var METHOD_NAME_ALL = "ALL";
 var METHOD_NAME_ALL_LOWERCASE = "all";
 var METHODS = ["get", "post", "put", "delete", "options", "patch"];
@@ -2004,6 +2751,9 @@ var UnsupportedPathError = class extends Error {
 };
 
 // node_modules/hono/dist/utils/constants.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
 var COMPOSED_HANDLER = "__COMPOSED_HANDLER";
 
 // node_modules/hono/dist/hono-base.js
@@ -2114,14 +2864,14 @@ var Hono = class _Hono {
    * app.route("/api", app2) // GET /api/user
    * ```
    */
-  route(path, app11) {
+  route(path, app10) {
     const subApp = this.basePath(path);
-    app11.routes.map((r) => {
+    app10.routes.map((r) => {
       let handler;
-      if (app11.errorHandler === errorHandler) {
+      if (app10.errorHandler === errorHandler) {
         handler = r.handler;
       } else {
-        handler = /* @__PURE__ */ __name(async (c, next) => (await compose([], app11.errorHandler)(c, () => r.handler(c, next))).res, "handler");
+        handler = /* @__PURE__ */ __name(async (c, next) => (await compose([], app10.errorHandler)(c, () => r.handler(c, next))).res, "handler");
         handler[COMPOSED_HANDLER] = r.handler;
       }
       subApp.#addRoute(r.method, r.path, handler, r.basePath);
@@ -2385,7 +3135,20 @@ var Hono = class _Hono {
   }, "fire");
 };
 
+// node_modules/hono/dist/router/reg-exp-router/index.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+
+// node_modules/hono/dist/router/reg-exp-router/router.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+
 // node_modules/hono/dist/router/reg-exp-router/matcher.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
 var emptyParam = [];
 function match(method, path) {
   const matchers = this.buildAllMatchers();
@@ -2408,6 +3171,9 @@ function match(method, path) {
 __name(match, "match");
 
 // node_modules/hono/dist/router/reg-exp-router/node.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
 var LABEL_REG_EXP_STR = "[^/]+";
 var ONLY_WILDCARD_REG_EXP_STR = ".*";
 var TAIL_WILDCARD_REG_EXP_STR = "(?:|/.*)";
@@ -2520,6 +3286,9 @@ var Node = class _Node {
 };
 
 // node_modules/hono/dist/router/reg-exp-router/trie.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
 var Trie = class {
   static {
     __name(this, "Trie");
@@ -2764,7 +3533,20 @@ var RegExpRouter = class {
   }
 };
 
+// node_modules/hono/dist/router/reg-exp-router/prepared-router.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+
+// node_modules/hono/dist/router/smart-router/index.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+
 // node_modules/hono/dist/router/smart-router/router.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
 var SmartRouter = class {
   static {
     __name(this, "SmartRouter");
@@ -2822,7 +3604,20 @@ var SmartRouter = class {
   }
 };
 
+// node_modules/hono/dist/router/trie-router/index.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+
+// node_modules/hono/dist/router/trie-router/router.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+
 // node_modules/hono/dist/router/trie-router/node.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
 var emptyParams = /* @__PURE__ */ Object.create(null);
 var hasChildren = /* @__PURE__ */ __name((children) => {
   for (const _ in children) {
@@ -3044,6 +3839,9 @@ var Hono2 = class extends Hono {
 };
 
 // node_modules/hono/dist/middleware/cors/index.js
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
 var cors = /* @__PURE__ */ __name((options) => {
   const opts = {
     origin: "*",
@@ -3129,482 +3927,11 @@ var cors = /* @__PURE__ */ __name((options) => {
   }, "cors2");
 }, "cors");
 
-// src/db/queries.ts
-function generateId(prefix = "tx") {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-__name(generateId, "generateId");
-async function getTransactions(db, opts) {
-  const conditions = [];
-  const params = [];
-  if (opts.date) {
-    conditions.push("date = ?");
-    params.push(opts.date);
-  }
-  if (opts.month) {
-    conditions.push("strftime('%Y-%m', date) = ?");
-    params.push(opts.month);
-  }
-  if (opts.date_from) {
-    conditions.push("date >= ?");
-    params.push(opts.date_from);
-  }
-  if (opts.date_to) {
-    conditions.push("date <= ?");
-    params.push(opts.date_to);
-  }
-  if (opts.category) {
-    conditions.push("category = ?");
-    params.push(opts.category);
-  }
-  if (opts.status) {
-    conditions.push("status = ?");
-    params.push(opts.status);
-  }
-  if (opts.type) {
-    conditions.push("type = ?");
-    params.push(opts.type);
-  }
-  if (opts.card) {
-    conditions.push("card = ?");
-    params.push(opts.card);
-  }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-  const limit = opts.limit ?? 50;
-  const offset = opts.offset ?? 0;
-  const { results } = await db.prepare(`SELECT * FROM transactions ${where} ORDER BY date DESC, created_at DESC LIMIT ? OFFSET ?`).bind(...params, limit, offset).all();
-  const countRow = await db.prepare(`SELECT COUNT(*) as total FROM transactions ${where}`).bind(...params).first();
-  return { data: results, total: countRow?.total ?? 0 };
-}
-__name(getTransactions, "getTransactions");
-async function adjustAssetBalance(db, accountName, delta) {
-  if (!accountName) return;
-  await db.prepare("UPDATE assets SET balance = balance + ?, updated_at = date('now') WHERE name = ?").bind(delta, accountName).run();
-}
-__name(adjustAssetBalance, "adjustAssetBalance");
-async function calcAssetDelta(db, accountName, amount, type) {
-  const asset = await db.prepare("SELECT type FROM assets WHERE name = ?").bind(accountName).first();
-  if (!asset) return 0;
-  const isIncome = type === "\u6536\u5165";
-  return isIncome ? amount : -amount;
-}
-__name(calcAssetDelta, "calcAssetDelta");
-async function createTransaction(db, data) {
-  const id = generateId("tx");
-  await db.prepare("INSERT INTO transactions (id, name, amount, date, category, card, type, status, source, note, transfer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(id, data.name, data.amount, data.date, data.category, data.card, data.type ?? "\u652F\u51FA", data.status, data.source, data.note ?? null, data.transfer_id ?? null).run();
-  if (data.source !== "\u9918\u984D\u8ABF\u6574" && data.card) {
-    const delta = await calcAssetDelta(db, data.card, data.amount, data.type ?? "\u652F\u51FA");
-    await adjustAssetBalance(db, data.card, delta);
-  }
-  return id;
-}
-__name(createTransaction, "createTransaction");
-async function createTransfer(db, data) {
-  const transferId = generateId("xfr");
-  await createTransaction(db, {
-    name: data.outName ?? `\u8F49\u5E33 \u2192 ${data.to_account}`,
-    amount: data.amount,
-    date: data.date,
-    category: "\u8F49\u5E33",
-    card: data.from_account,
-    type: "\u652F\u51FA",
-    status: "\u5DF2\u5C0D\u5E33",
-    source: "\u624B\u52D5\u8F38\u5165",
-    note: data.note ?? null,
-    transfer_id: transferId
-  });
-  await createTransaction(db, {
-    name: data.inName ?? `\u8F49\u5E33 \u2190 ${data.from_account}`,
-    amount: data.amount,
-    date: data.date,
-    category: "\u8F49\u5E33",
-    card: data.to_account,
-    type: "\u6536\u5165",
-    status: "\u5DF2\u5C0D\u5E33",
-    source: "\u624B\u52D5\u8F38\u5165",
-    note: data.note ?? null,
-    transfer_id: transferId
-  });
-  if (data.fee && data.fee > 0) {
-    await createTransaction(db, {
-      name: `\u624B\u7E8C\u8CBB\uFF08\u8F49\u5E33\u81F3 ${data.to_account}\uFF09`,
-      amount: data.fee,
-      date: data.date,
-      category: "\u624B\u7E8C\u8CBB",
-      card: data.from_account,
-      type: "\u652F\u51FA",
-      status: "\u5DF2\u5C0D\u5E33",
-      source: "\u624B\u52D5\u8F38\u5165",
-      note: null,
-      transfer_id: null
-    });
-  }
-  return transferId;
-}
-__name(createTransfer, "createTransfer");
-async function deleteTransferPair(db, transferId) {
-  const { results } = await db.prepare("SELECT card, amount, type FROM transactions WHERE transfer_id = ?").bind(transferId).all();
-  await db.prepare("DELETE FROM transactions WHERE transfer_id = ?").bind(transferId).run();
-  for (const txn of results) {
-    if (txn.card) {
-      const delta = await calcAssetDelta(db, txn.card, txn.amount, txn.type);
-      await adjustAssetBalance(db, txn.card, -delta);
-    }
-  }
-}
-__name(deleteTransferPair, "deleteTransferPair");
-async function updateTransaction(db, id, data) {
-  const old = await db.prepare("SELECT card, amount, type, source FROM transactions WHERE id = ?").bind(id).first();
-  const fields = Object.keys(data).filter((k) => data[k] !== void 0);
-  if (!fields.length) return false;
-  const sets = fields.map((f) => `${f} = ?`).join(", ");
-  const values = fields.map((f) => data[f]);
-  const result = await db.prepare(`UPDATE transactions SET ${sets} WHERE id = ?`).bind(...values, id).run();
-  if (result.meta.changes > 0 && old) {
-    const newCard = (data.card !== void 0 ? data.card : old.card) || "";
-    const newAmount = data.amount !== void 0 ? data.amount : old.amount;
-    const newType = data.type !== void 0 ? data.type : old.type;
-    if (old.card) {
-      const oldDelta = await calcAssetDelta(db, old.card, old.amount, old.type);
-      await adjustAssetBalance(db, old.card, -oldDelta);
-    }
-    if (newCard) {
-      const newDelta = await calcAssetDelta(db, newCard, newAmount, newType);
-      await adjustAssetBalance(db, newCard, newDelta);
-    }
-  }
-  return result.meta.changes > 0;
-}
-__name(updateTransaction, "updateTransaction");
-async function deleteTransaction(db, id) {
-  const txn = await db.prepare("SELECT card, amount, type, source FROM transactions WHERE id = ?").bind(id).first();
-  const result = await db.prepare("DELETE FROM transactions WHERE id = ?").bind(id).run();
-  if (result.meta.changes > 0 && txn && txn.card) {
-    const delta = await calcAssetDelta(db, txn.card, txn.amount, txn.type);
-    await adjustAssetBalance(db, txn.card, -delta);
-  }
-  return result.meta.changes > 0;
-}
-__name(deleteTransaction, "deleteTransaction");
-async function getInvestments(db) {
-  const { results } = await db.prepare("SELECT * FROM investments ORDER BY name").all();
-  return results;
-}
-__name(getInvestments, "getInvestments");
-async function deleteInvestment(db, id) {
-  const result = await db.prepare("DELETE FROM investments WHERE id = ?").bind(id).run();
-  return result.meta.changes > 0;
-}
-__name(deleteInvestment, "deleteInvestment");
-async function upsertInvestment(db, data) {
-  const id = data.id ?? generateId("inv");
-  await db.prepare(`
-    INSERT INTO investments (id, name, symbol, shares, avg_cost, market_value, profit_loss, return_rate, realized_pnl, current_price, previous_close, updated_at, account)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      shares=excluded.shares, avg_cost=excluded.avg_cost, market_value=excluded.market_value,
-      profit_loss=excluded.profit_loss, return_rate=excluded.return_rate,
-      realized_pnl=excluded.realized_pnl,
-      current_price=excluded.current_price, previous_close=excluded.previous_close,
-      updated_at=excluded.updated_at
-  `).bind(id, data.name, data.symbol, data.shares, data.avg_cost, data.market_value, data.profit_loss, data.return_rate, data.realized_pnl ?? 0, data.current_price ?? 0, data.previous_close ?? 0, data.updated_at, data.account).run();
-  return id;
-}
-__name(upsertInvestment, "upsertInvestment");
-async function getInvestmentTrades(db, symbol) {
-  const where = symbol ? "WHERE symbol = ?" : "";
-  const { results } = await db.prepare(`SELECT * FROM investment_trades ${where} ORDER BY date DESC, created_at DESC`).bind(...symbol ? [symbol] : []).all();
-  return results;
-}
-__name(getInvestmentTrades, "getInvestmentTrades");
-async function createInvestmentTrade(db, data) {
-  const id = generateId("trd");
-  await db.prepare(`
-    INSERT INTO investment_trades (id, symbol, name, type, shares, price, amount, date, account, note)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(id, data.symbol, data.name, data.type, data.shares, data.price, data.amount, data.date, data.account ?? "", data.note ?? null).run();
-  return id;
-}
-__name(createInvestmentTrade, "createInvestmentTrade");
-async function deleteInvestmentTrade(db, id) {
-  const result = await db.prepare("DELETE FROM investment_trades WHERE id = ?").bind(id).run();
-  return result.meta.changes > 0;
-}
-__name(deleteInvestmentTrade, "deleteInvestmentTrade");
-async function getAssets(db) {
-  const { results } = await db.prepare("SELECT * FROM assets ORDER BY type, name").all();
-  return results;
-}
-__name(getAssets, "getAssets");
-async function createAsset(db, data) {
-  const id = generateId("acc");
-  await db.prepare("INSERT INTO assets (id, name, type, bank, balance, include_in_total, billing_day, payment_day, credit_limit, payment_method, payment_account, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, date('now'))").bind(id, data.name, data.type, data.bank, data.balance, data.include_in_total ?? 1, data.billing_day ?? null, data.payment_day ?? null, data.credit_limit ?? 0, data.payment_method ?? "manual", data.payment_account ?? null).run();
-  return id;
-}
-__name(createAsset, "createAsset");
-async function updateAssetFull(db, id, data) {
-  const fields = [];
-  const values = [];
-  if (data.name !== void 0) {
-    fields.push("name");
-    values.push(data.name);
-  }
-  if (data.type !== void 0) {
-    fields.push("type");
-    values.push(data.type);
-  }
-  if (data.balance !== void 0) {
-    fields.push("balance");
-    values.push(data.balance);
-  }
-  if (data.include_in_total !== void 0) {
-    fields.push("include_in_total");
-    values.push(data.include_in_total);
-  }
-  if ("billing_day" in data) {
-    fields.push("billing_day");
-    values.push(data.billing_day ?? null);
-  }
-  if ("payment_day" in data) {
-    fields.push("payment_day");
-    values.push(data.payment_day ?? null);
-  }
-  if ("credit_limit" in data) {
-    fields.push("credit_limit");
-    values.push(data.credit_limit ?? null);
-  }
-  if ("payment_method" in data) {
-    fields.push("payment_method");
-    values.push(data.payment_method ?? "manual");
-  }
-  if ("payment_account" in data) {
-    fields.push("payment_account");
-    values.push(data.payment_account ?? null);
-  }
-  if (!fields.length) return null;
-  const sets = [...fields.map((f) => `${f} = ?`), "updated_at = date('now')"].join(", ");
-  await db.prepare(`UPDATE assets SET ${sets} WHERE id = ?`).bind(...values, id).run();
-  return db.prepare("SELECT * FROM assets WHERE id = ?").bind(id).first();
-}
-__name(updateAssetFull, "updateAssetFull");
-async function getAssetById(db, id) {
-  return db.prepare("SELECT * FROM assets WHERE id = ?").bind(id).first();
-}
-__name(getAssetById, "getAssetById");
-async function deleteAsset(db, id) {
-  const result = await db.prepare("DELETE FROM assets WHERE id = ?").bind(id).run();
-  return result.meta.changes > 0;
-}
-__name(deleteAsset, "deleteAsset");
-async function getDailySummary(db, date) {
-  return db.prepare("SELECT * FROM daily_summaries WHERE date = ?").bind(date).first();
-}
-__name(getDailySummary, "getDailySummary");
-async function upsertDailySummary(db, date, data) {
-  const id = generateId("sum");
-  await db.prepare(`
-    INSERT INTO daily_summaries (id, date, total_amount, transaction_count, summary_text)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(date) DO UPDATE SET
-      total_amount=excluded.total_amount, transaction_count=excluded.transaction_count, summary_text=excluded.summary_text
-  `).bind(id, date, data.total_amount, data.transaction_count, data.summary_text).run();
-}
-__name(upsertDailySummary, "upsertDailySummary");
-async function getMonthlySummary(db, month) {
-  const rows = await db.prepare(`
-    SELECT category, SUM(amount) as total, COUNT(*) as count
-    FROM transactions
-    WHERE strftime('%Y-%m', date) = ?
-    GROUP BY category
-    ORDER BY total DESC
-  `).bind(month).all();
-  const totals = await db.prepare(`
-    SELECT SUM(amount) as total, COUNT(*) as count
-    FROM transactions
-    WHERE strftime('%Y-%m', date) = ?
-      AND type = '\u652F\u51FA'
-      AND transfer_id IS NULL
-  `).bind(month).first();
-  const incomeTotals = await db.prepare(`
-    SELECT SUM(amount) as total
-    FROM transactions
-    WHERE strftime('%Y-%m', date) = ?
-      AND type = '\u6536\u5165'
-      AND transfer_id IS NULL
-  `).bind(month).first();
-  return {
-    byCategory: rows.results,
-    total: totals?.total ?? 0,
-    count: totals?.count ?? 0,
-    income: incomeTotals?.total ?? 0
-  };
-}
-__name(getMonthlySummary, "getMonthlySummary");
-async function getReconciliations(db, billMonth) {
-  const where = billMonth ? "WHERE bill_month = ?" : "";
-  const params = billMonth ? [billMonth] : [];
-  const { results } = await db.prepare(`SELECT * FROM reconciliation ${where} ORDER BY date DESC`).bind(...params).all();
-  return results;
-}
-__name(getReconciliations, "getReconciliations");
-async function createReconciliationItem(db, data) {
-  const id = generateId("rec");
-  await db.prepare(`
-    INSERT INTO reconciliation (id, name, bill_amount, record_amount, date, category, status, bill_month, transaction_id, note)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(id, data.name, data.bill_amount, data.record_amount ?? null, data.date, data.category ?? "\u5176\u4ED6", data.status, data.bill_month, data.transaction_id ?? null, data.note ?? null).run();
-  return id;
-}
-__name(createReconciliationItem, "createReconciliationItem");
-async function updateReconciliationItem(db, id, data) {
-  const fields = ["status", "note", "transaction_id", "record_amount"].filter((f) => data[f] !== void 0);
-  if (!fields.length) return false;
-  const sets = fields.map((f) => `${f} = ?`).join(", ");
-  const values = fields.map((f) => data[f]);
-  const result = await db.prepare(`UPDATE reconciliation SET ${sets} WHERE id = ?`).bind(...values, id).run();
-  return result.meta.changes > 0;
-}
-__name(updateReconciliationItem, "updateReconciliationItem");
-async function getAssetHistory(db, months = 12) {
-  const { results } = await db.prepare(`
-    SELECT * FROM asset_history
-    ORDER BY snapshot_date DESC
-    LIMIT ?
-  `).bind(months).all();
-  return results.reverse();
-}
-__name(getAssetHistory, "getAssetHistory");
-async function recordAssetSnapshot(db, data) {
-  const id = generateId("snap");
-  await db.prepare(`
-    INSERT OR REPLACE INTO asset_history (id, snapshot_date, total_assets, total_investments, total_cash, monthly_expense)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).bind(id, data.snapshot_date, data.total_assets, data.total_investments, data.total_cash, data.monthly_expense).run();
-}
-__name(recordAssetSnapshot, "recordAssetSnapshot");
-async function getCategories(db) {
-  const { results } = await db.prepare("SELECT * FROM categories ORDER BY sort_order ASC, name ASC").all();
-  return results;
-}
-__name(getCategories, "getCategories");
-async function createCategory(db, name, type = "\u652F\u51FA", sort_order, icon) {
-  const id = generateId("cat");
-  const order = sort_order ?? 0;
-  await db.prepare("INSERT INTO categories (id, name, type, sort_order, icon) VALUES (?, ?, ?, ?, ?)").bind(id, name, type, order, icon ?? null).run();
-  return id;
-}
-__name(createCategory, "createCategory");
-async function updateCategory(db, id, data) {
-  let oldName = null;
-  if (data.name !== void 0) {
-    const row = await db.prepare("SELECT name FROM categories WHERE id = ?").bind(id).first();
-    oldName = row?.name ?? null;
-  }
-  const fields = [];
-  const values = [];
-  if (data.name !== void 0) {
-    fields.push("name");
-    values.push(data.name);
-  }
-  if (data.sort_order !== void 0) {
-    fields.push("sort_order");
-    values.push(data.sort_order);
-  }
-  if ("icon" in data) {
-    fields.push("icon");
-    values.push(data.icon ?? null);
-  }
-  if (!fields.length) return false;
-  const sets = fields.map((f) => `${f} = ?`).join(", ");
-  const result = await db.prepare(`UPDATE categories SET ${sets} WHERE id = ?`).bind(...values, id).run();
-  if (result.meta.changes > 0 && data.name !== void 0 && oldName && oldName !== data.name) {
-    await db.prepare("UPDATE transactions SET category = ? WHERE category = ?").bind(data.name, oldName).run();
-    await db.prepare("UPDATE recurring_transactions SET category = ? WHERE category = ?").bind(data.name, oldName).run();
-  }
-  return result.meta.changes > 0;
-}
-__name(updateCategory, "updateCategory");
-async function deleteCategory(db, id) {
-  const result = await db.prepare("DELETE FROM categories WHERE id = ?").bind(id).run();
-  return result.meta.changes > 0;
-}
-__name(deleteCategory, "deleteCategory");
-async function getRecurring(db) {
-  const { results } = await db.prepare("SELECT * FROM recurring_transactions ORDER BY next_date ASC, name ASC").all();
-  return results;
-}
-__name(getRecurring, "getRecurring");
-async function createRecurring(db, data) {
-  const id = generateId("rcr");
-  const startDate = data.start_date ?? data.next_date;
-  await db.prepare(`
-    INSERT INTO recurring_transactions (id, name, amount, type, category, card, note, frequency, day_of_month, next_date, start_date, end_date, fee, is_active)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(id, data.name, data.amount, data.type ?? "\u652F\u51FA", data.category, data.card ?? "", data.note ?? null, data.frequency ?? "monthly", data.day_of_month ?? 1, data.next_date, startDate, data.end_date ?? null, data.fee ?? 0, data.is_active ?? 1).run();
-  return id;
-}
-__name(createRecurring, "createRecurring");
-async function updateRecurring(db, id, data) {
-  const allowed = ["name", "amount", "type", "category", "card", "note", "frequency", "day_of_month", "next_date", "start_date", "end_date", "fee", "is_active", "last_generated"];
-  const fields = allowed.filter((f) => data[f] !== void 0);
-  if (!fields.length) return false;
-  const sets = fields.map((f) => `${f} = ?`).join(", ");
-  const values = fields.map((f) => data[f]);
-  await db.prepare(`UPDATE recurring_transactions SET ${sets} WHERE id = ?`).bind(...values, id).run();
-  return true;
-}
-__name(updateRecurring, "updateRecurring");
-async function deleteRecurring(db, id) {
-  const result = await db.prepare("DELETE FROM recurring_transactions WHERE id = ?").bind(id).run();
-  return result.meta.changes > 0;
-}
-__name(deleteRecurring, "deleteRecurring");
-async function processRecurring(db) {
-  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-  const { results } = await db.prepare("SELECT * FROM recurring_transactions WHERE is_active = 1 AND next_date <= ? AND (end_date IS NULL OR end_date >= ?)").bind(today, today).all();
-  let count3 = 0;
-  for (const item of results) {
-    const fee = item.fee ?? 0;
-    await createTransaction(db, {
-      name: item.name,
-      amount: item.amount + fee,
-      date: item.next_date,
-      category: item.category,
-      card: item.card ?? "",
-      type: item.type,
-      status: "\u5F85\u78BA\u8A8D",
-      source: "\u5B9A\u671F",
-      note: fee > 0 ? `\u542B\u624B\u7E8C\u8CBB NT$${fee.toLocaleString()}` : item.note,
-      transfer_id: null
-    });
-    const next = calcNextDate(item.next_date, item.frequency, item.day_of_month);
-    await updateRecurring(db, item.id, { next_date: next, last_generated: today });
-    count3++;
-  }
-  return count3;
-}
-__name(processRecurring, "processRecurring");
-function calcNextDate(dateStr, frequency, dayOfMonth = 1) {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  if (frequency === "weekly") {
-    const dt = new Date(y, m - 1, d + 7);
-    return dt.toISOString().slice(0, 10);
-  }
-  if (frequency === "yearly") {
-    const maxD2 = new Date(y + 1, m, 0).getDate();
-    return `${y + 1}-${String(m).padStart(2, "0")}-${String(Math.min(d, maxD2)).padStart(2, "0")}`;
-  }
-  let ny = y, nm = m + 1;
-  if (nm > 12) {
-    nm = 1;
-    ny++;
-  }
-  const maxD = new Date(ny, nm, 0).getDate();
-  return `${ny}-${String(nm).padStart(2, "0")}-${String(Math.min(dayOfMonth, maxD)).padStart(2, "0")}`;
-}
-__name(calcNextDate, "calcNextDate");
-
 // src/routes/transactions.ts
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+init_queries();
 var app = new Hono2();
 app.get("/", async (c) => {
   const q = c.req.query();
@@ -3688,6 +4015,52 @@ app.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const txn = await c.env.DB.prepare("SELECT transfer_id FROM transactions WHERE id = ?").bind(id).first();
   if (txn?.transfer_id) {
+    const linkedTrade = await c.env.DB.prepare("SELECT * FROM investment_trades WHERE transfer_id = ?").bind(txn.transfer_id).first();
+    if (linkedTrade) {
+      const allForPair = await getInvestmentTrades(c.env.DB, linkedTrade.symbol, linkedTrade.account);
+      const allInv = await getInvestments(c.env.DB);
+      await deleteInvestmentTrade(c.env.DB, linkedTrade.id);
+      await deleteTransferPair(c.env.DB, txn.transfer_id);
+      const remaining = allForPair.filter((t) => t.id !== linkedTrade.id);
+      const inv = allInv.find((i) => i.symbol === linkedTrade.symbol && i.account === linkedTrade.account);
+      const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+      if (remaining.length === 0) {
+        if (inv) await deleteInvestment(c.env.DB, inv.id);
+        return c.json({ ok: true });
+      }
+      const sorted = [...remaining].sort((a, b) => a.date.localeCompare(b.date));
+      let shares = 0, avgCost = 0, realizedPnl = 0;
+      for (const t of sorted) {
+        if (t.type === "\u8CB7\u5165") {
+          const newShares = shares + t.shares;
+          avgCost = newShares > 0 ? (shares * avgCost + t.shares * t.price) / newShares : t.price;
+          shares = newShares;
+        } else {
+          realizedPnl += (t.price - avgCost) * t.shares;
+          shares = Math.max(0, shares - t.shares);
+        }
+      }
+      if (shares === 0) {
+        if (inv) await deleteInvestment(c.env.DB, inv.id);
+        return c.json({ ok: true });
+      }
+      const currentPerShare = inv ? inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : avgCost) : avgCost;
+      const newMarketValue = Math.round(shares * currentPerShare);
+      const newTotalCost = Math.round(shares * avgCost);
+      const newProfitLoss = newMarketValue - newTotalCost;
+      const newReturnRate = newTotalCost > 0 ? Math.round(newProfitLoss / newTotalCost * 1e4) / 100 : 0;
+      await upsertInvestment(c.env.DB, {
+        ...inv ?? { id: void 0, name: linkedTrade.name, symbol: linkedTrade.symbol, account: linkedTrade.account, current_price: avgCost, previous_close: 0 },
+        shares,
+        avg_cost: Math.round(avgCost * 100) / 100,
+        market_value: newMarketValue,
+        profit_loss: newProfitLoss,
+        return_rate: newReturnRate,
+        realized_pnl: Math.round(realizedPnl),
+        updated_at: today
+      });
+      return c.json({ ok: true });
+    }
     await deleteTransferPair(c.env.DB, txn.transfer_id);
     return c.json({ ok: true, deleted_transfer: true });
   }
@@ -3697,7 +4070,16 @@ app.delete("/:id", async (c) => {
 });
 var transactions_default = app;
 
+// src/routes/investments.ts
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+init_queries();
+
 // src/services/csv-parser.ts
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
 function parseNumber(str) {
   const cleaned = str.replace(/[,\s%]/g, "").replace(/[（(]/, "-").replace(/[）)]/, "");
   const n = parseFloat(cleaned);
@@ -3981,28 +4363,54 @@ app2.post("/price/:symbol/refresh", async (c) => {
 });
 app2.get("/history", async (c) => {
   const range = c.req.query("range") ?? "month";
-  if (range === "year") {
+  const taipeiNow = new Date(Date.now() + 8 * 60 * 60 * 1e3);
+  const today = taipeiNow.toISOString().slice(0, 10);
+  if (range === "week") {
+    const start2 = new Date(taipeiNow);
+    start2.setUTCDate(start2.getUTCDate() - 6);
+    const startDate2 = start2.toISOString().slice(0, 10);
     const { results: results2 } = await c.env.DB.prepare(`
-      SELECT snapshot_date, total_investments
-      FROM asset_history
-      WHERE snapshot_date IN (
-        SELECT MAX(snapshot_date) FROM asset_history GROUP BY substr(snapshot_date, 1, 7)
-      )
-      ORDER BY snapshot_date DESC LIMIT 12
-    `).all();
-    return c.json({ ok: true, data: results2.reverse() });
+      SELECT snapshot_date, total_investments FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      ORDER BY snapshot_date ASC
+    `).bind(startDate2, today).all();
+    return c.json({ ok: true, data: results2, start: startDate2, end: today });
   }
-  const limit = range === "week" ? 7 : 30;
+  if (range === "month") {
+    const start2 = new Date(taipeiNow);
+    start2.setUTCDate(start2.getUTCDate() - 29);
+    const startDate2 = start2.toISOString().slice(0, 10);
+    const { results: results2 } = await c.env.DB.prepare(`
+      SELECT snapshot_date, total_investments FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      ORDER BY snapshot_date ASC
+    `).bind(startDate2, today).all();
+    return c.json({ ok: true, data: results2, start: startDate2, end: today });
+  }
+  const start = new Date(taipeiNow);
+  start.setUTCDate(start.getUTCDate() - 364);
+  const startDate = start.toISOString().slice(0, 10);
   const { results } = await c.env.DB.prepare(`
-    SELECT snapshot_date, total_investments FROM asset_history
-    ORDER BY snapshot_date DESC LIMIT ?
-  `).bind(limit).all();
-  return c.json({ ok: true, data: results.reverse() });
+    SELECT snapshot_date, total_investments
+    FROM asset_history
+    WHERE snapshot_date IN (
+      SELECT MAX(snapshot_date) FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      GROUP BY substr(snapshot_date, 1, 7)
+    )
+    ORDER BY snapshot_date ASC
+  `).bind(startDate, today).all();
+  return c.json({ ok: true, data: results, start: startDate, end: today });
 });
 app2.get("/trades", async (c) => {
   const symbol = c.req.query("symbol");
   const trades = await getInvestmentTrades(c.env.DB, symbol);
   return c.json({ ok: true, data: trades });
+});
+app2.get("/pnl", async (c) => {
+  const { results } = await c.env.DB.prepare(`SELECT * FROM investment_trades WHERE type = '\u8CE3\u51FA' ORDER BY date DESC, created_at DESC`).all();
+  const total = results.reduce((s, t) => s + (t.realized_pnl ?? 0), 0);
+  return c.json({ ok: true, data: results, total_realized_pnl: total });
 });
 app2.post("/trades", async (c) => {
   const body = await c.req.json();
@@ -4013,6 +4421,25 @@ app2.post("/trades", async (c) => {
     return c.json({ ok: false, error: "type \u5FC5\u9808\u662F \u8CB7\u5165 \u6216 \u8CE3\u51FA" }, 400);
   }
   const amount = Math.round(body.shares * body.price);
+  const fee = body.fee ?? 0;
+  const investments = await getInvestments(c.env.DB);
+  const account = body.account ?? "";
+  const inv = investments.find((i) => i.symbol === body.symbol && i.account === account);
+  const today = body.date;
+  const tradeRealizedPnl = body.type === "\u8CE3\u51FA" && inv ? Math.round((body.price - inv.avg_cost) * body.shares) - fee : 0;
+  let tradeTransferId = null;
+  if (body.type === "\u8CE3\u51FA" && body.to_account && body.account) {
+    const proceeds = amount - fee;
+    tradeTransferId = await createTransfer(c.env.DB, {
+      from_account: body.account,
+      to_account: body.to_account,
+      amount: proceeds,
+      date: body.date,
+      note: `\u8CE3\u51FA ${body.symbol} ${body.name} \xD7${body.shares}`,
+      outName: `\u8CE3\u51FA ${body.symbol} ${body.name}`,
+      inName: `\u8CE3\u51FA ${body.symbol} ${body.name}`
+    });
+  }
   const id = await createInvestmentTrade(c.env.DB, {
     symbol: body.symbol,
     name: body.name,
@@ -4022,11 +4449,11 @@ app2.post("/trades", async (c) => {
     amount,
     date: body.date,
     account: body.account ?? "",
+    to_account: body.type === "\u8CE3\u51FA" ? body.to_account ?? null : null,
+    realized_pnl: tradeRealizedPnl,
+    transfer_id: tradeTransferId,
     note: body.note ?? null
   });
-  const investments = await getInvestments(c.env.DB);
-  const inv = investments.find((i) => i.symbol === body.symbol);
-  const today = body.date;
   if (inv) {
     let newShares;
     let newAvgCost;
@@ -4037,23 +4464,27 @@ app2.post("/trades", async (c) => {
     } else {
       newShares = Math.max(0, inv.shares - body.shares);
       newAvgCost = inv.avg_cost;
-      newRealizedPnl += (body.price - inv.avg_cost) * body.shares;
+      newRealizedPnl += tradeRealizedPnl;
     }
     const currentPerShare = inv.shares > 0 ? inv.current_price || inv.market_value / inv.shares : body.price;
     const newMarketValue = Math.round(newShares * currentPerShare);
     const newTotalCost = Math.round(newShares * newAvgCost);
     const newProfitLoss = newMarketValue - newTotalCost;
     const newReturnRate = newTotalCost > 0 ? Math.round(newProfitLoss / newTotalCost * 1e4) / 100 : 0;
-    await upsertInvestment(c.env.DB, {
-      ...inv,
-      shares: newShares,
-      avg_cost: Math.round(newAvgCost * 100) / 100,
-      market_value: newMarketValue,
-      profit_loss: newProfitLoss,
-      return_rate: newReturnRate,
-      realized_pnl: Math.round(newRealizedPnl),
-      updated_at: today
-    });
+    if (newShares === 0 && body.type === "\u8CE3\u51FA") {
+      await deleteInvestment(c.env.DB, inv.id);
+    } else {
+      await upsertInvestment(c.env.DB, {
+        ...inv,
+        shares: newShares,
+        avg_cost: Math.round(newAvgCost * 100) / 100,
+        market_value: newMarketValue,
+        profit_loss: newProfitLoss,
+        return_rate: newReturnRate,
+        realized_pnl: Math.round(newRealizedPnl),
+        updated_at: today
+      });
+    }
   } else if (body.type === "\u8CB7\u5165") {
     await upsertInvestment(c.env.DB, {
       name: body.name,
@@ -4067,24 +4498,78 @@ app2.post("/trades", async (c) => {
       current_price: body.price,
       previous_close: 0,
       updated_at: today,
-      account: body.account ?? "\u6C38\u8C50\u8B49\u5238"
+      account: body.account ?? ""
     });
   }
   return c.json({ ok: true, id });
+});
+app2.patch("/trades/:id", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+  const trade = await c.env.DB.prepare("SELECT * FROM investment_trades WHERE id = ?").bind(id).first();
+  if (!trade) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u6B64\u8A18\u9304" }, 404);
+  const newType = body.type ?? trade.type;
+  const newShares = body.shares ?? trade.shares;
+  const newPrice = body.price ?? trade.price;
+  const newDate = body.date ?? trade.date;
+  const newAccount = body.account ?? trade.account;
+  const newNote = "note" in body ? body.note : trade.note;
+  const newAmount = Math.round(newShares * newPrice);
+  await c.env.DB.prepare(
+    "UPDATE investment_trades SET type=?, shares=?, price=?, amount=?, date=?, account=?, note=? WHERE id=?"
+  ).bind(newType, newShares, newPrice, newAmount, newDate, newAccount, newNote ?? null, id).run();
+  const effectiveAccount = newAccount || trade.account;
+  const allForPair = await getInvestmentTrades(c.env.DB, trade.symbol, effectiveAccount);
+  const allInv = await getInvestments(c.env.DB);
+  const inv = allInv.find((i) => i.symbol === trade.symbol && i.account === effectiveAccount);
+  if (!inv) return c.json({ ok: true });
+  const remaining = allForPair.map(
+    (t) => t.id === id ? { ...t, type: newType, shares: newShares, price: newPrice, date: newDate } : t
+  );
+  const sorted = [...remaining].sort((a, b) => a.date.localeCompare(b.date));
+  let shares = 0, avgCost = 0, realizedPnl = 0;
+  for (const t of sorted) {
+    if (t.type === "\u8CB7\u5165") {
+      const ns = shares + t.shares;
+      avgCost = ns > 0 ? (shares * avgCost + t.shares * t.price) / ns : t.price;
+      shares = ns;
+    } else {
+      realizedPnl += (t.price - avgCost) * t.shares;
+      shares = Math.max(0, shares - t.shares);
+    }
+  }
+  const currentPerShare = inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : 0);
+  const newMarketValue = Math.round(shares * currentPerShare);
+  const newTotalCost = Math.round(shares * avgCost);
+  const newProfitLoss = newMarketValue - newTotalCost;
+  const newReturnRate = newTotalCost > 0 ? Math.round(newProfitLoss / newTotalCost * 1e4) / 100 : 0;
+  await upsertInvestment(c.env.DB, {
+    ...inv,
+    shares,
+    avg_cost: Math.round(avgCost * 100) / 100,
+    market_value: newMarketValue,
+    profit_loss: newProfitLoss,
+    return_rate: newReturnRate,
+    realized_pnl: Math.round(realizedPnl),
+    updated_at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)
+  });
+  return c.json({ ok: true });
 });
 app2.delete("/trades/:id", async (c) => {
   const id = c.req.param("id");
   const trade = await c.env.DB.prepare("SELECT * FROM investment_trades WHERE id = ?").bind(id).first();
   if (!trade) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u6B64\u8A18\u9304" }, 404);
-  const allForSymbol = await getInvestmentTrades(c.env.DB, trade.symbol);
+  const allForPair = await getInvestmentTrades(c.env.DB, trade.symbol, trade.account);
   const allInv = await getInvestments(c.env.DB);
   await deleteInvestmentTrade(c.env.DB, id);
-  const remaining = allForSymbol.filter((t) => t.id !== id);
-  const inv = allInv.find((i) => i.symbol === trade.symbol);
-  if (!inv) return c.json({ ok: true });
+  if (trade.transfer_id) {
+    await deleteTransferPair(c.env.DB, trade.transfer_id);
+  }
+  const remaining = allForPair.filter((t) => t.id !== id);
+  const inv = allInv.find((i) => i.symbol === trade.symbol && i.account === trade.account);
   const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
   if (remaining.length === 0) {
-    await deleteInvestment(c.env.DB, inv.id);
+    if (inv) await deleteInvestment(c.env.DB, inv.id);
     return c.json({ ok: true });
   }
   const sorted = [...remaining].sort((a, b) => a.date.localeCompare(b.date));
@@ -4101,13 +4586,24 @@ app2.delete("/trades/:id", async (c) => {
       shares = Math.max(0, shares - t.shares);
     }
   }
-  const currentPerShare = inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : 0);
+  if (shares === 0) {
+    if (inv) await deleteInvestment(c.env.DB, inv.id);
+    return c.json({ ok: true });
+  }
+  const currentPerShare = inv ? inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : avgCost) : avgCost;
   const newMarketValue = Math.round(shares * currentPerShare);
   const newTotalCost = Math.round(shares * avgCost);
   const newProfitLoss = newMarketValue - newTotalCost;
   const newReturnRate = newTotalCost > 0 ? Math.round(newProfitLoss / newTotalCost * 1e4) / 100 : 0;
   await upsertInvestment(c.env.DB, {
-    ...inv,
+    ...inv ?? {
+      id: void 0,
+      name: trade.name,
+      symbol: trade.symbol,
+      account: trade.account,
+      current_price: avgCost,
+      previous_close: 0
+    },
     shares,
     avg_cost: Math.round(avgCost * 100) / 100,
     market_value: newMarketValue,
@@ -4143,7 +4639,7 @@ app2.post("/upload", async (c) => {
       current_price: inv?.current_price ?? 0,
       previous_close: inv?.previous_close ?? 0,
       updated_at: today,
-      account: inv?.account ?? "\u6C38\u8C50\u8B49\u5238"
+      account: inv?.account ?? ""
     });
     updated.push(id);
   }
@@ -4184,6 +4680,10 @@ app2.patch("/:id", async (c) => {
 var investments_default = app2;
 
 // src/routes/summary.ts
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+init_queries();
 var app3 = new Hono2();
 app3.get("/daily", async (c) => {
   const date = c.req.query("date") ?? (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
@@ -4231,6 +4731,10 @@ app3.get("/monthly", async (c) => {
 var summary_default = app3;
 
 // src/routes/reconcile.ts
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+init_queries();
 var app4 = new Hono2();
 app4.get("/", async (c) => {
   const billMonth = c.req.query("month");
@@ -4374,269 +4878,14 @@ app4.patch("/:id", async (c) => {
 });
 var reconcile_default = app4;
 
-// src/services/gmail.ts
-async function getAccessToken(clientId, clientSecret, refreshToken) {
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: "refresh_token"
-    })
-  });
-  if (!res.ok) throw new Error(`OAuth token refresh failed: ${res.status}`);
-  const data = await res.json();
-  return data.access_token;
-}
-__name(getAccessToken, "getAccessToken");
-async function listMessages(accessToken, query) {
-  const params = new URLSearchParams({ q: query, maxResults: "50" });
-  const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params}`, {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  });
-  if (!res.ok) return [];
-  const data = await res.json();
-  return (data.messages ?? []).map((m) => m.id);
-}
-__name(listMessages, "listMessages");
-async function getMessage(accessToken, messageId) {
-  const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`, {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  });
-  if (!res.ok) return null;
-  return res.json();
-}
-__name(getMessage, "getMessage");
-function decodeBase64(str) {
-  const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
-  try {
-    return decodeURIComponent(
-      atob(base64).split("").map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
-    );
-  } catch {
-    return atob(base64);
-  }
-}
-__name(decodeBase64, "decodeBase64");
-function extractBody(msg) {
-  if (msg.payload.body?.data) return decodeBase64(msg.payload.body.data);
-  if (msg.payload.parts) {
-    for (const part of msg.payload.parts) {
-      if ((part.mimeType === "text/plain" || part.mimeType === "text/html") && part.body?.data) {
-        return decodeBase64(part.body.data);
-      }
-    }
-  }
-  return msg.snippet ?? "";
-}
-__name(extractBody, "extractBody");
-function getHeader(msg, name) {
-  return msg.payload.headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value ?? "";
-}
-__name(getHeader, "getHeader");
-function parseSinopacEmail(subject, body, dateHeader) {
-  const text = body.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ");
-  const amountPatterns = [
-    /(?:NT\$|NTD|TWD|台幣)\s*([0-9,]+)/i,
-    /消費金額[：:]\s*([0-9,]+)/,
-    /交易金額[：:]\s*([0-9,]+)/,
-    /金額[：:]\s*NT?\$?\s*([0-9,]+)/
-  ];
-  let amount = 0;
-  for (const pattern of amountPatterns) {
-    const match2 = text.match(pattern);
-    if (match2) {
-      amount = parseInt(match2[1].replace(/,/g, ""), 10);
-      break;
-    }
-  }
-  if (!amount) return null;
-  const namePatterns = [
-    /消費商店[：:]\s*([^\n\r<>，,。.]{2,30})/,
-    /特店名稱[：:]\s*([^\n\r<>，,。.]{2,30})/,
-    /消費地點[：:]\s*([^\n\r<>，,。.]{2,30})/,
-    /商店[：:]\s*([^\n\r<>，,。.]{2,30})/
-  ];
-  let name = "";
-  for (const pattern of namePatterns) {
-    const match2 = text.match(pattern);
-    if (match2) {
-      name = match2[1].trim();
-      break;
-    }
-  }
-  if (!name) {
-    const subjectMatch = subject.match(/(?:消費通知|刷卡通知)[：:\s]*([^\s]{2,20})/);
-    if (subjectMatch) name = subjectMatch[1];
-    else name = "\u6D88\u8CBB";
-  }
-  const txDatePatterns = [
-    /消費日期[：:]\s*(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/,
-    /交易日期[：:]\s*(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/,
-    /(\d{4})[\/\-.](\d{2})[\/\-.](\d{2})/
-  ];
-  let date = "";
-  for (const pattern of txDatePatterns) {
-    const match2 = text.match(pattern);
-    if (match2) {
-      const y = match2[1], m = match2[2].padStart(2, "0"), d = match2[3].padStart(2, "0");
-      date = `${y}-${m}-${d}`;
-      break;
-    }
-  }
-  if (!date) {
-    const d = new Date(dateHeader);
-    if (!isNaN(d.getTime())) {
-      date = d.toISOString().slice(0, 10);
-    } else {
-      date = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-    }
-  }
-  return { name: name.slice(0, 50), amount, date };
-}
-__name(parseSinopacEmail, "parseSinopacEmail");
-async function syncGmailWithDB(clientId, clientSecret, refreshToken, db) {
-  const accessToken = await getAccessToken(clientId, clientSecret, refreshToken);
-  const todayDate = /* @__PURE__ */ new Date();
-  const yyyy = todayDate.getFullYear();
-  const mm = String(todayDate.getMonth() + 1).padStart(2, "0");
-  const dd = String(todayDate.getDate()).padStart(2, "0");
-  const today = `${yyyy}/${mm}/${dd}`;
-  const queries = [
-    `from:ecard@sinopac.com after:${yyyy}/${mm}/${dd}`,
-    `subject:\u6C38\u8C50\u9280\u884C\u4FE1\u7528\u5361\u6D88\u8CBB\u901A\u77E5 after:${yyyy}/${mm}/${dd}`,
-    `subject:(\u5237\u5361\u901A\u77E5 OR \u6D88\u8CBB\u901A\u77E5) from:sinopac after:${yyyy}/${mm}/${dd}`
-  ];
-  const allIds = /* @__PURE__ */ new Set();
-  for (const q of queries) {
-    const ids = await listMessages(accessToken, q);
-    ids.forEach((id) => allIds.add(id));
-  }
-  let synced = 0;
-  let skipped = 0;
-  const errors = [];
-  const transactions = [];
-  for (const msgId of allIds) {
-    try {
-      const msg = await getMessage(accessToken, msgId);
-      if (!msg) continue;
-      const subject = getHeader(msg, "subject");
-      const dateHeader = getHeader(msg, "date");
-      const body = extractBody(msg);
-      const parsed = parseSinopacEmail(subject, body, dateHeader);
-      if (!parsed) {
-        skipped++;
-        continue;
-      }
-      const existing = await db.prepare("SELECT id FROM transactions WHERE name = ? AND amount = ? AND date = ? AND source = 'Gmail\u81EA\u52D5'").bind(parsed.name, parsed.amount, parsed.date).first();
-      if (existing) {
-        skipped++;
-        continue;
-      }
-      const id = `tx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      await db.prepare("INSERT INTO transactions (id, name, amount, date, category, card, status, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(id, parsed.name, parsed.amount, parsed.date, "\u5176\u4ED6", "\u6C38\u8C50", "\u5F85\u78BA\u8A8D", "Gmail\u81EA\u52D5").run();
-      synced++;
-      transactions.push(parsed);
-    } catch (e) {
-      errors.push(String(e));
-    }
-  }
-  return { synced, skipped, errors, transactions };
-}
-__name(syncGmailWithDB, "syncGmailWithDB");
-
-// src/routes/gmail.ts
-var app5 = new Hono2();
-app5.post("/sync", async (c) => {
-  const { GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN } = c.env;
-  if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !GMAIL_REFRESH_TOKEN) {
-    return c.json({ ok: false, error: "Gmail OAuth \u5C1A\u672A\u8A2D\u5B9A\uFF0C\u8ACB\u5148\u5B8C\u6210 OAuth \u6388\u6B0A\u6D41\u7A0B" }, 400);
-  }
-  try {
-    const result = await syncGmailWithDB(GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, c.env.DB);
-    if (result.synced > 0) {
-      const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-      const totalAmount = result.transactions.reduce((s, t) => s + t.amount, 0);
-      const lines = result.transactions.map((t) => `\u2022 ${t.name} $${t.amount.toLocaleString()}`);
-      const summaryText = `\u{1F4CA} ${today} \u6D88\u8CBB\u6458\u8981
-\u5171 ${result.synced} \u7B46\uFF0C\u7E3D\u91D1\u984D NT$${totalAmount.toLocaleString()}
-
-${lines.join("\n")}
-
-\u5DF2\u5BEB\u5165\u7CFB\u7D71 \u2705`;
-      await upsertDailySummary(c.env.DB, today, {
-        total_amount: totalAmount,
-        transaction_count: result.synced,
-        summary_text: summaryText
-      });
-    }
-    return c.json({ ok: true, ...result });
-  } catch (e) {
-    return c.json({ ok: false, error: String(e) }, 500);
-  }
-});
-app5.get("/oauth/url", async (c) => {
-  const { GMAIL_CLIENT_ID } = c.env;
-  if (!GMAIL_CLIENT_ID) {
-    return c.json({ ok: false, error: "\u672A\u8A2D\u5B9A GMAIL_CLIENT_ID" }, 400);
-  }
-  const redirectUri = `${new URL(c.req.url).origin}/api/gmail/oauth/callback`;
-  const scope = "https://www.googleapis.com/auth/gmail.readonly";
-  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-  url.searchParams.set("client_id", GMAIL_CLIENT_ID);
-  url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", scope);
-  url.searchParams.set("access_type", "offline");
-  url.searchParams.set("prompt", "consent");
-  return c.json({ ok: true, url: url.toString(), redirect_uri: redirectUri });
-});
-app5.get("/oauth/callback", async (c) => {
-  const code = c.req.query("code");
-  const { GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET } = c.env;
-  if (!code) return c.text("\u7F3A\u5C11 code \u53C3\u6578", 400);
-  if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET) return c.text("\u672A\u8A2D\u5B9A OAuth \u6191\u8B49", 400);
-  const redirectUri = `${new URL(c.req.url).origin}/api/gmail/oauth/callback`;
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: GMAIL_CLIENT_ID,
-      client_secret: GMAIL_CLIENT_SECRET,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code"
-    })
-  });
-  const data = await res.json();
-  if (!res.ok || !data.refresh_token) {
-    return c.html(`
-      <h2>\u6388\u6B0A\u5931\u6557</h2>
-      <p>${data.error ?? "\u672A\u53D6\u5F97 refresh_token"}</p>
-    `);
-  }
-  return c.html(`
-    <html>
-    <head><style>body{font-family:monospace;background:#0d1117;color:#c9d1d9;padding:2rem}</style></head>
-    <body>
-      <h2>\u2705 Gmail OAuth \u6388\u6B0A\u6210\u529F</h2>
-      <p>\u8ACB\u5C07\u4EE5\u4E0B Refresh Token \u8907\u88FD\u4E26\u8A2D\u5B9A\u5230 wrangler.toml \u6216 Cloudflare \u74B0\u5883\u8B8A\u6578\u4E2D\uFF1A</p>
-      <pre style="background:#161b22;padding:1rem;border-radius:8px;border:1px solid #30363d;word-break:break-all">${data.refresh_token}</pre>
-      <p>\u8A2D\u5B9A\u65B9\u5F0F\uFF1A<br>
-      <code>wrangler secret put GMAIL_REFRESH_TOKEN</code><br>
-      \u7136\u5F8C\u8CBC\u4E0A\u4E0A\u9762\u7684 token</p>
-    </body>
-    </html>
-  `);
-});
-var gmail_default = app5;
-
 // src/routes/assets.ts
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+init_queries();
 var ACCOUNT_TYPES = ["\u9280\u884C", "\u8B49\u5238\u6236", "\u4FE1\u7528\u5361", "\u73FE\u91D1"];
-var app6 = new Hono2();
-app6.get("/", async (c) => {
+var app5 = new Hono2();
+app5.get("/", async (c) => {
   const [assets, investments] = await Promise.all([
     getAssets(c.env.DB),
     getInvestments(c.env.DB)
@@ -4669,7 +4918,7 @@ app6.get("/", async (c) => {
     }
   });
 });
-app6.post("/", async (c) => {
+app5.post("/", async (c) => {
   const body = await c.req.json();
   if (!body.name || !body.type) {
     return c.json({ ok: false, error: "\u7F3A\u5C11 name \u6216 type" }, 400);
@@ -4689,7 +4938,7 @@ app6.post("/", async (c) => {
   });
   return c.json({ ok: true, id }, 201);
 });
-app6.patch("/:id", async (c) => {
+app5.patch("/:id", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json();
   const before = await getAssetById(c.env.DB, id);
@@ -4725,18 +4974,18 @@ app6.patch("/:id", async (c) => {
   }
   return c.json({ ok: true, before: before.balance, after: updated.balance });
 });
-app6.delete("/:id", async (c) => {
+app5.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const ok = await deleteAsset(c.env.DB, id);
   if (!ok) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u6B64\u5E33\u6236" }, 404);
   return c.json({ ok: true });
 });
-app6.get("/history", async (c) => {
+app5.get("/history", async (c) => {
   const months = parseInt(c.req.query("months") ?? "12");
   const history = await getAssetHistory(c.env.DB, months);
   return c.json({ ok: true, data: history });
 });
-app6.post("/snapshot", async (c) => {
+app5.post("/snapshot", async (c) => {
   const [assets, investments] = await Promise.all([
     getAssets(c.env.DB),
     getInvestments(c.env.DB)
@@ -4755,15 +5004,19 @@ app6.post("/snapshot", async (c) => {
   });
   return c.json({ ok: true });
 });
-var assets_default = app6;
+var assets_default = app5;
 
 // src/routes/categories.ts
-var app7 = new Hono2();
-app7.get("/", async (c) => {
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+init_queries();
+var app6 = new Hono2();
+app6.get("/", async (c) => {
   const categories = await getCategories(c.env.DB);
   return c.json({ ok: true, data: categories });
 });
-app7.post("/", async (c) => {
+app6.post("/", async (c) => {
   const { name, type, sort_order, icon } = await c.req.json();
   if (!name?.trim()) return c.json({ ok: false, error: "\u8ACB\u8F38\u5165\u5206\u985E\u540D\u7A31" }, 400);
   const catType = type === "\u6536\u5165" ? "\u6536\u5165" : "\u652F\u51FA";
@@ -4774,7 +5027,7 @@ app7.post("/", async (c) => {
     return c.json({ ok: false, error: "\u5206\u985E\u540D\u7A31\u5DF2\u5B58\u5728" }, 409);
   }
 });
-app7.patch("/:id", async (c) => {
+app6.patch("/:id", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json();
   if (body.name !== void 0 && !body.name.trim()) return c.json({ ok: false, error: "\u8ACB\u8F38\u5165\u5206\u985E\u540D\u7A31" }, 400);
@@ -4786,13 +5039,13 @@ app7.patch("/:id", async (c) => {
   if (!ok) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u6B64\u5206\u985E" }, 404);
   return c.json({ ok: true });
 });
-app7.delete("/:id", async (c) => {
+app6.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const ok = await deleteCategory(c.env.DB, id);
   if (!ok) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u6B64\u5206\u985E" }, 404);
   return c.json({ ok: true });
 });
-app7.post("/fix-records", async (c) => {
+app6.post("/fix-records", async (c) => {
   const db = c.env.DB;
   const { results: cats } = await db.prepare("SELECT name FROM categories").all();
   const catNames = cats.map((c2) => c2.name);
@@ -4816,15 +5069,19 @@ app7.post("/fix-records", async (c) => {
   }
   return c.json({ ok: true, fixed });
 });
-var categories_default = app7;
+var categories_default = app6;
 
 // src/routes/recurring.ts
-var app8 = new Hono2();
-app8.get("/", async (c) => {
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+init_queries();
+var app7 = new Hono2();
+app7.get("/", async (c) => {
   const data = await getRecurring(c.env.DB);
   return c.json({ ok: true, data });
 });
-app8.post("/", async (c) => {
+app7.post("/", async (c) => {
   const body = await c.req.json();
   const startDate = body.start_date || body.next_date;
   if (!body.name || !body.amount || !body.category || !startDate) {
@@ -4835,43 +5092,65 @@ app8.post("/", async (c) => {
   const id = await createRecurring(c.env.DB, body);
   return c.json({ ok: true, id });
 });
-app8.patch("/:id", async (c) => {
+app7.patch("/:id", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json();
   const ok = await updateRecurring(c.env.DB, id, body);
   return c.json({ ok });
 });
-app8.delete("/:id", async (c) => {
+app7.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const ok = await deleteRecurring(c.env.DB, id);
   return c.json({ ok });
 });
-app8.post("/process", async (c) => {
+app7.post("/process", async (c) => {
   const count3 = await processRecurring(c.env.DB);
   return c.json({ ok: true, count: count3 });
 });
-var recurring_default = app8;
+var recurring_default = app7;
 
 // src/routes/auth.ts
-var app9 = new Hono2();
-app9.post("/login", async (c) => {
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
+init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
+init_performance2();
+var app8 = new Hono2();
+app8.post("/login", async (c) => {
   const { pin } = await c.req.json();
   if (!pin || pin !== c.env.AUTH_PIN) {
     return c.json({ ok: false, error: "\u5BC6\u78BC\u932F\u8AA4" }, 401);
   }
   return c.json({ ok: true, token: c.env.AUTH_TOKEN });
 });
-var auth_default = app9;
+var auth_default = app8;
 
-// src/index.ts
-var app10 = new Hono2();
-app10.use("/api/*", cors({
+// src/installer-entry.ts
+init_queries();
+var app9 = new Hono2();
+app9.use("/api/*", cors({
   origin: "*",
   allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization"]
 }));
-app10.route("/api/auth", auth_default);
-app10.use("/api/*", async (c, next) => {
+app9.get("/api/app-config", (c) => {
+  return c.json({ app_name: c.env.APP_NAME || "\u6211\u7684\u8CA1\u52D9" });
+});
+app9.get("/manifest.json", (c) => {
+  const appName = c.env.APP_NAME || "\u6211\u7684\u8CA1\u52D9";
+  return c.json({
+    name: appName,
+    short_name: appName,
+    description: "\u500B\u4EBA\u8CA1\u52D9\u7BA1\u7406\u7CFB\u7D71",
+    start_url: "/",
+    scope: "/",
+    display: "standalone",
+    background_color: "#0d1117",
+    theme_color: "#161b22",
+    orientation: "portrait-primary",
+    icons: [{ src: "/icons/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any maskable" }]
+  }, 200, { "Content-Type": "application/manifest+json" });
+});
+app9.route("/api/auth", auth_default);
+app9.use("/api/*", async (c, next) => {
   if (c.req.method === "OPTIONS") return next();
   if (c.req.path === "/api/cron/run") return next();
   const token = c.req.header("Authorization")?.replace("Bearer ", "");
@@ -4880,16 +5159,16 @@ app10.use("/api/*", async (c, next) => {
   }
   return next();
 });
-app10.route("/api/transactions", transactions_default);
-app10.route("/api/investments", investments_default);
-app10.route("/api/summary", summary_default);
-app10.route("/api/reconcile", reconcile_default);
-app10.route("/api/gmail", gmail_default);
-app10.route("/api/assets", assets_default);
-app10.route("/api/categories", categories_default);
-app10.route("/api/recurring", recurring_default);
-app10.get("/api/shortcut/data", async (c) => {
-  const [cats, assets] = await Promise.all([getCategories(c.env.DB), getAssets(c.env.DB)]);
+app9.route("/api/transactions", transactions_default);
+app9.route("/api/investments", investments_default);
+app9.route("/api/summary", summary_default);
+app9.route("/api/reconcile", reconcile_default);
+app9.route("/api/assets", assets_default);
+app9.route("/api/categories", categories_default);
+app9.route("/api/recurring", recurring_default);
+app9.get("/api/shortcut/data", async (c) => {
+  const { getCategories: getCategories2 } = await Promise.resolve().then(() => (init_queries(), queries_exports));
+  const [cats, assets] = await Promise.all([getCategories2(c.env.DB), getAssets(c.env.DB)]);
   const expCats = cats.filter((ct) => ct.type !== "\u6536\u5165");
   const incCats = cats.filter((ct) => ct.type === "\u6536\u5165");
   return c.json({
@@ -4900,24 +5179,37 @@ app10.get("/api/shortcut/data", async (c) => {
     income_category_objects: incCats.map((ct) => ({ name: ct.name, icon: ct.icon ?? null }))
   });
 });
-app10.post("/api/cron/run", async (c) => {
+app9.post("/api/cron/run", async (c) => {
   const secret = c.req.header("x-cron-secret");
   if (secret !== c.env.CRON_SECRET) {
     return c.json({ ok: false, error: "Unauthorized" }, 401);
   }
   return runNightlyJob(c.env).then((result) => c.json({ ok: true, ...result })).catch((e) => c.json({ ok: false, error: String(e) }, 500));
 });
-var index_default = {
-  fetch: app10.fetch,
+app9.all("*", async (c) => {
+  const origin = c.env.STATIC_ORIGIN || "https://ricky-finance.ke877857.workers.dev";
+  const url = new URL(c.req.url);
+  try {
+    const res = await fetch(origin + url.pathname + url.search, {
+      headers: { "User-Agent": "installer-proxy/1.0" }
+    });
+    const contentType = res.headers.get("Content-Type") || "text/html; charset=utf-8";
+    return new Response(res.body, {
+      status: res.status,
+      headers: { "Content-Type": contentType }
+    });
+  } catch {
+    return c.text("\u975C\u614B\u8CC7\u6E90\u8F09\u5165\u5931\u6557\uFF0C\u8ACB\u78BA\u8A8D\u539F\u59CB\u670D\u52D9\u6B63\u5E38\u904B\u4F5C", 502);
+  }
+});
+var installer_entry_default = {
+  fetch: app9.fetch,
   async scheduled(_event, env2, ctx) {
     ctx.waitUntil(runNightlyJob(env2));
   }
 };
 async function runNightlyJob(env2) {
-  const { GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, DB } = env2;
-  if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !GMAIL_REFRESH_TOKEN) {
-    return { skipped: true, reason: "Gmail OAuth not configured" };
-  }
+  const DB = env2.DB;
   const recurringCount = await processRecurring(DB);
   const taiwanNow = new Date((/* @__PURE__ */ new Date()).toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
   const todayDay = taiwanNow.getDate();
@@ -4935,34 +5227,27 @@ async function runNightlyJob(env2) {
       await createTransfer(DB, { from_account: cc.payment_account, to_account: cc.name, amount: billAmount, date: todayStr, note: `${monthStr} \u81EA\u52D5\u6263\u7E73`, outName: "\u81EA\u52D5\u6263\u7E73", inName: "\u81EA\u52D5\u6263\u7E73" });
     }
   }
-  const result = await syncGmailWithDB(GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, DB);
   const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
   const { data: txns } = await getTransactions(DB, { date: today, limit: 100 });
   const totalAmount = txns.reduce((s, t) => s + t.amount, 0);
-  const lines = txns.map((t) => `\u2022 ${t.name} $${t.amount.toLocaleString()}\uFF08${t.category}\uFF09`);
   const summaryText = txns.length ? `\u{1F4CA} ${today} \u6D88\u8CBB\u6458\u8981
-\u5171 ${txns.length} \u7B46\uFF0C\u7E3D\u91D1\u984D NT$${totalAmount.toLocaleString()}
-
-${lines.join("\n")}
-
-\u5DF2\u5BEB\u5165\u7CFB\u7D71 \u2705` : `\u{1F4CA} ${today} \u6D88\u8CBB\u6458\u8981
+\u5171 ${txns.length} \u7B46\uFF0C\u7E3D\u91D1\u984D NT$${totalAmount.toLocaleString()}` : `\u{1F4CA} ${today} \u6D88\u8CBB\u6458\u8981
 \u4ECA\u65E5\u7121\u6D88\u8CBB\u8A18\u9304`;
   await upsertDailySummary(DB, today, {
     total_amount: totalAmount,
     transaction_count: txns.length,
     summary_text: summaryText
   });
-  return {
-    date: today,
-    recurring_generated: recurringCount,
-    gmail_synced: result.synced,
-    gmail_skipped: result.skipped,
-    total_today: txns.length,
-    summary: summaryText
-  };
+  const [allAssetsSnap, allInvestmentsSnap] = await Promise.all([getAssets(DB), getInvestments(DB)]);
+  const monthKey = today.slice(0, 7);
+  const { total: monthlyExpense } = await getMonthlySummary(DB, monthKey);
+  const totalCash = allAssetsSnap.filter((a) => a.type === "\u9280\u884C" || a.type === "\u73FE\u91D1" || a.type === "\u9280\u884C\u5B58\u6B3E").reduce((s, a) => s + a.balance, 0);
+  const totalInvestmentsValue = allInvestmentsSnap.reduce((s, i) => s + i.market_value, 0);
+  await recordAssetSnapshot(DB, { snapshot_date: today, total_assets: totalCash + totalInvestmentsValue, total_investments: totalInvestmentsValue, total_cash: totalCash, monthly_expense: monthlyExpense });
+  return { date: today, recurring_generated: recurringCount };
 }
 __name(runNightlyJob, "runNightlyJob");
 export {
-  index_default as default
+  installer_entry_default as default
 };
-//# sourceMappingURL=index.js.map
+//# sourceMappingURL=installer-entry.js.map

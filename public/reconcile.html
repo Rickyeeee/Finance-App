@@ -274,6 +274,9 @@
 <div class="main">
   <div class="header">
     <h1>信用卡對帳</h1>
+    <div class="header-actions">
+      <button class="btn btn-secondary btn-sm" onclick="renderAll()">↻ 重新整理</button>
+    </div>
   </div>
 
   <div class="content">
@@ -377,7 +380,7 @@
 
 <script src="/js/calc-keyboard.js"></script>
 <script type="module">
-import { api, toast, catIcon } from '/js/api.js'
+import { api, toast, catIcon, initAppName } from '/js/api.js'
 
 let allAccounts = []
 let recTxns = []       // 目前對帳 modal 裡的交易
@@ -396,6 +399,32 @@ function fmtDateHeader(dateStr) {
 
 function escHtml(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+
+const ACCT_TYPE_LABEL = { '銀行': '銀行', '銀行存款': '銀行', '證券戶': '證券戶', '投資帳戶': '證券戶', '信用卡': '信用卡', '現金': '現金' }
+function groupedAccountOptions(accounts) {
+  const groups = {}
+  for (const a of accounts) {
+    const label = ACCT_TYPE_LABEL[a.type] ?? a.type
+    if (!groups[label]) groups[label] = []
+    groups[label].push(a)
+  }
+  const order = ['銀行', '證券戶', '現金']
+  let html = ''
+  for (const type of order) {
+    if (!groups[type]?.length) continue
+    html += `<optgroup label="${type}">`
+    html += groups[type].map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+    html += '</optgroup>'
+  }
+  const knownTypes = new Set(order)
+  const others = accounts.filter(a => !knownTypes.has(ACCT_TYPE_LABEL[a.type] ?? a.type))
+  if (others.length) {
+    html += `<optgroup label="其他">`
+    html += others.map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+    html += '</optgroup>'
+  }
+  return html || '<option>無可用帳戶</option>'
 }
 
 // ── 帳戶記錄月份導覽 ──
@@ -440,12 +469,48 @@ function initMonthSelect() {
 // ── 每張信用卡獨立的帳單期間狀態 ──
 const cardMonths = {}
 
-function getCardMonth(accId) {
-  if (!cardMonths[accId]) {
-    const now = new Date()
-    cardMonths[accId] = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+// 根據結算日與扣款日，推算目前應預設顯示哪一期帳單
+// 邏輯：
+//   1. 找「最近一個結算日已到」的帳單月份（today >= billing_day → 當月；否則 → 上月）
+//   2. 若該期的扣款日已過 → 代表這期已結束，推到下一期
+function calcDefaultCardMonth(billingDay, paymentDay) {
+  const now = new Date()
+  const todayStr = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
+  const td = parseInt(todayStr.slice(8), 10)
+  const ty = parseInt(todayStr.slice(0, 4), 10)
+  const tm = parseInt(todayStr.slice(5, 7), 10)
+
+  if (!billingDay) return `${ty}-${String(tm).padStart(2,'0')}`
+
+  // 找出「今天所在的帳單期別」所對應的月份 M：
+  //   td > billingDay → 已過結算日，進入下期 → M = 當月+1
+  //   td <= billingDay → 結算日還沒到 → M = 當月
+  let m = td > billingDay ? tm + 1 : tm
+  let y = ty
+  if (m > 12) { m = 1; y++ }
+
+  // 若有扣款日，先確認「上一期」的扣款是否還沒過
+  // 還沒過 → 預設顯示上一期（那期才是待繳的）
+  // 已過   → 顯示當期
+  if (paymentDay) {
+    let pm = m - 1, py = y
+    if (pm < 1) { pm = 12; py-- }
+
+    const sameMonth = paymentDay > billingDay
+    const prevPayT = new Date(py, sameMonth ? pm - 1 : pm, paymentDay)
+    const prevPayStr = prevPayT.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
+
+    if (prevPayStr >= todayStr) {
+      // 上一期扣款還沒過（含當天）→ 預設顯示上一期
+      return `${py}-${String(pm).padStart(2,'0')}`
+    }
   }
-  return cardMonths[accId]
+
+  return `${y}-${String(m).padStart(2,'0')}`
+}
+
+function getCardMonth(accId) {
+  return cardMonths[accId] ?? null
 }
 
 const _nowStr = (() => {
@@ -543,7 +608,11 @@ async function renderAll() {
 
 // ── 單張信用卡 HTML 建構 ──
 async function buildCCCardHtml(acc) {
-  const month = getCardMonth(acc.id)
+  // 首次顯示才計算預設期別，之後保留使用者手動切換的結果
+  if (!cardMonths[acc.id]) {
+    cardMonths[acc.id] = calcDefaultCardMonth(acc.billing_day, acc.payment_day)
+  }
+  const month = cardMonths[acc.id]
   const now = new Date()
   const [selY, selM] = month.split('-').map(Number)
   const todayStr = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
@@ -568,28 +637,45 @@ async function buildCCCardHtml(acc) {
   if (acc.billing_day) {
     const { start, end } = getBillingPeriod(acc.billing_day, month)
     periodEnd = end
-    const txns = await fetchBillingTxns(acc.name, acc.billing_day, month)
+    // 兩個 API call 並行，不互相等待
+    const [txns, isPaidResult] = await Promise.all([
+      fetchBillingTxns(acc.name, acc.billing_day, month),
+      checkPaymentDone(acc.name, end),
+    ])
     billingStatus = getBillingStatus(txns)
-    isPaid = await checkPaymentDone(acc.name, end)
+    isPaid = !!billingStatus && isPaidResult
   }
 
-  // 無消費 → 只顯示空白提示，不隱藏卡片（用戶可能想切換到其他期間）
-  const isOverdue = periodEnd && periodEnd < todayStr && !isPaid && !!billingStatus
+  // 判斷扣款日是否已過
+  let paymentPast = false
+  let payDateStr = null
+  if (acc.payment_day && periodEnd) {
+    const sameMonth = acc.payment_day > acc.billing_day
+    const [ey, em] = periodEnd.split('-').map(Number)
+    const payT = new Date(ey, sameMonth ? em - 1 : em, acc.payment_day)
+    payDateStr = payT.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
+    paymentPast = payDateStr < todayStr
+  }
 
   // 對帳狀態
   let statusHtml = ''
   if (!acc.billing_day) {
     statusHtml = `<span style="color:var(--text-muted);font-size:12px">–</span>`
-  } else if (isPaid) {
-    statusHtml = `<span style="color:var(--success);font-size:13px;font-weight:600">已繳款</span>`
-  } else if (isOverdue) {
-    statusHtml = `<span style="color:var(--danger);font-size:13px;font-weight:600">已到期</span>`
-  } else if (billingStatus?.allDecided) {
-    statusHtml = `<span style="color:var(--success);font-size:13px;font-weight:600">NT$${billingStatus.amount.toLocaleString()} 應繳</span>`
-  } else if (billingStatus) {
-    statusHtml = `<span style="color:var(--warning);font-size:13px">未對帳</span>`
-  } else {
+  } else if (periodEnd && periodEnd > todayStr) {
+    // 結算日尚未到 → 帳單未出
+    statusHtml = `<span style="color:var(--text-muted);font-size:12px">–</span>`
+  } else if (!billingStatus) {
+    // 結算日已過但無交易
     statusHtml = `<span style="color:var(--text-muted);font-size:12px">本期無消費</span>`
+  } else if (isPaid) {
+    statusHtml = `<span style="color:var(--accent);font-size:13px;font-weight:600">已繳款</span>`
+  } else if (paymentPast) {
+    // 有交易、扣款日已過、未繳
+    statusHtml = `<span style="color:var(--danger);font-size:13px;font-weight:600">未繳款</span>`
+  } else if (billingStatus.allDecided) {
+    statusHtml = `<span style="color:var(--success);font-size:13px;font-weight:600">NT$${billingStatus.amount.toLocaleString()} 應繳</span>`
+  } else {
+    statusHtml = `<span style="color:var(--warning);font-size:13px">未對帳</span>`
   }
 
   // 帳單期間導覽列（每張卡獨立）
@@ -650,8 +736,8 @@ async function buildCCCardHtml(acc) {
             ? `<button class="btn btn-primary btn-sm" onclick="openPaymentModal('${escHtml(acc.name)}',${billingStatus.amount})">手動繳款</button>`
             : `<button class="btn btn-secondary btn-sm" style="opacity:0.4" onclick="paymentNotReady()">手動繳款</button>`
       }
-      ${isPaid
-        ? `<button class="btn btn-secondary btn-sm" style="opacity:0.4;cursor:default">已繳款</button>`
+      ${(isPaid || !billingStatus)
+        ? `<button class="btn btn-secondary btn-sm" style="opacity:0.4;cursor:default" disabled>開始對帳</button>`
         : `<button class="btn btn-secondary btn-sm" onclick="openRecModal('${escHtml(acc.id)}')">開始對帳</button>`
       }
     </div>` : ''}
@@ -666,15 +752,15 @@ async function renderCCSection() {
     container.innerHTML = '<div class="empty-state" style="padding:16px 0">無信用卡帳戶</div>'
     return
   }
-  // 先放佔位，再逐一填入
+  // 先放佔位，再全部並行載入
   container.innerHTML = ccAccs.map(acc =>
     `<div id="cc-card-${escHtml(acc.id)}" class="cc-card"><div style="padding:20px;text-align:center;color:var(--text-muted)">載入中…</div></div>`
   ).join('')
-  for (const acc of ccAccs) {
+  await Promise.all(ccAccs.map(async acc => {
     const html = await buildCCCardHtml(acc)
     const el = document.getElementById('cc-card-' + acc.id)
     if (el) el.outerHTML = html
-  }
+  }))
 }
 
 // ── 帳戶記錄區 ──
@@ -685,12 +771,24 @@ function renderAcctSection(month) {
     container.innerHTML = '<div class="empty-state" style="padding:16px 0">無帳戶</div>'
     return
   }
+
   const iconMap = { '銀行':'🏦','銀行存款':'🏦','證券戶':'📈','投資帳戶':'📈','現金':'💵' }
-  container.innerHTML = nonCC.map(acc => {
+  const typeLabel = { '銀行':'銀行', '銀行存款':'銀行', '證券戶':'證券戶', '投資帳戶':'證券戶', '現金':'現金' }
+  const typeOrder = ['銀行', '證券戶', '現金']
+
+  // 依類型分組
+  const groups = {}
+  for (const acc of nonCC) {
+    const label = typeLabel[acc.type] ?? acc.type
+    if (!groups[label]) groups[label] = []
+    groups[label].push(acc)
+  }
+
+  function renderRow(acc) {
     const icon = iconMap[acc.type] ?? '💼'
     const bal = acc.balance >= 0
-      ? `<span style="color:var(--success)">NT$${acc.balance.toLocaleString()}</span>`
-      : `<span style="color:var(--danger)">-NT${Math.abs(acc.balance).toLocaleString()}</span>`
+      ? `<span style="color:var(--accent)">NT$${acc.balance.toLocaleString()}</span>`
+      : `<span style="color:var(--danger)">NT$${Math.abs(acc.balance).toLocaleString()}</span>`
     return `<div class="acct-row" onclick="openAcctView('${escHtml(acc.id)}','${escHtml(acc.name)}','${month}')">
       <div class="acct-row-icon">${icon}</div>
       <div class="acct-row-info">
@@ -700,14 +798,32 @@ function renderAcctSection(month) {
       <div class="acct-row-balance">${bal}</div>
       <div style="color:var(--text-muted);font-size:18px;margin-left:4px">›</div>
     </div>`
-  }).join('')
+  }
+
+  let html = ''
+  const rendered = new Set()
+  for (const type of typeOrder) {
+    const accs = groups[type]
+    if (!accs?.length) continue
+    rendered.add(type)
+    html += `<div style="padding:10px 16px 4px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">${type}</div>`
+    html += accs.map(renderRow).join('')
+  }
+  // 其他未分類
+  for (const [type, accs] of Object.entries(groups)) {
+    if (rendered.has(type)) continue
+    html += `<div style="padding:10px 16px 4px;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">${type}</div>`
+    html += accs.map(renderRow).join('')
+  }
+
+  container.innerHTML = html
 }
 
 // ── 對帳 Modal ──
 window.openRecModal = async function(accId) {
   recCardAcc = allAccounts.find(a => a.id === accId)
   if (!recCardAcc) return
-  const month = getMonthValue()
+  const month = getCardMonth(accId)
 
   const { start, end } = getBillingPeriod(recCardAcc.billing_day, month)
   document.getElementById('rec-modal-card-name').textContent = recCardAcc.name
@@ -766,7 +882,7 @@ async function savePendingDeferrals() {
 function renderRecModal() {
   // 總消費（支出）= 所有交易加總（皆為正數，但要顯示為負）
   const totalExp = recTxns.filter(t => t.type !== '收入').reduce((s, t) => s + t.amount, 0)
-  document.getElementById('rec-modal-card-total').textContent = totalExp ? `-NT$${totalExp.toLocaleString()}` : 'NT$0'
+  document.getElementById('rec-modal-card-total').textContent = totalExp ? `NT$${totalExp.toLocaleString()}` : 'NT$0'
 
   const decided = recTxns.filter(t => t.status !== '待確認')
   const confirmedAmt = recTxns.filter(t => t.status === '已對帳').reduce((s,t) => s+t.amount, 0)
@@ -809,8 +925,7 @@ function renderRecModal() {
 
       // 金額顏色：延後→淡黃，收入→綠，支出→紅
       const amtColor = isDeferred && !isPrevPeriod ? '#d4b247' : isIncome ? 'var(--success)' : 'var(--danger)'
-      const amtSign = isIncome ? '+' : '-'
-      const amtDisplay = `${amtSign}NT$${t.amount.toLocaleString()}`
+      const amtDisplay = `NT$${t.amount.toLocaleString()}`
 
       // 上期延後入帳是否已被操作（按過 ✓ 或 ↓）
       const isPrevActedOn = isPrevPeriod && (isConfirmed || pendingDeferrals.has(t.id))
@@ -935,7 +1050,7 @@ window.openAcctView = async function(accId, accName, month) {
   const expenseAmt = txns.filter(t => t.type !== '收入').reduce((s, t) => s + t.amount, 0)
   const net = incomeAmt - expenseAmt
   const totalEl = document.getElementById('acct-view-total')
-  totalEl.textContent = (net >= 0 ? '+' : '-') + 'NT$' + Math.abs(net).toLocaleString()
+  totalEl.textContent = 'NT$' + Math.abs(net).toLocaleString()
   totalEl.style.color = net >= 0 ? 'var(--success)' : 'var(--danger)'
   document.getElementById('acct-view-count').textContent = txns.length
 
@@ -947,14 +1062,13 @@ window.openAcctView = async function(accId, accName, month) {
       lastDate = t.date
     }
     const amtColor = t.type === '收入' ? 'var(--success)' : 'var(--danger)'
-    const amtSign = t.type === '收入' ? '+' : '−'
     html += `<div class="av-txn-row">
       <div class="av-txn-icon">${catIcon(t.category)}</div>
       <div class="av-txn-info">
         <div class="av-txn-name">${escHtml(t.name || t.category)}</div>
         <div class="av-txn-sub">${escHtml(t.category)}</div>
       </div>
-      <div class="av-txn-amt" style="color:${amtColor}">${amtSign}NT$${t.amount.toLocaleString()}</div>
+      <div class="av-txn-amt" style="color:${amtColor}">NT$${t.amount.toLocaleString()}</div>
     </div>`
   }
   document.getElementById('acct-view-list').innerHTML = html
@@ -976,9 +1090,8 @@ window.openPaymentModal = async function(cardName, billedAmount) {
   const accs = allAccounts
   const nonCC = accs.filter(a => a.type !== '信用卡')
   const cc = accs.find(a => a.name === cardName)
-  const bankOpts = nonCC.map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
   const fromSel = document.getElementById('pay-from-account')
-  fromSel.innerHTML = bankOpts || '<option>無可用帳戶</option>'
+  fromSel.innerHTML = groupedAccountOptions(nonCC)
   // 若信用卡有設定 payment_account，預選它
   if (cc?.payment_account) {
     const opt = [...fromSel.options].find(o => o.value === cc.payment_account)
@@ -1015,6 +1128,7 @@ document.getElementById('acct-view-modal').addEventListener('click', e => {
   if (e.target === document.getElementById('acct-view-modal')) closeAcctView()
 })
 
+initAppName()
 initMonthSelect()
 renderAll()
 </script>
@@ -1028,3 +1142,4 @@ renderAll()
 </nav>
 </body>
 </html>
+

@@ -1,18 +1,19 @@
+/**
+ * Installer Entry — 朋友的 Worker 版本
+ * 靜態檔案 proxy 回原始 Worker，API 使用自己的 D1
+ */
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { Bindings } from './types'
 import transactionsRoute from './routes/transactions'
-import installerRoute from './routes/installer'
 import investmentsRoute from './routes/investments'
 import summaryRoute from './routes/summary'
 import reconcileRoute from './routes/reconcile'
-import gmailRoute from './routes/gmail'
 import assetsRoute from './routes/assets'
 import categoriesRoute from './routes/categories'
 import recurringRoute from './routes/recurring'
 import authRoute from './routes/auth'
-import { syncGmailWithDB } from './services/gmail'
-import { upsertDailySummary, getTransactions, getCategories, getAssets, processRecurring, createTransfer, getInvestments, getMonthlySummary, recordAssetSnapshot } from './db/queries'
+import { processRecurring, getAssets, getInvestments, getMonthlySummary, recordAssetSnapshot, getTransactions, upsertDailySummary, createTransfer } from './db/queries'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -22,12 +23,12 @@ app.use('/api/*', cors({
   allowHeaders: ['Content-Type', 'Authorization'],
 }))
 
-// 公開端點：不需要驗證
+// 公開端點
 app.get('/api/app-config', (c) => {
   return c.json({ app_name: c.env.APP_NAME || '我的財務' })
 })
 
-// 動態 manifest.json（使用 APP_NAME 設定）
+// 動態 manifest.json
 app.get('/manifest.json', (c) => {
   const appName = c.env.APP_NAME || '我的財務'
   return c.json({
@@ -44,15 +45,13 @@ app.get('/manifest.json', (c) => {
   }, 200, { 'Content-Type': 'application/manifest+json' })
 })
 
-// 登入端點不需要驗證
+// 登入不需要驗證
 app.route('/api/auth', authRoute)
 
-// 所有其他 /api/* 路由都需要 Bearer token
+// 所有其他 /api/* 需要 Bearer token
 app.use('/api/*', async (c, next) => {
   if (c.req.method === 'OPTIONS') return next()
-  // cron 有自己的 CRON_SECRET 驗證
   if (c.req.path === '/api/cron/run') return next()
-
   const token = c.req.header('Authorization')?.replace('Bearer ', '')
   if (!token || token !== c.env.AUTH_TOKEN) {
     return c.json({ ok: false, error: '未授權' }, 401)
@@ -60,20 +59,16 @@ app.use('/api/*', async (c, next) => {
   return next()
 })
 
-// 安裝程式（不需要驗證，自帶 Cloudflare API token）
-app.route('/api/installer', installerRoute)
-
 app.route('/api/transactions', transactionsRoute)
 app.route('/api/investments', investmentsRoute)
 app.route('/api/summary', summaryRoute)
 app.route('/api/reconcile', reconcileRoute)
-app.route('/api/gmail', gmailRoute)
 app.route('/api/assets', assetsRoute)
 app.route('/api/categories', categoriesRoute)
 app.route('/api/recurring', recurringRoute)
 
-// 捷徑專用：回傳簡單字串陣列，方便 iOS Shortcuts 解析
 app.get('/api/shortcut/data', async (c) => {
+  const { getCategories } = await import('./db/queries')
   const [cats, assets] = await Promise.all([getCategories(c.env.DB), getAssets(c.env.DB)])
   const expCats = cats.filter(ct => ct.type !== '收入')
   const incCats = cats.filter(ct => ct.type === '收入')
@@ -86,7 +81,6 @@ app.get('/api/shortcut/data', async (c) => {
   })
 })
 
-// Cron 端點：保護用
 app.post('/api/cron/run', async (c) => {
   const secret = c.req.header('x-cron-secret')
   if (secret !== c.env.CRON_SECRET) {
@@ -97,30 +91,40 @@ app.post('/api/cron/run', async (c) => {
     .catch(e => c.json({ ok: false, error: String(e) }, 500))
 })
 
-// Cloudflare Scheduled Worker（每天 22:00 台北時間 = UTC 14:00）
+// 靜態檔案：proxy 回原始 Worker
+app.all('*', async (c) => {
+  const origin = c.env.STATIC_ORIGIN || 'https://ricky-finance.ke877857.workers.dev'
+  const url = new URL(c.req.url)
+  try {
+    const res = await fetch(origin + url.pathname + url.search, {
+      headers: { 'User-Agent': 'installer-proxy/1.0' },
+    })
+    const contentType = res.headers.get('Content-Type') || 'text/html; charset=utf-8'
+    return new Response(res.body, {
+      status: res.status,
+      headers: { 'Content-Type': contentType },
+    })
+  } catch {
+    return c.text('靜態資源載入失敗，請確認原始服務正常運作', 502)
+  }
+})
+
 export default {
   fetch: app.fetch,
-
   async scheduled(_event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
     ctx.waitUntil(runNightlyJob(env))
   },
 }
 
 async function runNightlyJob(env: Bindings) {
-  const { GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, DB } = env
-
-  if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !GMAIL_REFRESH_TOKEN) {
-    return { skipped: true, reason: 'Gmail OAuth not configured' }
-  }
-
-  // 處理定期交易
+  const DB = env.DB
   const recurringCount = await processRecurring(DB)
 
-  // 自動扣繳：結算日當天，找出 payment_method='auto' 的信用卡並建立付款轉帳
   const taiwanNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Taipei' }))
   const todayDay = taiwanNow.getDate()
   const todayStr = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth()+1).padStart(2,'0')}-${String(taiwanNow.getDate()).padStart(2,'0')}`
   const allAssets = await getAssets(DB)
+
   for (const cc of allAssets) {
     if (cc.type !== '信用卡' || cc.payment_method !== 'auto' || !cc.payment_account || cc.billing_day !== todayDay) continue
     const y = taiwanNow.getFullYear(), m = taiwanNow.getMonth() + 1
@@ -134,16 +138,11 @@ async function runNightlyJob(env: Bindings) {
     }
   }
 
-  const result = await syncGmailWithDB(GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, DB)
-
   const today = new Date().toISOString().slice(0, 10)
-
-  // 取得今天所有消費（含已存在的）
   const { data: txns } = await getTransactions(DB, { date: today, limit: 100 })
   const totalAmount = txns.reduce((s, t) => s + t.amount, 0)
-  const lines = txns.map(t => `• ${t.name} $${t.amount.toLocaleString()}（${t.category}）`)
   const summaryText = txns.length
-    ? `📊 ${today} 消費摘要\n共 ${txns.length} 筆，總金額 NT$${totalAmount.toLocaleString()}\n\n${lines.join('\n')}\n\n已寫入系統 ✅`
+    ? `📊 ${today} 消費摘要\n共 ${txns.length} 筆，總金額 NT$${totalAmount.toLocaleString()}`
     : `📊 ${today} 消費摘要\n今日無消費記錄`
 
   await upsertDailySummary(DB, today, {
@@ -152,31 +151,12 @@ async function runNightlyJob(env: Bindings) {
     summary_text: summaryText,
   })
 
-  // 每日資產快照（用於折線圖）
-  const [allAssetsSnap, allInvestmentsSnap] = await Promise.all([
-    getAssets(DB),
-    getInvestments(DB),
-  ])
+  const [allAssetsSnap, allInvestmentsSnap] = await Promise.all([getAssets(DB), getInvestments(DB)])
   const monthKey = today.slice(0, 7)
   const { total: monthlyExpense } = await getMonthlySummary(DB, monthKey)
-  const totalCash = allAssetsSnap
-    .filter(a => a.type === '銀行' || a.type === '現金' || a.type === '銀行存款')
-    .reduce((s, a) => s + a.balance, 0)
+  const totalCash = allAssetsSnap.filter(a => a.type === '銀行' || a.type === '現金' || a.type === '銀行存款').reduce((s, a) => s + a.balance, 0)
   const totalInvestmentsValue = allInvestmentsSnap.reduce((s, i) => s + i.market_value, 0)
-  await recordAssetSnapshot(DB, {
-    snapshot_date: today,
-    total_assets: totalCash + totalInvestmentsValue,
-    total_investments: totalInvestmentsValue,
-    total_cash: totalCash,
-    monthly_expense: monthlyExpense,
-  })
+  await recordAssetSnapshot(DB, { snapshot_date: today, total_assets: totalCash + totalInvestmentsValue, total_investments: totalInvestmentsValue, total_cash: totalCash, monthly_expense: monthlyExpense })
 
-  return {
-    date: today,
-    recurring_generated: recurringCount,
-    gmail_synced: result.synced,
-    gmail_skipped: result.skipped,
-    total_today: txns.length,
-    summary: summaryText,
-  }
+  return { date: today, recurring_generated: recurringCount }
 }

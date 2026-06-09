@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   status TEXT NOT NULL DEFAULT '待確認',
   source TEXT NOT NULL DEFAULT '手動輸入',
   note TEXT,
+  transfer_id TEXT,
+  deferred_to TEXT DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -33,13 +35,34 @@ CREATE TABLE IF NOT EXISTS investments (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   symbol TEXT NOT NULL,
-  shares INTEGER NOT NULL DEFAULT 0,
-  avg_cost INTEGER NOT NULL DEFAULT 0,
+  shares REAL NOT NULL DEFAULT 0,
+  avg_cost REAL NOT NULL DEFAULT 0,
   market_value INTEGER NOT NULL DEFAULT 0,
   profit_loss INTEGER NOT NULL DEFAULT 0,
   return_rate REAL NOT NULL DEFAULT 0,
+  current_price REAL DEFAULT 0,
+  previous_close REAL DEFAULT 0,
+  realized_pnl REAL DEFAULT 0,
   updated_at DATE,
-  account TEXT NOT NULL
+  account TEXT NOT NULL DEFAULT ''
+);
+
+-- 投資交易記錄
+CREATE TABLE IF NOT EXISTS investment_trades (
+  id TEXT PRIMARY KEY,
+  symbol TEXT NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,
+  shares REAL NOT NULL,
+  price REAL NOT NULL,
+  amount REAL NOT NULL,
+  date TEXT NOT NULL,
+  account TEXT DEFAULT '',
+  to_account TEXT,
+  realized_pnl INTEGER DEFAULT 0,
+  transfer_id TEXT,
+  note TEXT,
+  created_at DATETIME DEFAULT (datetime('now'))
 );
 
 -- 每日摘要
@@ -60,6 +83,11 @@ CREATE TABLE IF NOT EXISTS assets (
   bank TEXT NOT NULL,
   balance INTEGER NOT NULL DEFAULT 0,
   include_in_total INTEGER NOT NULL DEFAULT 1,
+  billing_day INTEGER DEFAULT NULL,
+  payment_day INTEGER DEFAULT NULL,
+  credit_limit INTEGER DEFAULT 0,
+  payment_method TEXT DEFAULT 'manual',
+  payment_account TEXT,
   updated_at DATE DEFAULT CURRENT_DATE
 );
 
@@ -69,7 +97,28 @@ CREATE TABLE IF NOT EXISTS categories (
   name TEXT NOT NULL UNIQUE,
   type TEXT NOT NULL DEFAULT '支出',
   sort_order INTEGER NOT NULL DEFAULT 0,
+  icon TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 定期項目
+CREATE TABLE IF NOT EXISTS recurring_transactions (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  type TEXT NOT NULL DEFAULT '支出',
+  category TEXT NOT NULL,
+  card TEXT DEFAULT '',
+  note TEXT,
+  frequency TEXT NOT NULL DEFAULT 'monthly',
+  day_of_month INTEGER DEFAULT 1,
+  start_date DATE,
+  end_date DATE,
+  next_date TEXT NOT NULL,
+  fee INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  last_generated TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
 );
 
 -- 資產歷史（用於趨勢圖）
@@ -82,20 +131,6 @@ CREATE TABLE IF NOT EXISTS asset_history (
   monthly_expense INTEGER NOT NULL DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
--- 初始投資資料
-INSERT OR IGNORE INTO investments (id, name, symbol, shares, avg_cost, market_value, profit_loss, return_rate, account)
-VALUES
-  ('inv-0050', '元大台灣50', '0050', 1266, 96, 0, 0, 0.0, ''),
-  ('inv-2330', '台積電', '2330', 47, 750, 0, 0, 0.0, '');
-
--- 初始帳戶資料
-INSERT OR IGNORE INTO assets (id, name, type, bank, balance)
-VALUES
-  ('acc-ctbc', '中信', '銀行存款', '中國信託', 0),
-  ('acc-post', '郵局', '銀行存款', '中華郵政', 0),
-  ('acc-ktb', '國泰', '銀行存款', '國泰世華', 0),
-  ('acc-sinopac-inv', '', '投資帳戶', '永豐銀行', 0);
 
 -- 索引
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);

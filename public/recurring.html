@@ -71,6 +71,7 @@
     <div class="header-actions">
       <button class="btn btn-secondary btn-sm" onclick="triggerProcess()" id="btn-process">⚡ 立即生成</button>
       <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ 新增</button>
+      <button class="btn btn-secondary btn-sm" onclick="init()">↻ 重新整理</button>
     </div>
   </div>
 
@@ -177,7 +178,7 @@
 </div>
 
 <script type="module">
-import { api, toast, catIcon, catIconHtml, fmtSigned, amtColor, freqLabel } from '/js/api.js'
+import { api, toast, catIcon, catIconHtml, fmtSigned, amtColor, freqLabel, initAppName } from '/js/api.js'
 
 let allItems = [], allCategories = [], allAccounts = []
 let currentType = '支出'
@@ -210,7 +211,7 @@ function render() {
     <div class="monthly-total-item">
       <div class="monthly-total-label">月均淨額</div>
       <div class="monthly-total-val" style="color:${net >= 0 ? 'var(--success)' : 'var(--danger)'}">
-        ${net >= 0 ? '+' : '−'}NT$${Math.abs(net).toLocaleString()}
+        NT$${Math.abs(net).toLocaleString()}
       </div>
     </div>
     <div class="monthly-total-item" style="margin-left:auto;text-align:right">
@@ -258,7 +259,7 @@ function render() {
         </div>
         <div class="rec-item-right">
           <div class="rec-item-amt" style="color:${isInc ? 'var(--success)' : 'var(--danger)'}">
-            ${isInc ? '+' : '−'}NT$${item.amount.toLocaleString()}
+            NT$${item.amount.toLocaleString()}
           </div>
           <div class="rec-item-next" style="${dueSoon ? 'color:var(--warning)' : ''}">
             ${dueSoon ? '⚠️ ' : ''}下次 ${item.next_date}
@@ -423,6 +424,7 @@ window.deleteItem = async function(id, name) {
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
 function escJs(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'") }
 
+initAppName()
 init()
 </script>
 

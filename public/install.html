@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>財務系統安裝</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0 }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 16px;
+      padding: 40px;
+      width: 100%;
+      max-width: 480px;
+    }
+    .logo { font-size: 40px; text-align: center; margin-bottom: 8px }
+    h1 { text-align: center; font-size: 20px; font-weight: 700; margin-bottom: 4px }
+    .subtitle { text-align: center; color: #8b949e; font-size: 14px; margin-bottom: 32px }
+
+    .field { margin-bottom: 20px }
+    label { display: block; font-size: 13px; font-weight: 600; color: #8b949e; margin-bottom: 6px }
+    input {
+      width: 100%;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      color: #e6edf3;
+      padding: 10px 14px;
+      font-size: 15px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    input:focus { border-color: #58a6ff; box-shadow: 0 0 0 3px rgba(88,166,255,.15) }
+    .hint { font-size: 12px; color: #8b949e; margin-top: 5px }
+    .hint span { color: #58a6ff }
+
+    .btn {
+      width: 100%;
+      background: #238636;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 13px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+      margin-top: 8px;
+    }
+    .btn:hover { opacity: .85 }
+    .btn:disabled { opacity: .4; cursor: default }
+
+    /* 進度 */
+    #progress { display: none; margin-top: 28px }
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid #21262d;
+      font-size: 14px;
+      color: #8b949e;
+    }
+    .step:last-child { border-bottom: none }
+    .step-icon { width: 22px; height: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 15px }
+    .step.active .step-icon::after { content: ''; display: block; width: 16px; height: 16px; border: 2px solid #58a6ff; border-top-color: transparent; border-radius: 50%; animation: spin .7s linear infinite }
+    .step.active { color: #e6edf3 }
+    .step.done { color: #e6edf3 }
+    .step.done .step-icon::after { content: '✓'; font-size: 13px; color: #3fb950; animation: none; border: none }
+    .step.error { color: #f85149 }
+    .step.error .step-icon::after { content: '✗'; font-size: 13px; color: #f85149; animation: none; border: none }
+    @keyframes spin { to { transform: rotate(360deg) } }
+
+    /* 完成畫面 */
+    #result { display: none; text-align: center; padding-top: 24px }
+    .result-icon { font-size: 48px; margin-bottom: 12px }
+    .result-title { font-size: 20px; font-weight: 700; margin-bottom: 8px }
+    .result-url {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 15px;
+      color: #58a6ff;
+      word-break: break-all;
+      margin: 16px 0;
+    }
+    .open-btn {
+      display: inline-block;
+      background: #238636;
+      color: #fff;
+      padding: 12px 28px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 15px;
+    }
+    .open-btn:hover { opacity: .85 }
+
+    #error-msg {
+      background: rgba(248,81,73,.1);
+      border: 1px solid rgba(248,81,73,.4);
+      border-radius: 8px;
+      padding: 12px 16px;
+      color: #f85149;
+      font-size: 14px;
+      margin-top: 20px;
+      display: none;
+    }
+
+    /* token 說明 */
+    .token-guide {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 12px;
+      color: #8b949e;
+      margin-top: 8px;
+      line-height: 1.6;
+    }
+    .token-guide a { color: #58a6ff; text-decoration: none }
+    .token-guide a:hover { text-decoration: underline }
+    .token-guide ol { padding-left: 16px; margin-top: 6px }
+    .toggle-guide {
+      background: none;
+      border: none;
+      color: #58a6ff;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 0;
+      margin-top: 5px;
+    }
+    .toggle-guide:hover { text-decoration: underline }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">💰</div>
+  <h1>個人財務系統安裝</h1>
+  <p class="subtitle">填寫以下資訊，自動幫你建立專屬的財務系統</p>
+
+  <div id="form-section">
+    <div class="field">
+      <label>Cloudflare API Token</label>
+      <input type="password" id="api-token" placeholder="貼上你的 API Token" autocomplete="off">
+      <button class="toggle-guide" onclick="toggleGuide()">▶ 怎麼取得 API Token？</button>
+      <div class="token-guide" id="token-guide" style="display:none">
+        <ol>
+          <li>前往 <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank">Cloudflare API Tokens</a></li>
+          <li>點擊「Create Token」</li>
+          <li>選擇「Create Custom Token」</li>
+          <li>設定以下權限：
+            <br>• <b>Account - Workers Scripts: Edit</b>
+            <br>• <b>Account - D1: Edit</b>
+            <br>• <b>Account - Workers Routes: Edit</b>
+          </li>
+          <li>建立後複製 Token 貼回這裡</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>App 名稱</label>
+      <input type="text" id="app-name" placeholder="例如：小明財務" maxlength="20">
+      <p class="hint">顯示在標題列和登入頁面</p>
+    </div>
+
+    <div class="field">
+      <label>Worker 名稱（決定你的網址）</label>
+      <input type="text" id="worker-name" placeholder="例如：mingming-finance" maxlength="63"
+             oninput="sanitizeWorkerName(this)">
+      <p class="hint" id="url-preview">網址將會是：<span>—</span></p>
+    </div>
+
+    <div class="field">
+      <label>登入 PIN 碼</label>
+      <input type="password" id="pin" placeholder="設定 4-12 位數字" inputmode="numeric" maxlength="12">
+      <p class="hint">用來登入你的財務系統</p>
+    </div>
+
+    <button class="btn" id="install-btn" onclick="startInstall()">開始安裝</button>
+  </div>
+
+  <!-- 進度 -->
+  <div id="progress">
+    <div class="step" id="s1"><div class="step-icon"></div><span>驗證 Cloudflare 帳號</span></div>
+    <div class="step" id="s2"><div class="step-icon"></div><span>建立資料庫</span></div>
+    <div class="step" id="s3"><div class="step-icon"></div><span>初始化資料庫結構</span></div>
+    <div class="step" id="s4"><div class="step-icon"></div><span>準備 Worker 程式碼</span></div>
+    <div class="step" id="s5"><div class="step-icon"></div><span>部署 Worker</span></div>
+    <div class="step" id="s6"><div class="step-icon"></div><span>設定密碼</span></div>
+    <div class="step" id="s7"><div class="step-icon"></div><span>啟用網址</span></div>
+  </div>
+
+  <div id="error-msg"></div>
+
+  <!-- 完成 -->
+  <div id="result">
+    <div class="result-icon">🎉</div>
+    <div class="result-title">安裝完成！</div>
+    <p style="color:#8b949e;font-size:14px;margin-bottom:4px">你的財務系統網址：</p>
+    <div class="result-url" id="result-url"></div>
+    <a href="#" id="open-link" class="open-btn" target="_blank">立即開啟 →</a>
+    <p style="color:#8b949e;font-size:13px;margin-top:16px">建議將網址加到手機主畫面，享受 PWA 體驗 📱</p>
+  </div>
+</div>
+
+<script>
+  function toggleGuide() {
+    const g = document.getElementById('token-guide')
+    const btn = document.querySelector('.toggle-guide')
+    const show = g.style.display === 'none'
+    g.style.display = show ? 'block' : 'none'
+    btn.textContent = (show ? '▼' : '▶') + ' 怎麼取得 API Token？'
+  }
+
+  function sanitizeWorkerName(input) {
+    input.value = input.value.toLowerCase().replace(/[^a-z0-9-]/g, '')
+    const name = input.value
+    const preview = document.querySelector('#url-preview span')
+    preview.textContent = name ? `https://${name}.workers.dev` : '—'
+  }
+
+  // 從 app name 自動產生 worker name
+  document.getElementById('app-name').addEventListener('input', function() {
+    const workerInput = document.getElementById('worker-name')
+    if (workerInput.dataset.edited) return
+    const slug = this.value
+      .toLowerCase()
+      .replace(/[一-鿿]/g, '') // 移除中文
+      .replace(/[^a-z0-9]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 40)
+    if (slug) {
+      workerInput.value = slug + '-finance'
+      workerInput.dispatchEvent(new Event('input'))
+    }
+  })
+  document.getElementById('worker-name').addEventListener('keydown', function() {
+    this.dataset.edited = '1'
+  })
+
+  async function startInstall() {
+    const token = document.getElementById('api-token').value.trim()
+    const appName = document.getElementById('app-name').value.trim()
+    const workerName = document.getElementById('worker-name').value.trim()
+    const pin = document.getElementById('pin').value.trim()
+
+    // 驗證
+    if (!token) return alert('請輸入 API Token')
+    if (!appName) return alert('請輸入 App 名稱')
+    if (!workerName || !/^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/.test(workerName)) return alert('Worker 名稱格式錯誤')
+    if (!/^\d{4,12}$/.test(pin)) return alert('PIN 碼需為 4-12 位數字')
+
+    // 切換 UI
+    document.getElementById('form-section').style.display = 'none'
+    document.getElementById('progress').style.display = 'block'
+    document.getElementById('error-msg').style.display = 'none'
+
+    // 開始 SSE
+    const res = await fetch('/api/installer/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_token: token, app_name: appName, worker_name: workerName, pin }),
+    })
+
+    if (!res.ok) {
+      showError('安裝請求失敗，請稍後重試')
+      return
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          // handled below
+        } else if (line.startsWith('data: ')) {
+          // find the event type from previous line
+        }
+      }
+
+      // 重新解析 SSE events
+      const raw = buffer + lines.join('\n')
+      parseSSE(buffer.split('\n\n').filter(Boolean))
+    }
+  }
+
+  function parseSSE(chunks) {
+    const full = document.getElementById('progress').dataset.buffer || ''
+    // 改用 EventSource 解析方式
+  }
+
+  // 改用 EventSource 方式（支援 SSE 格式解析）
+  async function startInstall() {
+    const token = document.getElementById('api-token').value.trim()
+    const appName = document.getElementById('app-name').value.trim()
+    const workerName = document.getElementById('worker-name').value.trim()
+    const pin = document.getElementById('pin').value.trim()
+
+    if (!token) return alert('請輸入 API Token')
+    if (!appName) return alert('請輸入 App 名稱')
+    if (!workerName || !/^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]$/.test(workerName)) return alert('Worker 名稱格式錯誤')
+    if (!/^\d{4,12}$/.test(pin)) return alert('PIN 碼需為 4-12 位數字')
+
+    document.getElementById('form-section').style.display = 'none'
+    document.getElementById('progress').style.display = 'block'
+    document.getElementById('error-msg').style.display = 'none'
+    document.getElementById('install-btn').disabled = true
+
+    try {
+      const res = await fetch('/api/installer/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_token: token, app_name: appName, worker_name: workerName, pin }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json()
+        showError(data.error || '安裝請求失敗')
+        return
+      }
+
+      const reader = res.body.getReader()
+      const dec = new TextDecoder()
+      let buf = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += dec.decode(value, { stream: true })
+
+        // 解析 SSE 格式
+        const messages = buf.split('\n\n')
+        buf = messages.pop() || ''
+
+        for (const msg of messages) {
+          let eventType = 'message'
+          let eventData = ''
+          for (const line of msg.split('\n')) {
+            if (line.startsWith('event: ')) eventType = line.slice(7).trim()
+            else if (line.startsWith('data: ')) eventData = line.slice(6).trim()
+          }
+          if (!eventData) continue
+
+          try {
+            const data = JSON.parse(eventData)
+            handleEvent(eventType, data)
+          } catch {}
+        }
+      }
+    } catch (e) {
+      showError('連線中斷，請重試：' + e.message)
+    }
+  }
+
+  function handleEvent(type, data) {
+    if (type === 'step') {
+      const el = document.getElementById('s' + data.step)
+      if (el) {
+        el.classList.add('active')
+        el.querySelector('span').textContent = data.message
+      }
+    } else if (type === 'done') {
+      const el = document.getElementById('s' + data.step)
+      if (el) {
+        el.classList.remove('active')
+        el.classList.add('done')
+        el.querySelector('span').textContent = data.message
+      }
+    } else if (type === 'error') {
+      showError(data.message)
+    } else if (type === 'complete') {
+      document.getElementById('progress').style.display = 'none'
+      document.getElementById('result').style.display = 'block'
+      document.getElementById('result-url').textContent = data.url
+      document.getElementById('open-link').href = data.url
+    }
+  }
+
+  function showError(msg) {
+    document.getElementById('form-section').style.display = 'block'
+    document.getElementById('progress').style.display = 'none'
+    document.getElementById('install-btn').disabled = false
+    const errEl = document.getElementById('error-msg')
+    errEl.textContent = '❌ ' + msg
+    errEl.style.display = 'block'
+    // 標記所有進行中的 step 為 error
+    document.querySelectorAll('.step.active').forEach(el => {
+      el.classList.remove('active')
+      el.classList.add('error')
+    })
+  }
+</script>
+</body>
+</html>

@@ -1,3 +1,25 @@
+// ── App config（公開，不需 token）──
+let _appName = null
+
+export async function initAppName() {
+  try {
+    if (!_appName) {
+      const res = await fetch('/api/app-config')
+      const data = await res.json()
+      _appName = data.app_name || '我的財務'
+    }
+    // 更新頁面標題（保留原本頁面名稱，替換 app 名稱部分）
+    const pagePart = document.title.split(' — ')[0]
+    document.title = pagePart ? `${pagePart} — ${_appName}` : _appName
+    // 更新 sidebar logo
+    const logoSpan = document.querySelector('.sidebar-logo span:last-child')
+    if (logoSpan) logoSpan.textContent = _appName
+    // 更新 apple-mobile-web-app-title meta
+    const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]')
+    if (meta) meta.content = _appName
+  } catch { /* 靜默失敗，保留預設值 */ }
+}
+
 // ── Auth ──
 const _AUTH_KEY = 'ricky_finance_token'
 let _token = localStorage.getItem(_AUTH_KEY)
@@ -116,39 +138,21 @@ export const api = {
   updateAsset: (id, data) => request('/assets/' + id, { method: 'PATCH', body: JSON.stringify(typeof data === 'number' ? { balance: data } : data) }),
   deleteAsset: (id) => request('/assets/' + id, { method: 'DELETE' }),
   getAssetHistory: (months = 12) => request('/assets/history?months=' + months),
-  takeSnapshot: () => request('/assets/snapshot', { method: 'POST' }),
 
   // Investments
   getInvestments: () => request('/investments'),
   updateInvestment: (id, data) => request('/investments/' + id, { method: 'PATCH', body: JSON.stringify(data) }),
-  uploadInvestmentCSV: (formData) => fetch(BASE + '/investments/upload', {
-    method: 'POST',
-    headers: _token ? { Authorization: `Bearer ${_token}` } : {},
-    body: formData,
-  }).then(r => r.json()),
-  refreshInvestmentPrice: (symbol) => request('/investments/price/' + symbol + '/refresh', { method: 'POST' }),
   refreshAllInvestmentPrices: () => request('/investments/refresh-all', { method: 'POST' }),
   lookupStock: (symbol) => request('/investments/lookup/' + symbol),
   getInvestmentHistory: (range) => request('/investments/history?range=' + range),
   getInvestmentTrades: (symbol) => request('/investments/trades' + (symbol ? '?symbol=' + symbol : '')),
+  getInvestmentPnl: () => request('/investments/pnl'),
   addInvestmentTrade: (data) => request('/investments/trades', { method: 'POST', body: JSON.stringify(data) }),
   updateInvestmentTrade: (id, data) => request('/investments/trades/' + id, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteInvestmentTrade: (id) => request('/investments/trades/' + id, { method: 'DELETE' }),
 
-  // Summary
-  getDailySummary: (date) => request('/summary/daily' + (date ? '?date=' + date : '')),
-  getMonthlySummary: (month) => request('/summary/monthly' + (month ? '?month=' + month : '')),
-
   // Reconcile
-  getReconcile: (month) => request('/reconcile' + (month ? '?month=' + month : '')),
-  uploadBill: (data) => request('/reconcile/upload', { method: 'POST', body: JSON.stringify(data) }),
-  updateReconcile: (id, data) => request('/reconcile/' + id, { method: 'PATCH', body: JSON.stringify(data) }),
-  deferReconcile: (id, new_date) => request('/reconcile/' + id + '/defer', { method: 'POST', body: JSON.stringify({ new_date }) }),
   addPayment: (data) => request('/reconcile/payment', { method: 'POST', body: JSON.stringify(data) }),
-
-  // Gmail
-  syncGmail: () => request('/gmail/sync', { method: 'POST' }),
-  getGmailOAuthUrl: () => request('/gmail/oauth/url'),
 
   // Categories
   getCategories: () => request('/categories'),
@@ -189,8 +193,7 @@ export function formatMoney(n) {
 
 export function fmtSigned(amount, type) {
   if (amount === null || amount === undefined) return '–'
-  const signed = type === '收入' ? amount : -Math.abs(amount)
-  return (signed >= 0 ? '+' : '-') + '$' + Math.abs(signed).toLocaleString()
+  return '$' + Math.abs(amount).toLocaleString()
 }
 
 export function amtColor(type) {
@@ -204,8 +207,7 @@ export function formatDate(str) {
 }
 
 export function formatReturn(rate) {
-  const prefix = rate >= 0 ? '+' : ''
-  return prefix + rate.toFixed(2) + '%'
+  return Math.abs(rate).toFixed(2) + '%'
 }
 
 export function currentMonth() {

@@ -21,8 +21,8 @@
 
 .cal-dows { display:grid; grid-template-columns:repeat(7,1fr); }
 .cal-dow { font-size:11px; font-weight:500; color:var(--text-muted); padding:4px 0 6px 8px; }
-.cal-dow.sat { color:#3fb950; }
-.cal-dow.sun { color:#e06c75; }
+.cal-dow.sat { color:#f85149; }
+.cal-dow.sun { color:#f85149; }
 
 .cal-grid {
   display:grid; grid-template-columns:repeat(7,1fr);
@@ -33,22 +33,21 @@
   min-height:76px; padding:7px 5px 4px 7px; position:relative; cursor:default;
 }
 .cal-cell.clickable { cursor:pointer; }
-.cal-cell.has-expense { background:rgba(248,81,73,0.07); }
-.cal-cell.has-income  { background:rgba(63,185,80,0.05); }
-.cal-cell.has-both    { background:rgba(248,81,73,0.07); }
+.cal-cell.net-neg { background:rgba(248,81,73,0.07); }
+.cal-cell.net-pos { background:rgba(63,185,80,0.08); }
 .cal-cell.today { outline:2px solid var(--accent); outline-offset:-1px; position:relative; z-index:1; }
 .cal-cell.selected { outline:2px solid var(--accent); background:rgba(88,166,255,0.09); position:relative; z-index:1; }
 .cal-cell.other-month { opacity:0.3; cursor:default; }
 
 .cal-d { font-size:17px; font-weight:700; line-height:1; color:var(--text); font-variant-numeric:tabular-nums; }
-.cal-cell.sat-col .cal-d { color:#3fb950; }
-.cal-cell.sun-col .cal-d { color:#e06c75; }
+.cal-cell.sat-col .cal-d { color:#f85149; }
+.cal-cell.sun-col .cal-d { color:#f85149; }
 .cal-cell.today    .cal-d { color:var(--accent); }
 .cal-cell.other-month .cal-d { color:var(--text-muted) !important; }
 
 .cal-amts { position:absolute; bottom:4px; right:5px; text-align:right; line-height:1.45; }
 .cal-inc { color:#3fb950; font-size:10px; font-weight:600; }
-.cal-exp { color:#e06c75; font-size:10px; font-weight:600; }
+.cal-exp { color:#f85149; font-size:10px; font-weight:600; }
 
 .cal-footer { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding-top:10px; margin-top:2px; border-top:1px solid var(--border); font-size:12px; }
 .cf-item { display:flex; align-items:center; gap:5px; }
@@ -113,8 +112,8 @@
   <div class="header">
     <h1>消費記錄</h1>
     <div class="header-actions">
-      <button class="btn btn-secondary btn-sm" onclick="syncGmail()">🔄 同步</button>
       <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ 新增</button>
+      <button class="btn btn-secondary btn-sm" onclick="loadMonth()">↻ 重新整理</button>
     </div>
   </div>
 
@@ -262,6 +261,7 @@
     </div>
 
     <div class="modal-footer">
+      <button class="btn btn-danger" id="modal-delete-btn" style="display:none;margin-right:auto" onclick="deleteFromModal()">刪除</button>
       <button class="btn btn-secondary" onclick="closeTxnModal()">取消</button>
       <button class="btn btn-primary" onclick="saveTxn()">儲存</button>
     </div>
@@ -403,7 +403,7 @@
 
 <script src="/js/calc-keyboard.js"></script>
 <script type="module">
-import { api, toast, formatMoney, fmtSigned, amtColor, badgeHtml, catIconHtml, catIcon, freqLabel } from '/js/api.js'
+import { api, toast, formatMoney, fmtSigned, amtColor, badgeHtml, catIconHtml, catIcon, freqLabel, initAppName } from '/js/api.js'
 
 // 用已存的 icon 欄位 fallback 到 CAT_ICON_MAP
 function resolvedCatIcon(categoryName) {
@@ -478,12 +478,12 @@ async function loadMonth() {
 
   const netSigned = incTotal - expTotal
   document.getElementById('cal-footer').innerHTML = `
-    <div class="cf-item"><span class="cf-dot" style="background:#e06c75"></span>支出
-      <b style="color:#e06c75">-$${expTotal.toLocaleString()}</b></div>
+    <div class="cf-item"><span class="cf-dot" style="background:#f85149"></span>支出
+      <b style="color:#f85149">$${expTotal.toLocaleString()}</b></div>
     <div class="cf-item"><span class="cf-dot" style="background:#3fb950"></span>收入
-      <b style="color:#3fb950">+$${incTotal.toLocaleString()}</b></div>
+      <b style="color:#3fb950">$${incTotal.toLocaleString()}</b></div>
     <div class="cf-item"><span class="cf-dot" style="background:#bc8cff"></span>總計
-      <b style="color:#bc8cff">${netSigned >= 0 ? '+' : '-'}$${Math.abs(netSigned).toLocaleString()}</b></div>
+      <b style="color:#bc8cff">$${Math.abs(netSigned).toLocaleString()}</b></div>
   `
 
   if (showMonthly) renderMonthlyTable()
@@ -514,9 +514,11 @@ function renderCalendar(month, byDate) {
     const colIdx = (offset + d - 1) % 7
     const data = byDate[dateStr] || null
     const cls = []
-    if (data?.expense > 0 && data?.income > 0) cls.push('has-both')
-    else if (data?.expense > 0) cls.push('has-expense')
-    else if (data?.income > 0) cls.push('has-income')
+    if (data) {
+      const net = (data.income || 0) - (data.expense || 0)
+      if (net > 0) cls.push('net-pos')
+      else if (net < 0) cls.push('net-neg')
+    }
     if (dateStr === today) cls.push('today')
     if (dateStr === selectedDate) cls.push('selected')
     if (data) cls.push('clickable')
@@ -539,8 +541,8 @@ function cellHtml(label, dateStr, extraCls, colIdx, data) {
   let amtsHtml = ''
   if (data) {
     let lines = ''
-    if (data.income > 0)  lines += `<div class="cal-inc">+${fmtAmt(data.income)}</div>`
-    if (data.expense > 0) lines += `<div class="cal-exp">−${fmtAmt(data.expense)}</div>`
+    if (data.income > 0)  lines += `<div class="cal-inc">${fmtAmt(data.income)}</div>`
+    if (data.expense > 0) lines += `<div class="cal-exp">${fmtAmt(data.expense)}</div>`
     if (lines) amtsHtml = `<div class="cal-amts">${lines}</div>`
   }
   return `<div class="cal-cell ${extraCls} ${colCls}" ${clickAttr} ${dblClickAttr}><div class="cal-d">${label}</div>${amtsHtml}</div>`
@@ -610,22 +612,22 @@ function renderDailyView(txns) {
   let html = mergeTransferPairs(txns).map(t => {
     if (t._isMergedTransfer) {
       const icon = `<div style="width:38px;height:38px;border-radius:50%;background:rgba(208,112,48,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">↔</div>`
-      return `<div class="txn-row">
+      return `<div class="txn-row" onclick="if(window.innerWidth<=768)editTransfer('${t.transfer_id}')">
         ${icon}
         <div class="txn-info">
-          <div class="txn-name">${escHtml(t.name || '轉帳')}</div>
+          <div class="txn-name">${escHtml(t.note || '轉帳')}</div>
           <div class="txn-meta">${escHtml(t._xfrFrom)} → ${escHtml(t._xfrTo)}</div>
         </div>
         <div class="txn-right">
           <span class="txn-amt" style="color:#d07030">NT$${t.amount.toLocaleString()}</span>
-          <button class="btn btn-secondary btn-sm" onclick="editTransfer('${t.transfer_id}')">編輯</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteTxn('${t.id}',true)">刪</button>
+          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editTransfer('${t.transfer_id}')">編輯</button>
+          <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteTxn('${t.id}',true)">刪</button>
         </div>
       </div>`
     }
     const editAttrs = `'${t.id}','${escJs(t.name)}',${t.amount},'${t.date}','${escJs(t.category)}','${escJs(t.card||'')}','${escJs(t.note||'')}','${escJs(t.type||'支出')}'`
     const recBadge = t.source === '定期' ? ' <span title="定期項目" style="font-size:13px">🔁</span>' : ''
-    return `<div class="txn-row">
+    return `<div class="txn-row" onclick="if(window.innerWidth<=768)editTxn(${editAttrs})">
       ${resolvedCatIconHtml(t.category, 38)}
       <div class="txn-info">
         <div class="txn-name">${escHtml(t.name || t.category)}${recBadge}</div>
@@ -633,17 +635,17 @@ function renderDailyView(txns) {
       </div>
       <div class="txn-right">
         <span class="txn-amt ${t.type==='收入'?'amt-inc':'amt-exp'}">${fmtSigned(t.amount,t.type)}</span>
-        <button class="btn btn-secondary btn-sm" onclick="editTxn(${editAttrs})">編輯</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteTxn('${t.id}',false)">刪</button>
+        <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editTxn(${editAttrs})">編輯</button>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteTxn('${t.id}',false)">刪</button>
       </div>
     </div>`
   }).join('')
 
   if (txns.length > 1) {
-    html += `<div style="padding:8px 0 0;font-size:12px;color:var(--text-muted);display:flex;gap:14px">
-      ${expTotal>0?`支出 <b style="color:#e06c75">-$${expTotal.toLocaleString()}</b>`:''}
-      ${incTotal>0?`收入 <b style="color:#3fb950">+$${incTotal.toLocaleString()}</b>`:''}
-    </div>`
+    const parts = []
+    if (incTotal > 0) parts.push(`<span style="color:#3fb950">收入 $${incTotal.toLocaleString()}</span>`)
+    if (expTotal > 0) parts.push(`<span style="color:#f85149">支出 $${expTotal.toLocaleString()}</span>`)
+    if (parts.length) html += `<div class="daily-summary" style="display:flex;justify-content:flex-end;gap:14px;padding:6px 0 2px;padding-right:92px;font-size:13px;font-weight:600">${parts.join('')}</div>`
   }
   el.innerHTML = html
 }
@@ -706,22 +708,22 @@ function renderMonthlyTable() {
     html += mergeTransferPairs(txns).map(t => {
       if (t._isMergedTransfer) {
         const icon = `<div style="width:38px;height:38px;border-radius:50%;background:rgba(208,112,48,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">↔</div>`
-        return `<div class="txn-row">
+        return `<div class="txn-row" onclick="if(window.innerWidth<=768)editTransfer('${t.transfer_id}')">
           ${icon}
           <div class="txn-info">
-            <div class="txn-name">${escHtml(t.name || '轉帳')}</div>
+            <div class="txn-name">${escHtml(t.note || '轉帳')}</div>
             <div class="txn-meta">${escHtml(t._xfrFrom)} → ${escHtml(t._xfrTo)}</div>
           </div>
           <div class="txn-right">
             <span class="txn-amt" style="color:#d07030">NT$${t.amount.toLocaleString()}</span>
-            <button class="btn btn-secondary btn-sm" onclick="editTransfer('${t.transfer_id}')">編輯</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteTxn('${t.id}',true)">刪</button>
+            <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editTransfer('${t.transfer_id}')">編輯</button>
+            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteTxn('${t.id}',true)">刪</button>
           </div>
         </div>`
       }
       const editAttrs = `'${t.id}','${escJs(t.name)}',${t.amount},'${t.date}','${escJs(t.category)}','${escJs(t.card||'')}','${escJs(t.note||'')}','${escJs(t.type||'支出')}'`
       const recBadge = t.source === '定期' ? ' <span title="定期項目" style="font-size:13px">🔁</span>' : ''
-      return `<div class="txn-row">
+      return `<div class="txn-row" onclick="if(window.innerWidth<=768)editTxn(${editAttrs})">
         ${resolvedCatIconHtml(t.category, 38)}
         <div class="txn-info">
           <div class="txn-name">${escHtml(t.name || t.category)}${recBadge}</div>
@@ -729,16 +731,17 @@ function renderMonthlyTable() {
         </div>
         <div class="txn-right">
           <span class="txn-amt ${t.type==='收入'?'amt-inc':'amt-exp'}">${fmtSigned(t.amount,t.type)}</span>
-          <button class="btn btn-secondary btn-sm" onclick="editTxn(${editAttrs})">編輯</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteTxn('${t.id}',false)">刪</button>
+          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editTxn(${editAttrs})">編輯</button>
+          <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteTxn('${t.id}',false)">刪</button>
         </div>
       </div>`
     }).join('')
 
+    // 每日總結：收入在左、支出在右，靠右對齊
     const parts = []
-    if (expTotal > 0) parts.push(`支出 <b style="color:#e06c75">-$${expTotal.toLocaleString()}</b>`)
-    if (incTotal > 0) parts.push(`收入 <b style="color:#3fb950">+$${incTotal.toLocaleString()}</b>`)
-    if (parts.length) html += `<div style="padding:4px 0 2px;font-size:12px;color:var(--text-muted);display:flex;gap:14px">${parts.join('')}</div>`
+    if (incTotal > 0) parts.push(`<span style="color:#3fb950">收入 $${incTotal.toLocaleString()}</span>`)
+    if (expTotal > 0) parts.push(`<span style="color:#f85149">支出 $${expTotal.toLocaleString()}</span>`)
+    if (parts.length) html += `<div class="daily-summary" style="display:flex;justify-content:flex-end;gap:14px;padding:6px 0 2px;padding-right:92px;font-size:13px;font-weight:600">${parts.join('')}</div>`
   }
   container.innerHTML = html
 }
@@ -748,12 +751,40 @@ function renderCategorySelects() {
   document.getElementById('f-category').innerHTML = allCategories.filter(c => c.type === currentType)
     .map(c => `<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('')
 }
+const ACCT_TYPE_ORDER = ['銀行', '銀行存款', '證券戶', '投資帳戶', '信用卡', '現金']
+const ACCT_TYPE_LABEL = { '銀行': '銀行', '銀行存款': '銀行', '證券戶': '證券戶', '投資帳戶': '證券戶', '信用卡': '信用卡', '現金': '現金' }
+
+function groupedAccountOptions(accounts, withEmpty = false) {
+  const groups = {}
+  for (const a of accounts) {
+    const label = ACCT_TYPE_LABEL[a.type] ?? a.type
+    if (!groups[label]) groups[label] = []
+    groups[label].push(a)
+  }
+  const order = ['銀行', '證券戶', '信用卡', '現金']
+  let html = withEmpty ? '<option value="">全部帳戶</option>' : ''
+  for (const type of order) {
+    if (!groups[type]?.length) continue
+    html += `<optgroup label="${type}">`
+    html += groups[type].map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+    html += '</optgroup>'
+  }
+  // 其他未分類
+  const knownTypes = new Set(order)
+  const others = accounts.filter(a => !knownTypes.has(ACCT_TYPE_LABEL[a.type] ?? a.type))
+  if (others.length) {
+    html += `<optgroup label="其他">`
+    html += others.map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+    html += '</optgroup>'
+  }
+  return html
+}
+
 function renderAccountSelects() {
-  document.getElementById('f-card').innerHTML = allAccounts
-    .map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+  document.getElementById('f-card').innerHTML = groupedAccountOptions(allAccounts)
 }
 function renderXfrSelects() {
-  const opts = allAccounts.map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+  const opts = groupedAccountOptions(allAccounts)
   document.getElementById('xfr-from').innerHTML = opts
   document.getElementById('xfr-to').innerHTML = opts
   if (allAccounts.length > 1) document.getElementById('xfr-to').selectedIndex = 1
@@ -775,7 +806,7 @@ window.setType = function(type) {
   if (type !== '轉帳') renderCategorySelects()
   else {
     // 填入帳戶選單
-    const opts = allAccounts.map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+    const opts = groupedAccountOptions(allAccounts)
     document.getElementById('f-xfr-from').innerHTML = opts
     document.getElementById('f-xfr-to').innerHTML = opts
     if (allAccounts.length > 1) document.getElementById('f-xfr-to').selectedIndex = 1
@@ -800,6 +831,7 @@ window.openAddModal = function(dateOverride) {
   document.getElementById('fee-toggle-transfer').textContent = '＋ 加入手續費'
   document.getElementById('fee-total-normal').textContent = ''
   setType('支出')
+  document.getElementById('modal-delete-btn').style.display = 'none'
   document.getElementById('txn-modal').classList.add('open')
   setTimeout(() => document.getElementById('f-amount').focus(), 50)
 }
@@ -841,6 +873,10 @@ window.editTxn = function(id, name, amount, date, category, card, note, type) {
   for (let i=0;i<cs.options.length;i++) if(cs.options[i].value===category){cs.selectedIndex=i;break}
   const as = document.getElementById('f-card')
   for (let i=0;i<as.options.length;i++) if(as.options[i].value===card){as.selectedIndex=i;break}
+  const delBtn = document.getElementById('modal-delete-btn')
+  delBtn.style.display = ''
+  delBtn.dataset.id = id
+  delBtn.dataset.isTransfer = 'false'
   document.getElementById('txn-modal').classList.add('open')
 }
 
@@ -889,6 +925,14 @@ window.saveTxn = async function() {
     if (selectedDate) renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
     if (showMonthly) renderMonthlyTable()
   } else toast(res.error ?? '操作失敗', 'error')
+}
+
+window.deleteFromModal = async function() {
+  const btn = document.getElementById('modal-delete-btn')
+  const id = btn.dataset.id
+  const isTransfer = btn.dataset.isTransfer === 'true'
+  closeTxnModal()
+  await deleteTxn(id, isTransfer)
 }
 
 window.deleteTxn = async function(id, isTransfer) {
@@ -958,12 +1002,6 @@ window.saveTransfer = async function() {
   }
 }
 
-window.syncGmail = async function() {
-  toast('正在同步 Gmail…')
-  const res = await api.syncGmail()
-  if (res.ok) { toast(`同步完成：新增 ${res.synced} 筆`); loadMonth() }
-  else toast(res.error ?? '同步失敗', 'error')
-}
 
 // ── 分類管理 ──
 window.openCatModal = function() {
@@ -1084,9 +1122,9 @@ function renderRecurring() {
   const monthlyInc = calcMonthlyEquiv(recItems.filter(i => activeAndStarted(i) && i.type === '收入'))
   const net = monthlyInc - monthlyExp
   document.getElementById('rec-monthly-bar').innerHTML = `
-    <div class="monthly-bar-item"><div class="monthly-bar-label">月均支出</div><div class="monthly-bar-val" style="color:var(--danger)">−NT$${monthlyExp.toLocaleString()}</div></div>
-    <div class="monthly-bar-item"><div class="monthly-bar-label">月均收入</div><div class="monthly-bar-val" style="color:var(--success)">+NT$${monthlyInc.toLocaleString()}</div></div>
-    <div class="monthly-bar-item"><div class="monthly-bar-label">月均淨額</div><div class="monthly-bar-val" style="color:${net>=0?'var(--success)':'var(--danger)'}">${net>=0?'+':'−'}NT$${Math.abs(net).toLocaleString()}</div></div>
+    <div class="monthly-bar-item"><div class="monthly-bar-label">月均支出</div><div class="monthly-bar-val" style="color:var(--danger)">NT$${monthlyExp.toLocaleString()}</div></div>
+    <div class="monthly-bar-item"><div class="monthly-bar-label">月均收入</div><div class="monthly-bar-val" style="color:var(--success)">NT$${monthlyInc.toLocaleString()}</div></div>
+    <div class="monthly-bar-item"><div class="monthly-bar-label">月均淨額</div><div class="monthly-bar-val" style="color:${net>=0?'var(--success)':'var(--danger)'}">NT$${Math.abs(net).toLocaleString()}</div></div>
     <div class="monthly-bar-item" style="margin-left:auto"><div class="monthly-bar-label">啟用項目</div><div class="monthly-bar-val">${active.length} 個</div></div>
   `
 
@@ -1124,7 +1162,7 @@ function renderRecurring() {
           </div>
         </div>
         <div class="rec-item-right">
-          <div class="rec-item-amt" style="color:${isInc?'var(--success)':'var(--danger)'}">${isInc?'+':'−'}NT$${item.amount.toLocaleString()}</div>
+          <div class="rec-item-amt" style="color:${isInc?'var(--success)':'var(--danger)'}">NT$${item.amount.toLocaleString()}</div>
           ${feeTag}
           <div class="rec-item-next" style="${dueSoon&&!notStarted?'color:var(--warning)':''}">${dueSoon&&!notStarted?'⚠️ ':''}${notStarted?'起始 '+item.start_date:'下次 '+item.next_date}</div>
         </div>
@@ -1194,7 +1232,7 @@ window.openRecModal = function() {
   document.getElementById('r-end-date').value = ''
   document.getElementById('r-day-group').style.display = 'block'
   setRecType('支出')
-  document.getElementById('r-card').innerHTML = allAccounts.map(a=>`<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+  document.getElementById('r-card').innerHTML = groupedAccountOptions(allAccounts)
   document.getElementById('rec-modal').classList.add('open')
   setTimeout(()=>document.getElementById('r-name').focus(),50)
 }
@@ -1218,7 +1256,7 @@ window.openEditRecModal = function(id) {
   document.getElementById('r-end-date').value = item.end_date ?? ''
   document.getElementById('r-day-group').style.display = item.frequency==='monthly'?'block':'none'
   setRecType(item.type)
-  document.getElementById('r-card').innerHTML = allAccounts.map(a=>`<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+  document.getElementById('r-card').innerHTML = groupedAccountOptions(allAccounts)
   const cs=document.getElementById('r-category')
   for(let i=0;i<cs.options.length;i++) if(cs.options[i].value===item.category){cs.selectedIndex=i;break}
   const as=document.getElementById('r-card')
@@ -1288,6 +1326,7 @@ window.triggerRecurring = async function() {
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function escJs(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
 
+initAppName()
 init()
 
 document.getElementById('nav-add-btn').addEventListener('click', e => {

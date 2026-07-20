@@ -5,6 +5,33 @@ import { api, toast, formatMoney, initAppName, swr } from '/js/api.js'
 let holdingChart = null
 let growthChart = null
 
+// router 於 app 啟動後在背景呼叫：預先把本頁資料放進 swr 快取（不碰 DOM）
+export async function prefetch() {
+  const jobs = []
+  if (!swr.get('investments')) {
+    jobs.push((async () => {
+      const [invRes, tradeRes, assetsRes, pnlRes] = await Promise.all([
+        api.getInvestments(), api.getInvestmentTrades(), api.getAssets(), api.getInvestmentPnl(),
+      ])
+      if (!invRes.ok) return
+      const trades = {}
+      if (tradeRes.ok) for (const t of tradeRes.data) { const k = t.symbol + '|' + t.account; (trades[k] ||= []).push(t) }
+      const accounts = assetsRes?.ok ? (assetsRes.data?.accounts ?? []) : []
+      const brokers = accounts.filter(a => a.type === '證券戶' || a.type === '投資帳戶').map(a => a.name)
+      swr.set('investments', {
+        investments: invRes.data, trades, brokers, summary: invRes.summary,
+        pnl: pnlRes?.ok ? pnlRes.data : [], pnlTotal: pnlRes?.total_realized_pnl ?? 0,
+      })
+    })())
+  }
+  if (!swr.get('inv-history-month')) {
+    jobs.push(api.getInvestmentHistory('month').then(r => {
+      if (r.ok) swr.set('inv-history-month', { data: r.data ?? [], start: r.start, end: r.end })
+    }))
+  }
+  await Promise.all(jobs)
+}
+
 export default async function show({ signal }) {
 
 
@@ -694,9 +721,6 @@ function renderHoldingChart(investments) {
 }
 
 async function renderGrowthChart(range) {
-  const ctx = document.getElementById('growthChart').getContext('2d')
-  if (growthChart) { growthChart.destroy(); growthChart = null }
-
   // 更新 toggle 按鈕樣式
   ;['week','month','year'].forEach(r => {
     const btn = document.getElementById('btn-range-' + r)
@@ -704,11 +728,29 @@ async function renderGrowthChart(range) {
     btn.className = r === range ? 'btn btn-sm' : 'btn btn-sm btn-secondary'
   })
 
+  // 快取先畫（切頁零等待），fresh 回來若有變化才重畫
+  const key = 'inv-history-' + range
+  const cached = swr.get(key)
+  if (cached) drawGrowthChart(range, cached)
   const res = await api.getInvestmentHistory(range)
   if (!res.ok) {
-    ctx.canvas.parentElement.innerHTML = '<div class="empty-state">尚無歷史快照<p>在資產總覽頁點「快照」以記錄資產</p></div>'
+    if (!cached) {
+      const canvas = document.getElementById('growthChart')
+      if (canvas) canvas.parentElement.innerHTML = '<div class="empty-state">尚無歷史快照<p>在資產總覽頁點「快照」以記錄資產</p></div>'
+    }
     return
   }
+  const slim = { data: res.data ?? [], start: res.start, end: res.end }
+  swr.set(key, slim)
+  if (cached && JSON.stringify(slim) === JSON.stringify(cached)) return
+  drawGrowthChart(range, slim)
+}
+
+function drawGrowthChart(range, res) {
+  const canvas = document.getElementById('growthChart')
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (growthChart) { growthChart.destroy(); growthChart = null }
 
   // 建立快照資料索引
   const dataMap = {}

@@ -4,6 +4,22 @@ import { api, toast, formatMoney, catIcon, initAppName, swr } from '/js/api.js'
 // Chart 實例放模組層級：重新進入頁面時先 destroy 前一次的實例
 let chartByTab = { overview: [], detail: [], category: [], account: [], drill: [] }
 
+// router 於 app 啟動後在背景呼叫：預先把本頁（當月）資料放進 swr 快取（不碰 DOM）
+export async function prefetch() {
+  const now = new Date()
+  const y = now.getFullYear(), m = now.getMonth() + 1
+  const p2 = n => String(n).padStart(2, '0')
+  const from = `${y}-${p2(m)}-01`
+  const to = `${y}-${p2(m)}-${p2(new Date(y, m, 0).getDate())}`
+  const key = `report-${from}-${to}`
+  if (swr.get(key)) return
+  const [res, assetsRes] = await Promise.all([
+    api.getTransactions({ date_from: from, date_to: to, limit: 2000 }),
+    api.getAssets(),
+  ])
+  if (res.ok) swr.set(key, { txns: res.data ?? [], accounts: assetsRes.ok ? (assetsRes.data?.accounts ?? []) : [] })
+}
+
 export default async function show({ signal }) {
 Object.values(chartByTab).forEach(arr => { arr.forEach(c => c.destroy()); arr.length = 0 })
 

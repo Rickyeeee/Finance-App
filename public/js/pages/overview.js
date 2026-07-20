@@ -4,6 +4,14 @@ import { api, toast, formatMoney, fmtSigned, amtColor, formatDate, badgeHtml, ca
 // trendChart 放模組層級：重新進入頁面時能 destroy 前一次的 Chart 實例
 let trendChart = null
 
+// router 於 app 啟動後在背景呼叫：預先把本頁資料放進 swr 快取（不碰 DOM）
+export async function prefetch() {
+  if (swr.get('assets')) return
+  const [a, h] = await Promise.all([api.getAssets(), api.getAssetHistory(12)])
+  if (a.ok) swr.set('assets', a.data)
+  if (h.ok) swr.set('asset-history', h.data)
+}
+
 export default async function show({ signal }) {
 
 

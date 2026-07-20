@@ -523,14 +523,10 @@ export const swr = {
   },
 }
 
-// ── 背景預載：SPA 下所有頁面模組先解析好，切頁零等待 ──
+// ── 背景預載 txn-modal（頁面模組與資料的預載由 router.js 負責）──
 ;(function () {
   const idle = 'requestIdleCallback' in window ? f => requestIdleCallback(f, { timeout: 2000 }) : f => setTimeout(f, 800)
-  idle(() => {
-    import('/js/txn-modal.js').catch(() => {})
-    ;['overview', 'transactions', 'reconcile', 'investments', 'report'].forEach(p =>
-      import(`/js/pages/${p}.js`).catch(() => {}))
-  })
+  idle(() => { import('/js/txn-modal.js').catch(() => {}) })
 })()
 
 

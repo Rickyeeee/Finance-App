@@ -2,6 +2,124 @@ import { api, toast, catIcon, initAppName, swr } from '/js/api.js'
 import { openAddTxnModal, openEditTxnModal, preloadTxnModalData } from '/js/txn-modal.js'
 
 // 此模組由 build-spa 從 reconcile.html 抽出，router 每次進入頁面時呼叫 show()
+
+// ── 帳單期間工具（模組層級：頁面與 prefetch 共用）──
+// 根據結算日與扣款日，推算目前應預設顯示哪一期帳單
+// 邏輯：
+//   1. 找「最近一個結算日已到」的帳單月份（today >= billing_day → 當月；否則 → 上月）
+//   2. 若該期的扣款日已過 → 代表這期已結束，推到下一期
+function calcDefaultCardMonth(billingDay, paymentDay) {
+  const now = new Date()
+  const todayStr = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
+  const td = parseInt(todayStr.slice(8), 10)
+  const ty = parseInt(todayStr.slice(0, 4), 10)
+  const tm = parseInt(todayStr.slice(5, 7), 10)
+
+  if (!billingDay) return `${ty}-${String(tm).padStart(2,'0')}`
+
+  let m = td > billingDay ? tm + 1 : tm
+  let y = ty
+  if (m > 12) { m = 1; y++ }
+
+  if (paymentDay) {
+    let pm = m - 1, py = y
+    if (pm < 1) { pm = 12; py-- }
+
+    const sameMonth = paymentDay > billingDay
+    const prevPayT = new Date(py, sameMonth ? pm - 1 : pm, paymentDay)
+    const prevPayStr = prevPayT.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
+
+    if (prevPayStr >= todayStr) {
+      return `${py}-${String(pm).padStart(2,'0')}`
+    }
+  }
+
+  return `${y}-${String(m).padStart(2,'0')}`
+}
+
+// ── 取得帳單期間 ──
+function getBillingPeriod(billingDay, month) {
+  const [y, m] = month.split('-').map(Number)
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  // 選 5 月 + 結算日 9 → 4/10～5/9（上月結算日+1 到本月結算日）
+  const periodStart = new Date(y, m - 2, billingDay + 1)
+  const periodEnd   = new Date(y, m - 1, billingDay)
+  return { start: fmt(periodStart), end: fmt(periodEnd) }
+}
+
+// ── 取得帳單期間交易（含上期延後入帳）──
+// useCache=true：先用 swr 快取（進頁/預載秒開）；網路結果一律回寫快取
+async function fetchBillingTxns(cardName, billingDay, month, useCache = false) {
+  const { start, end } = getBillingPeriod(billingDay, month)
+  const [y, m] = month.split('-').map(Number)
+  const prevMonthStr = new Date(y, m - 2, 1)
+  const prevMonthKey = `${prevMonthStr.getFullYear()}-${String(prevMonthStr.getMonth()+1).padStart(2,'0')}`
+  const { start: prevStart } = getBillingPeriod(billingDay, prevMonthKey)
+
+  // 一次撈完 prevStart～end 的全部資料，前端篩選，避免月份迴圈邊界問題
+  const cacheKey = `txns-range-${prevStart}-${end}`
+  let data = useCache ? swr.get(cacheKey) : null
+  if (!data) {
+    const res = await api.getTransactions({ date_from: prevStart, date_to: end, limit: 1000 })
+    if (!res.ok) return []
+    data = res.data ?? []
+    swr.set(cacheKey, data)
+  }
+
+  const txns = data.filter(t =>
+    t.card === cardName &&
+    !t.transfer_id && (
+      // 當期：全部顯示（含延後入帳，讓使用者可取消）
+      (t.date >= start && t.date <= end) ||
+      // 上期延後入帳：帶入當期顯示
+      (t.status === '延後入帳' && t.date >= prevStart && t.date < start)
+    )
+  )
+  // 標記上期延後入帳的紀錄
+  txns.forEach(t => {
+    if (t.date < start && t.status === '延後入帳') t._fromPrevPeriod = true
+  })
+  txns.sort((a, b) => b.date.localeCompare(a.date) || b.created_at?.localeCompare(a.created_at ?? '') || 0)
+  return txns
+}
+
+// ── 確認是否已繳款 ──
+async function checkPaymentDone(cardName, periodEnd, useCache = false) {
+  const cacheKey = `paydone-${cardName}-${periodEnd}`
+  if (useCache) {
+    const cached = swr.get(cacheKey)
+    if (cached !== null) return cached
+  }
+  const d = new Date(periodEnd)
+  d.setDate(d.getDate() + 60)
+  const laterEnd = d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
+  const res = await api.getTransactions({ date_from: periodEnd, date_to: laterEnd, card: cardName, limit: 100 })
+  if (!res.ok) return false
+  const done = (res.data ?? []).some(t => (t.name === '手動繳款' || t.name === '自動扣繳') && t.transfer_id)
+  swr.set(cacheKey, done)
+  return done
+}
+
+// router 於 app 啟動後在背景呼叫：預先把本頁資料放進 swr 快取（不碰 DOM）
+export async function prefetch() {
+  let accounts = swr.get('reconcile-accounts')
+  if (!accounts) {
+    const res = await api.getAssets()
+    if (!res.ok) return
+    accounts = res.data.accounts ?? []
+    swr.set('reconcile-accounts', accounts)
+  }
+  const ccs = accounts.filter(a => a.type === '信用卡' && a.billing_day)
+  await Promise.all(ccs.map(acc => {
+    const month = calcDefaultCardMonth(acc.billing_day, acc.payment_day)
+    const { end } = getBillingPeriod(acc.billing_day, month)
+    return Promise.all([
+      fetchBillingTxns(acc.name, acc.billing_day, month, true),
+      checkPaymentDone(acc.name, end, true),
+    ])
+  }))
+}
+
 export default async function show({ signal }) {
 
 
@@ -75,46 +193,6 @@ let acctViewMonth = _nowMonth
 // ── 每張信用卡獨立的帳單期間狀態 ──
 const cardMonths = {}
 
-// 根據結算日與扣款日，推算目前應預設顯示哪一期帳單
-// 邏輯：
-//   1. 找「最近一個結算日已到」的帳單月份（today >= billing_day → 當月；否則 → 上月）
-//   2. 若該期的扣款日已過 → 代表這期已結束，推到下一期
-function calcDefaultCardMonth(billingDay, paymentDay) {
-  const now = new Date()
-  const todayStr = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
-  const td = parseInt(todayStr.slice(8), 10)
-  const ty = parseInt(todayStr.slice(0, 4), 10)
-  const tm = parseInt(todayStr.slice(5, 7), 10)
-
-  if (!billingDay) return `${ty}-${String(tm).padStart(2,'0')}`
-
-  // 找出「今天所在的帳單期別」所對應的月份 M：
-  //   td > billingDay → 已過結算日，進入下期 → M = 當月+1
-  //   td <= billingDay → 結算日還沒到 → M = 當月
-  let m = td > billingDay ? tm + 1 : tm
-  let y = ty
-  if (m > 12) { m = 1; y++ }
-
-  // 若有扣款日，先確認「上一期」的扣款是否還沒過
-  // 還沒過 → 預設顯示上一期（那期才是待繳的）
-  // 已過   → 顯示當期
-  if (paymentDay) {
-    let pm = m - 1, py = y
-    if (pm < 1) { pm = 12; py-- }
-
-    const sameMonth = paymentDay > billingDay
-    const prevPayT = new Date(py, sameMonth ? pm - 1 : pm, paymentDay)
-    const prevPayStr = prevPayT.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
-
-    if (prevPayStr >= todayStr) {
-      // 上一期扣款還沒過（含當天）→ 預設顯示上一期
-      return `${py}-${String(pm).padStart(2,'0')}`
-    }
-  }
-
-  return `${y}-${String(m).padStart(2,'0')}`
-}
-
 function getCardMonth(accId) {
   return cardMonths[accId] ?? null
 }
@@ -158,56 +236,6 @@ window.cardPeriodNav = async function(accId, dir) {
   if (el) el.outerHTML = cardHtml
 }
 
-// ── 取得帳單期間 ──
-function getBillingPeriod(billingDay, month) {
-  const [y, m] = month.split('-').map(Number)
-  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-  // 選 5 月 + 結算日 9 → 4/10～5/9（上月結算日+1 到本月結算日）
-  const periodStart = new Date(y, m - 2, billingDay + 1)
-  const periodEnd   = new Date(y, m - 1, billingDay)
-  return { start: fmt(periodStart), end: fmt(periodEnd) }
-}
-
-// ── 取得帳單期間交易（含上期延後入帳） ──
-async function fetchBillingTxns(cardName, billingDay, month) {
-  const { start, end } = getBillingPeriod(billingDay, month)
-  // 上期起始（用來撈延後入帳紀錄）
-  const [y, m] = month.split('-').map(Number)
-  const prevMonthStr = new Date(y, m - 2, 1)
-  const prevMonthKey = `${prevMonthStr.getFullYear()}-${String(prevMonthStr.getMonth()+1).padStart(2,'0')}`
-  const { start: prevStart } = getBillingPeriod(billingDay, prevMonthKey)
-
-  // 一次撈完 prevStart～end 的全部資料，前端篩選，避免月份迴圈邊界問題
-  const res = await api.getTransactions({ date_from: prevStart, date_to: end, limit: 1000 })
-  if (!res.ok) return []
-
-  const txns = (res.data ?? []).filter(t =>
-    t.card === cardName &&
-    !t.transfer_id && (
-      // 當期：全部顯示（含延後入帳，讓使用者可取消）
-      (t.date >= start && t.date <= end) ||
-      // 上期延後入帳：帶入當期顯示
-      (t.status === '延後入帳' && t.date >= prevStart && t.date < start)
-    )
-  )
-  // 標記上期延後入帳的紀錄
-  txns.forEach(t => {
-    if (t.date < start && t.status === '延後入帳') t._fromPrevPeriod = true
-  })
-  txns.sort((a, b) => b.date.localeCompare(a.date) || b.created_at?.localeCompare(a.created_at ?? '') || 0)
-  return txns
-}
-
-// ── 確認是否已繳款 ──
-async function checkPaymentDone(cardName, periodEnd) {
-  const d = new Date(periodEnd)
-  d.setDate(d.getDate() + 60)
-  const laterEnd = d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
-  const res = await api.getTransactions({ date_from: periodEnd, date_to: laterEnd, card: cardName, limit: 100 })
-  if (!res.ok) return false
-  return (res.data ?? []).some(t => (t.name === '手動繳款' || t.name === '自動扣繳') && t.transfer_id)
-}
-
 // ── 判斷對帳狀態 ──
 function getBillingStatus(txns) {
   if (!txns.length) return null
@@ -225,7 +253,7 @@ async function renderAll() {
   const cached = swr.get('reconcile-accounts')
   if (cached) {
     allAccounts = cached
-    await renderCCSection()
+    await renderCCSection(true)  // 快取直出（進頁秒開）
     renderAcctSection()
   }
   const [res, cRes] = await Promise.all([api.getAssets(), api.getCategories()])
@@ -233,12 +261,12 @@ async function renderAll() {
   allAccounts = res.data.accounts ?? []
   swr.set('reconcile-accounts', allAccounts)
   preloadTxnModalData(allAccounts, cRes.ok ? cRes.data : [])
-  await renderCCSection()
+  await renderCCSection()  // 網路資料校正
   renderAcctSection()
 }
 
 // ── 單張信用卡 HTML 建構 ──
-async function buildCCCardHtml(acc) {
+async function buildCCCardHtml(acc, useCache = false) {
   // 首次顯示才計算預設期別，之後保留使用者手動切換的結果
   if (!cardMonths[acc.id]) {
     cardMonths[acc.id] = calcDefaultCardMonth(acc.billing_day, acc.payment_day)
@@ -270,8 +298,8 @@ async function buildCCCardHtml(acc) {
     periodEnd = end
     // 兩個 API call 並行，不互相等待
     const [txns, isPaidResult] = await Promise.all([
-      fetchBillingTxns(acc.name, acc.billing_day, month),
-      checkPaymentDone(acc.name, end),
+      fetchBillingTxns(acc.name, acc.billing_day, month, useCache),
+      checkPaymentDone(acc.name, end, useCache),
     ])
     billingStatus = getBillingStatus(txns)
     isPaid = !!billingStatus && isPaidResult
@@ -381,7 +409,7 @@ async function buildCCCardHtml(acc) {
 }
 
 // ── 信用卡區 ──
-async function renderCCSection() {
+async function renderCCSection(useCache = false) {
   const ccAccs = allAccounts.filter(a => a.type === '信用卡')
   const container = document.getElementById('cc-section')
   if (!ccAccs.length) {
@@ -396,7 +424,7 @@ async function renderCCSection() {
     ).join('')
   }
   await Promise.all(ccAccs.map(async acc => {
-    const html = await buildCCCardHtml(acc)
+    const html = await buildCCCardHtml(acc, useCache)
     const el = document.getElementById('cc-card-' + acc.id)
     if (el) el.outerHTML = html
   }))

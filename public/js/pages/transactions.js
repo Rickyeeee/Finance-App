@@ -2,6 +2,26 @@ import { api, toast, formatMoney, fmtSigned, amtColor, badgeHtml, catIconHtml, c
 import { openAddTxnModal, preloadTxnModalData } from '/js/txn-modal.js'
 
 // 此模組由 build-spa 從 transactions.html 抽出，router 每次進入頁面時呼叫 show()
+
+// router 於 app 啟動後在背景呼叫：預先把本頁資料放進 swr 快取（不碰 DOM）
+export async function prefetch() {
+  const month = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' }).slice(0, 7)
+  const jobs = []
+  if (!swr.get('categories') || !swr.get('accounts')) {
+    jobs.push(Promise.all([api.getCategories(), api.getAssets()]).then(([cr, ar]) => {
+      if (cr.ok) swr.set('categories', cr.data)
+      if (ar.ok) swr.set('accounts', ar.data.accounts ?? [])
+    }))
+  }
+  if (!swr.get(`txns-${month}`)) {
+    jobs.push(api.getTransactions({ month, limit: 500 }).then(r => { if (r.ok) swr.set(`txns-${month}`, r.data) }))
+  }
+  if (!swr.get('recurring')) {
+    jobs.push(api.getRecurring().then(r => { if (r.ok) swr.set('recurring', r.data) }))
+  }
+  await Promise.all(jobs)
+}
+
 export default async function show({ signal }) {
 
 
@@ -36,6 +56,18 @@ async function init() {
   const cachedAccts = swr.get('accounts')
   if (cachedCats) { allCategories = cachedCats; renderCategorySelects() }
   if (cachedAccts) { allAccounts = cachedAccts; renderAccountSelects(); renderXfrSelects() }
+
+  // 有月資料快取 → 立即渲染月曆並選今天（切頁零等待），fresh 回來後下方會再刷新
+  selectedDate = today
+  const cachedMonthTxns = swr.get(`txns-${currentMonth}`)
+  if (cachedMonthTxns) {
+    cachedTxns = cachedMonthTxns
+    renderCalendar(currentMonth, rebuildByDate())
+    const cachedToday = cachedTxns.filter(t => t.date === today)
+    if (cachedToday.length) renderDailyView(cachedToday)
+    const [,cm,cd] = today.split('-')
+    document.getElementById('detail-title').textContent = `${parseInt(cm)} 月 ${parseInt(cd)} 日`
+  }
 
   // 全部並行跑，不等 meta
   await Promise.all([loadMeta(), loadMonth(), loadRecurring()])
@@ -926,8 +958,10 @@ document.getElementById('new-income-cat').addEventListener('keydown',e=>{if(e.ke
 
 // ── 定期 Tab ──
 async function loadRecurring() {
+  const cached = swr.get('recurring')
+  if (cached) { recItems = cached; renderRecurring() }
   const res = await api.getRecurring()
-  if (res.ok) { recItems = res.data; renderRecurring() }
+  if (res.ok) { recItems = res.data; swr.set('recurring', res.data); renderRecurring() }
 }
 
 function renderRecurring() {

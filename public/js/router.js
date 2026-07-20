@@ -91,4 +91,13 @@ window.__openSettings = openUpdateModal
 
 initAppName()
 history.replaceState({ page: PAGE_BY_PATH[location.pathname] ?? 'overview' }, '', location.pathname + location.search)
-show(PAGE_BY_PATH[location.pathname] ?? 'overview', { push: false })
+show(PAGE_BY_PATH[location.pathname] ?? 'overview', { push: false }).then(() => {
+  // 首頁載完後，背景把其他頁的模組與資料全部預載進快取 → 切頁零等待
+  const idle = 'requestIdleCallback' in window ? f => requestIdleCallback(f, { timeout: 3000 }) : f => setTimeout(f, 1000)
+  idle(() => {
+    for (const p of Object.keys(PATH_BY_PAGE)) {
+      if (p === currentPage) continue // 目前頁面已載入自己的資料
+      import('/js/pages/' + p + '.js').then(m => m.prefetch?.()).catch(() => {})
+    }
+  })
+})

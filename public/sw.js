@@ -1,6 +1,9 @@
-const CACHE = 'finance-v10'
+const CACHE = 'finance-v11'
 
-const PAGES = ['/index.html', '/transactions.html', '/investments.html', '/report.html', '/reconcile.html', '/add.html']
+// SPA：五個頁面路徑都由 index.html 提供
+// 預快取用 '/' 和 '/add'（.html 路徑會被 assets 307 轉址，fetch 結果 redirected 無法入快取）
+const PAGES = ['/', '/add']
+const SPA_PATHS = new Set(['/', '/index.html', '/transactions.html', '/investments.html', '/report.html', '/reconcile.html'])
 
 self.addEventListener('install', e => {
   self.skipWaiting()
@@ -8,7 +11,9 @@ self.addEventListener('install', e => {
     caches.open(CACHE).then(cache =>
       Promise.all(PAGES.map(url =>
         fetch(url).then(r => {
-          if (r.ok && !r.redirected) cache.put(url, r)
+          if (!r.ok || r.redirected) return
+          const keys = url === '/' ? ['/index.html'] : [url, url + '.html']
+          return Promise.all(keys.map(k => cache.put(k, r.clone())))
         }).catch(() => {})
       ))
     )
@@ -47,16 +52,15 @@ self.addEventListener('fetch', e => {
 
   // HTML navigation：cache-first，背景更新
   if (request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/') {
+    // SPA 頁面路徑一律對應 /index.html 的快取
+    const cacheKey = SPA_PATHS.has(url.pathname) ? '/index.html' : url.pathname
     e.respondWith(
       caches.open(CACHE).then(async cache => {
-        // 嘗試精確命中，再試 pathname（處理 / vs /index.html）
-        let cached = await cache.match(request)
-        if (!cached && url.pathname === '/') cached = await cache.match('/index.html')
-        if (!cached) cached = await cache.match(url.pathname)
+        const cached = await cache.match(cacheKey)
 
-        // 背景更新
+        // 背景更新（存回統一的 cacheKey）
         const revalidate = fetch(request).then(r => {
-          if (r.ok && !r.redirected) cache.put(request, r.clone())
+          if (r.ok && !r.redirected) cache.put(cacheKey, r.clone())
           return r
         }).catch(() => null)
 

@@ -12,8 +12,6 @@ import recurringRoute from './routes/recurring'
 import authRoute from './routes/auth'
 import { getAssets, getCategories, processRecurring, createTransfer, getInvestments, getMonthlySummary, recordAssetSnapshot } from './db/queries'
 import { generateShortcut } from './shortcut-generator'
-import { generateShortcut } from './shortcut-generator'
-import { generateShortcut } from './shortcut-generator'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -32,22 +30,6 @@ app.get('/api/app-config', async (c) => {
   } catch {
     return c.json({ app_name: c.env.APP_NAME || '我的財務' })
   }
-})
-
-// add.html 專用 manifest
-app.get('/add-manifest.json', async (c) => {
-  return c.json({
-    name: '記帳',
-    short_name: '記帳',
-    description: '快速新增記錄',
-    start_url: '/add.html',
-    scope: '/',
-    display: 'standalone',
-    background_color: '#0d1117',
-    theme_color: '#0d1117',
-    orientation: 'portrait-primary',
-    icons: [{ src: '/icons/add-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }],
-  }, 200, { 'Content-Type': 'application/manifest+json' })
 })
 
 // add.html 專用 manifest
@@ -135,40 +117,6 @@ app.get('/api/shortcut/download', async (c) => {
   }
 })
 
-// iOS 捷徑動態生成（token 嵌入）— 不需要驗證，token 來自 query param
-app.get('/api/shortcut/download', async (c) => {
-  const token = c.req.query('t')
-  if (!token) return c.json({ ok: false, error: 'missing token' }, 400)
-  try {
-    const buf = generateShortcut(token)
-    return new Response(buf, {
-      headers: {
-        'Content-Type': 'application/vnd.apple.shortcut',
-        'Content-Disposition': 'attachment; filename=jizhang.shortcut'
-      }
-    })
-  } catch (e: any) {
-    return c.json({ ok: false, error: String(e?.message ?? e) }, 500)
-  }
-})
-
-// iOS 捷徑動態生成（token 嵌入）— 不需要驗證，token 來自 query param
-app.get('/api/shortcut/download', async (c) => {
-  const token = c.req.query('t')
-  if (!token) return c.json({ ok: false, error: 'missing token' }, 400)
-  try {
-    const buf = generateShortcut(token)
-    return new Response(buf, {
-      headers: {
-        'Content-Type': 'application/vnd.apple.shortcut',
-        'Content-Disposition': 'attachment; filename=jizhang.shortcut'
-      }
-    })
-  } catch (e: any) {
-    return c.json({ ok: false, error: String(e?.message ?? e) }, 500)
-  }
-})
-
 app.route('/api/transactions', transactionsRoute)
 app.route('/api/investments', investmentsRoute)
 app.route('/api/summary', summaryRoute)
@@ -203,11 +151,21 @@ app.post('/api/cron/run', async (c) => {
     .catch(e => c.json({ ok: false, error: String(e) }, 500))
 })
 
+// SPA：舊的頁面路徑一律回傳 index.html（前端 router 依 pathname 顯示對應頁面）
+const SPA_PATHS = new Set(['/transactions.html', '/reconcile.html', '/investments.html', '/report.html'])
+
 // 靜態檔案 fallback（讓 ASSETS binding 處理所有未匹配的路由）
 app.all('*', async (c) => {
-  const res = await (c.env.ASSETS as Fetcher).fetch(c.req.raw)
-  const ct = res.headers.get('content-type') ?? ''
   const path = new URL(c.req.url).pathname
+  let assetReq = c.req.raw
+  if (c.req.method === 'GET' && SPA_PATHS.has(path)) {
+    // 用 '/' 而非 '/index.html'：assets 會把 /index.html 307 轉址回 /，反而丟失原路徑
+    const u = new URL(c.req.url)
+    u.pathname = '/'
+    assetReq = new Request(u.toString(), c.req.raw)
+  }
+  const res = await (c.env.ASSETS as Fetcher).fetch(assetReq)
+  const ct = res.headers.get('content-type') ?? ''
   if (path === '/sw.js') {
     // SW 絕對不能被快取，否則瀏覽器拿不到新版本
     const newRes = new Response(res.body, res)

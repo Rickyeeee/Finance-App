@@ -1,320 +1,14 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>報表 — 瑞奇財務</title>
-<link rel="manifest" href="/manifest.json">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="瑞奇財務">
-<meta name="theme-color" content="#161b22">
-<link rel="apple-touch-icon" href="/icons/icon.svg">
-<link rel="stylesheet" href="/css/style.css?v=1784541104574">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<style>
-/* ── 日期導航 ── */
-.report-nav {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 12px 0 4px;
-}
-.report-nav-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 20px;
-  cursor: pointer;
-  padding: 4px 10px;
-  border-radius: 6px;
-  line-height: 1;
-}
-.report-nav-btn:hover { background: var(--surface2); color: var(--text); }
-.report-nav-label {
-  font-size: 16px;
-  font-weight: 600;
-  min-width: 160px;
-  text-align: center;
-}
-.report-mode-toggle {
-  display: flex;
-  gap: 4px;
-  background: var(--surface2);
-  border-radius: 8px;
-  padding: 3px;
-}
-.report-mode-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 4px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.report-mode-btn.active {
-  background: var(--surface);
-  color: var(--text);
-}
+import { api, toast, formatMoney, catIcon, initAppName, swr } from '/js/api.js'
 
-/* ── Tab 列 ── */
-.report-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--border);
-  margin: 12px 0 0;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-.report-tabs::-webkit-scrollbar { display: none; }
-.report-tab {
-  flex-shrink: 0;
-  padding: 10px 18px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-muted);
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  white-space: nowrap;
-  background: none;
-  border-top: none;
-  border-left: none;
-  border-right: none;
-}
-.report-tab.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-  font-weight: 600;
-}
+// 此模組由 build-spa 從 report.html 抽出，router 每次進入頁面時呼叫 show()
+// Chart 實例放模組層級：重新進入頁面時先 destroy 前一次的實例
+let chartByTab = { overview: [], detail: [], category: [], account: [], drill: [] }
 
-/* ── 總覽 ── */
-.summary-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 0;
-  border-bottom: 1px solid rgba(48,54,61,0.5);
-}
-.summary-row:last-child { border-bottom: none; }
-.summary-badge {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  color: #fff;
-  flex-shrink: 0;
-}
-.summary-label { font-size: 14px; min-width: 52px; flex-shrink: 0; }
-.summary-bar-wrap { flex: 1; min-width: 0; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
-.summary-bar { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
-.summary-amount { font-size: 14px; font-weight: 600; flex-shrink: 0; min-width: 80px; text-align: right; }
+export default async function show({ signal }) {
+Object.values(chartByTab).forEach(arr => { arr.forEach(c => c.destroy()); arr.length = 0 })
 
-/* ── 類別圓圈 ── */
-.cat-circles {
-  display: flex;
-  gap: 16px;
-  overflow-x: auto;
-  padding: 4px 0 8px;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-.cat-circles::-webkit-scrollbar { display: none; }
-.cat-circle-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.cat-circle-label { font-size: 12px; color: var(--text-muted); }
-.cat-circle-amt { font-size: 13px; font-weight: 600; color: var(--danger); }
-.cat-donut-wrap { position: relative; width: 72px; height: 72px; }
-.cat-donut-wrap canvas { width: 72px !important; height: 72px !important; }
-.cat-donut-pct {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text);
-}
 
-/* ── 明細 chart ── */
-.detail-chart-wrap { height: 160px; position: relative; margin-bottom: 4px; }
 
-/* ── 類別/帳戶 list ── */
-.breakdown-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(48,54,61,0.5);
-}
-.breakdown-row:last-child { border-bottom: none; }
-.breakdown-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--surface2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  flex-shrink: 0;
-}
-.breakdown-info { flex: 1; min-width: 0; }
-.breakdown-name { font-size: 14px; font-weight: 500; }
-.breakdown-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
-.breakdown-right { text-align: right; flex-shrink: 0; }
-.breakdown-amt { font-size: 14px; font-weight: 600; color: var(--danger); }
-.breakdown-pct { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
-
-/* ── 大 donut 圖 ── */
-.main-donut-wrap { position: relative; width: 200px; height: 200px; margin: 12px auto; }
-.main-donut-wrap canvas { width: 200px !important; height: 200px !important; }
-.main-donut-center {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-.main-donut-total { font-size: 22px; font-weight: 700; }
-.main-donut-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-
-/* ── 明細 list ── */
-.detail-date-header {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
-  padding: 14px 0 6px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid rgba(48,54,61,0.3);
-}
-.detail-txn-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 0;
-  border-bottom: 1px solid rgba(48,54,61,0.35);
-}
-.detail-txn-row:last-child { border-bottom: none; }
-.detail-txn-icon {
-  width: 32px; height: 32px; border-radius: 50%;
-  background: var(--surface2);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 14px; flex-shrink: 0;
-}
-.detail-txn-info { flex: 1; min-width: 0; }
-.detail-txn-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.detail-txn-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
-.detail-txn-amt { font-size: 13px; font-weight: 600; text-align: right; flex-shrink: 0; }
-
-/* ── 淨額 highlight ── */
-.net-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 0 4px;
-  border-top: 1px solid var(--border);
-  margin-top: 4px;
-}
-.net-label { font-size: 14px; font-weight: 600; }
-.net-amt { font-size: 18px; font-weight: 700; }
-
-/* year bar chart */
-.year-bars { display: flex; align-items: flex-end; gap: 4px; height: 100px; margin: 8px 0 4px; }
-.year-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.year-bar { width: 100%; border-radius: 3px 3px 0 0; min-height: 2px; transition: height .3s; }
-.year-bar-label { font-size: 9px; color: var(--text-muted); }
-.year-bar-val { font-size: 8px; color: var(--text-muted); white-space: nowrap; }
-
-@media (max-width: 768px) {
-  .report-nav-label { min-width: 130px; font-size: 15px; }
-}
-</style>
-</head>
-<body>
-
-<aside class="sidebar">
-  <div class="sidebar-logo"><span>💰</span><span>瑞奇財務</span></div>
-  <nav class="sidebar-nav">
-    <a href="/" class="nav-item"><span class="icon">🏠</span><span>資產總覽</span></a>
-    <a href="/transactions.html" class="nav-item"><span class="icon">📋</span><span>消費記錄</span></a>
-    <a href="/reconcile.html" class="nav-item"><span class="icon">🔍</span><span>帳戶對帳</span></a>
-    <a href="/investments.html" class="nav-item"><span class="icon">📈</span><span>投資損益</span></a>
-    <a href="/report.html" class="nav-item active"><span class="icon">📊</span><span>報表</span></a>
-  </nav>
-  <button class="sidebar-update-btn" onclick="import('/js/api.js?v=1784541104574').then(m=>m.openUpdateModal())">↑ 更新系統</button>
-</aside>
-
-<div class="main">
-  <div class="header">
-    <h1>報表</h1>
-  </div>
-
-  <div class="content">
-
-    <!-- 日期導航 -->
-    <div class="card" style="margin-bottom:16px;padding-bottom:0">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-        <div class="report-mode-toggle" style="flex-shrink:0">
-          <button class="report-mode-btn active" id="mode-month" onclick="setMode('month')">月</button>
-          <button class="report-mode-btn" id="mode-year" onclick="setMode('year')">年</button>
-        </div>
-        <div class="report-nav" style="flex:1;justify-content:center;padding:0">
-          <button class="report-nav-btn" onclick="prevPeriod()">‹</button>
-          <div class="report-nav-label" id="period-label">–</div>
-          <button class="report-nav-btn" onclick="nextPeriod()">›</button>
-        </div>
-      </div>
-
-      <!-- Tab 列 -->
-      <div class="report-tabs" id="report-tabs">
-        <button class="report-tab active" onclick="setTab('overview')">總覽</button>
-        <button class="report-tab" onclick="setTab('detail')">明細</button>
-        <button class="report-tab" onclick="setTab('category')">類別</button>
-        <button class="report-tab" onclick="setTab('account')">帳戶</button>
-      </div>
-    </div>
-
-    <!-- Tab 內容（4 個固定 panel，切換時 show/hide） -->
-    <div id="tab-content">
-      <div id="panel-overview"></div>
-      <div id="panel-detail"   style="display:none"></div>
-      <div id="panel-category" style="display:none"></div>
-      <div id="panel-account"  style="display:none"></div>
-      <div id="panel-drill"    style="display:none"></div>
-    </div>
-
-  </div>
-</div>
-
-<nav class="bottom-nav">
-  <a href="/" class="bottom-nav-item"><span class="nav-icon">🏠</span><span>總覽</span></a>
-  <a href="/report.html" class="bottom-nav-item active"><span class="nav-icon">📊</span><span>報表</span></a>
-  <a href="/transactions.html" class="bottom-nav-item add-center"><span class="nav-icon">+</span></a>
-  <a href="/reconcile.html" class="bottom-nav-item"><span class="nav-icon">🔍</span><span>對帳</span></a>
-  <a href="/investments.html" class="bottom-nav-item"><span class="nav-icon">📈</span><span>投資</span></a>
-</nav>
-
-<script type="module">
-import { api, toast, formatMoney, catIcon, initAppName, swr } from '/js/api.js?v=1784541104574'
-
-initAppName()
 
 // ── 狀態 ──
 let mode = 'month'   // 'month' | 'year'
@@ -322,7 +16,6 @@ let currentYear = new Date().getFullYear()
 let currentMonth = new Date().getMonth() + 1
 let activeTab = 'overview'
 let allTxns = []
-let chartByTab = { overview: [], detail: [], category: [], account: [], drill: [] }
 let renderedTabs = new Set()
 let drillFilter = null  // null | { type: 'category'|'account', key: string }
 let breakdownDir = 'expense'  // 'expense' | 'income'
@@ -981,15 +674,13 @@ if (window.innerWidth <= 768) {
   container.addEventListener('touchstart', e => {
     _sx = e.touches[0].clientX
     _sy = e.touches[0].clientY
-  }, { passive: true })
+  }, { passive: true, signal })
   container.addEventListener('touchend', e => {
     const dx = e.changedTouches[0].clientX - _sx
     const dy = e.changedTouches[0].clientY - _sy
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
       dx < 0 ? nextPeriod() : prevPeriod()
     }
-  }, { passive: true })
+  }, { passive: true, signal })
 }
-</script>
-</body>
-</html>
+}

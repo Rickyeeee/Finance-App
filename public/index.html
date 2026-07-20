@@ -10,41 +10,8 @@
 <meta name="apple-mobile-web-app-title" content="瑞奇財務">
 <meta name="theme-color" content="#161b22">
 <link rel="apple-touch-icon" href="/icons/icon.svg">
-<link rel="stylesheet" href="/css/style.css?v=1784541104574">
+<link rel="stylesheet" href="/css/style.css?v=1784552459510">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<style>
-.account-group { margin-bottom: 16px; }
-.account-group-title {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.account-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 0;
-  border-bottom: 1px solid rgba(48,54,61,0.5);
-  gap: 8px;
-}
-.account-row:last-child { border-bottom: none; }
-.account-row { cursor: pointer; }
-.account-row:hover { background: rgba(48,54,61,0.4); margin: 0 -4px; padding-left: 4px; padding-right: 4px; border-radius: 6px; }
-.type-icon { font-size: 15px; margin-right: 6px; }
-.bill-card { padding: 10px 0; border-bottom: 1px solid rgba(48,54,61,0.5); }
-.bill-card:last-child { border-bottom: none; }
-.bill-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.bill-sub-row { display: flex; align-items: center; gap: 8px; padding: 2px 0 2px 6px; font-size: 13px; }
-.bill-sub-label { color: var(--text-muted); min-width: 40px; flex-shrink: 0; }
-</style>
 <style>
 #splash {
   position: fixed; inset: 0; z-index: 99999;
@@ -88,19 +55,65 @@ if (!sessionStorage.getItem('splashShown')) {
     <span>💰</span><span>瑞奇財務</span>
   </div>
   <nav class="sidebar-nav">
-    <a href="/" class="nav-item active"><span class="icon">🏠</span><span>資產總覽</span></a>
-    <a href="/transactions.html" class="nav-item"><span class="icon">📋</span><span>消費記錄</span></a>
-    <a href="/reconcile.html" class="nav-item"><span class="icon">🔍</span><span>帳戶對帳</span></a>
-    <a href="/investments.html" class="nav-item"><span class="icon">📈</span><span>投資損益</span></a>
-    <a href="/report.html" class="nav-item"><span class="icon">📊</span><span>報表</span></a>
+    <a href="/" class="nav-item" data-page="overview"><span class="icon">🏠</span><span>資產總覽</span></a>
+    <a href="/transactions.html" class="nav-item" data-page="transactions"><span class="icon">📋</span><span>消費記錄</span></a>
+    <a href="/reconcile.html" class="nav-item" data-page="reconcile"><span class="icon">🔍</span><span>帳戶對帳</span></a>
+    <a href="/investments.html" class="nav-item" data-page="investments"><span class="icon">📈</span><span>投資損益</span></a>
+    <a href="/report.html" class="nav-item" data-page="report"><span class="icon">📊</span><span>報表</span></a>
   </nav>
-  <button class="sidebar-update-btn" onclick="import('/js/api.js?v=1784541104574').then(m=>m.openUpdateModal())">↑ 更新系統</button>
+  <button class="sidebar-update-btn" onclick="window.__openSettings&&window.__openSettings()">↑ 更新系統</button>
   <div class="sidebar-footer" id="last-sync">–</div>
 </aside>
 
+<div id="page-root" style="display:contents"></div>
+
+<nav class="bottom-nav">
+  <a href="/" class="bottom-nav-item" data-page="overview"><span class="nav-icon">🏠</span><span>總覽</span></a>
+  <a href="/report.html" class="bottom-nav-item" data-page="report"><span class="nav-icon">📊</span><span>報表</span></a>
+  <a href="/add.html" class="bottom-nav-item add-center"><span class="nav-icon">+</span></a>
+  <a href="/reconcile.html" class="bottom-nav-item" data-page="reconcile"><span class="nav-icon">🔍</span><span>對帳</span></a>
+  <a href="/investments.html" class="bottom-nav-item" data-page="investments"><span class="nav-icon">📈</span><span>投資</span></a>
+</nav>
+
+<template id="tpl-overview" data-title="資產總覽">
+<style>
+
+.account-group { margin-bottom: 16px; }
+.account-group-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(48,54,61,0.5);
+  gap: 8px;
+}
+.account-row:last-child { border-bottom: none; }
+.account-row { cursor: pointer; }
+.account-row:hover { background: rgba(48,54,61,0.4); margin: 0 -4px; padding-left: 4px; padding-right: 4px; border-radius: 6px; }
+.type-icon { font-size: 15px; margin-right: 6px; }
+.bill-card { padding: 10px 0; border-bottom: 1px solid rgba(48,54,61,0.5); }
+.bill-card:last-child { border-bottom: none; }
+.bill-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.bill-sub-row { display: flex; align-items: center; gap: 8px; padding: 2px 0 2px 6px; font-size: 13px; }
+.bill-sub-label { color: var(--text-muted); min-width: 40px; flex-shrink: 0; }
+
+</style>
 <div class="main">
   <div class="header">
-    <h1 onclick="import('/js/api.js?v=1784541104574').then(m=>m.openUpdateModal())" style="cursor:pointer">資產總覽</h1>
+    <h1 onclick="window.__openSettings&&window.__openSettings()" style="cursor:pointer">資產總覽</h1>
     <div class="header-actions">
       <button class="btn btn-secondary btn-sm" onclick="load()">↻ 重新整理</button>
     </div>
@@ -314,657 +327,1488 @@ if (!sessionStorage.getItem('splashShown')) {
     </div>
   </div>
 </div>
+</template>
 
-<script type="module">
-import { api, toast, formatMoney, fmtSigned, amtColor, formatDate, badgeHtml, catIcon, initAppName, swr } from '/js/api.js?v=1784541104574'
+<template id="tpl-transactions" data-title="消費記錄">
+<style>
 
-const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
-let trendChart = null
-let allAccounts = []
-let allInvestments = []
-let allCategories = []
+/* ── 月曆 ── */
+.cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.cal-title { font-size:17px; font-weight:600; }
+.cal-nav { display:flex; gap:2px; }
+.cal-nav button { width:30px; height:30px; border:none; background:none; color:var(--text-muted); font-size:20px; cursor:pointer; border-radius:6px; line-height:1; }
+.cal-nav button:hover { color:var(--text); }
 
-function resolvedCatIcon(name) {
-  const cat = allCategories.find(c => c.name === name)
-  return (cat && cat.icon) ? cat.icon : catIcon(name)
+.cal-dows { display:grid; grid-template-columns:repeat(7,1fr); }
+.cal-dow { font-size:11px; font-weight:500; color:var(--text-muted); padding:4px 0 6px 8px; }
+.cal-dow.sat { color:#f85149; }
+.cal-dow.sun { color:#f85149; }
+
+.cal-wrap { overflow:hidden; position:relative; }
+.cal-strip { display:flex; width:300%; transform:translateX(-33.333%); will-change:transform; }
+.cal-grid {
+  flex:1; min-width:0;
+  display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,1fr);
+  border-top:1px solid #252c36; border-left:1px solid #252c36;
+  height:456px;
 }
-function catCircleHtml(name, size = 36) {
-  const icon = resolvedCatIcon(name)
-  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*0.5)}px;flex-shrink:0">${icon}</div>`
+.cal-cell {
+  border-right:1px solid #252c36; border-bottom:1px solid #252c36;
+  padding:7px 5px 4px 7px; position:relative; cursor:default; overflow:visible;
 }
-function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+.cal-cell.clickable { cursor:pointer; }
+.cal-cell.net-neg { background:rgba(248,81,73,0.07); }
+.cal-cell.net-pos { background:rgba(63,185,80,0.08); }
+.cal-cell.today { box-shadow:inset 0 0 0 2px var(--accent); position:relative; z-index:1; }
+.cal-cell.selected { box-shadow:inset 0 0 0 2px var(--accent); background:rgba(88,166,255,0.09); position:relative; z-index:1; }
+.cal-cell.other-month { opacity:0.3; cursor:default; }
 
-const TYPE_ICON = { '銀行': '🏦', '銀行存款': '🏦', '證券戶': '📈', '投資帳戶': '📈', '信用卡': '💳', '現金': '💵' }
-const TYPE_LABEL = { '銀行': '銀行', '銀行存款': '銀行', '證券戶': '證券戶', '投資帳戶': '證券戶', '信用卡': '信用卡', '現金': '現金' }
-const TYPE_ORDER = ['銀行', '銀行存款', '證券戶', '投資帳戶', '信用卡', '現金']
+.cal-d { font-size:17px; font-weight:700; line-height:1; color:var(--text); font-variant-numeric:tabular-nums; }
+.cal-cell.sat-col .cal-d { color:#f85149; }
+.cal-cell.sun-col .cal-d { color:#f85149; }
+.cal-cell.today    .cal-d { color:var(--accent); }
+.cal-cell.other-month .cal-d { color:var(--text-muted) !important; }
 
-function applyAssetsData(d, historyData) {
-  allAccounts = d.accounts ?? []
-  allInvestments = d.investments ?? []
+.cal-amts { position:absolute; bottom:4px; right:5px; text-align:right; line-height:1.45; }
+.cal-inc { color:#3fb950; font-size:10px; font-weight:600; }
+.cal-exp { color:#f85149; font-size:10px; font-weight:600; }
 
-  document.getElementById('total-net-worth').textContent = formatMoney(d.total_net_worth)
-  document.getElementById('total-investments').textContent = formatMoney(d.total_investments)
+.cal-footer { display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding-top:10px; margin-top:2px; border-top:1px solid var(--border); font-size:12px; }
+.cf-item { display:flex; align-items:center; gap:5px; }
+.cf-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
 
-  const mInc = document.getElementById('monthly-income')
-  mInc.textContent = d.monthly_income > 0 ? 'NT$' + d.monthly_income.toLocaleString() : 'NT$0'
-  mInc.style.color = d.monthly_income > 0 ? 'var(--success)' : 'var(--text)'
+/* ── 當日總覽 ── */
+.detail-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+.detail-hd-title { font-size:15px; font-weight:600; }
+.overview-btn { display:flex; align-items:center; gap:4px; background:var(--surface2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:5px 10px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; }
+.overview-btn:hover { background:var(--surface); }
+.overview-btn.active { border-color:var(--accent); color:var(--accent); }
 
-  const mExp = document.getElementById('monthly-expense')
-  mExp.textContent = d.monthly_expense > 0 ? 'NT$' + d.monthly_expense.toLocaleString() : 'NT$0'
-  mExp.style.color = d.monthly_expense > 0 ? 'var(--danger)' : 'var(--text)'
+/* ── 定期 tab ── */
+.monthly-bar { display:flex; gap:16px; flex-wrap:wrap; padding:12px 16px; background:var(--surface2); border-radius:12px; margin-bottom:18px; }
+.monthly-bar-item { display:flex; flex-direction:column; gap:2px; }
+.monthly-bar-label { font-size:11px; color:var(--text-muted); }
+.monthly-bar-val { font-size:15px; font-weight:700; }
 
-  const net = (d.monthly_income ?? 0) - (d.monthly_expense ?? 0)
-  const incomeSub = document.getElementById('income-sub')
-  const expenseSub = document.getElementById('expense-sub')
-  if (net > 0) {
-    incomeSub.textContent = `本月盈餘 NT$${net.toLocaleString()}`
-    incomeSub.style.color = 'var(--success)'
-    expenseSub.textContent = '本月消費'
-    expenseSub.style.color = ''
-  } else if (net < 0) {
-    expenseSub.textContent = `本月虧損 NT$${Math.abs(net).toLocaleString()}`
-    expenseSub.style.color = 'var(--danger)'
-    incomeSub.textContent = '本月收入'
-    incomeSub.style.color = ''
-  } else {
-    incomeSub.textContent = '本月收入'
-    incomeSub.style.color = ''
-    expenseSub.textContent = '本月消費'
-    expenseSub.style.color = ''
-  }
-
-  const pnl = d.investment_pnl
-  const pnlEl = document.getElementById('investment-pnl')
-  pnlEl.textContent = formatMoney(pnl) + ' 損益'
-  pnlEl.style.color = pnl >= 0 ? 'var(--success)' : 'var(--danger)'
-
-  if (d.total_credit_used > 0) {
-    document.getElementById('net-worth-sub').textContent = `信用卡負債 ${formatMoney(d.total_credit_used)}`
-    document.getElementById('net-worth-sub').style.color = 'var(--danger)'
-  }
-
-  renderAccounts()
-  if (historyData) renderTrendChart(historyData, d.total_net_worth ?? 0)
-}
-
-async function load() {
-  // 快取先渲染
-  const cachedAssets = swr.get('assets')
-  const cachedHistory = swr.get('asset-history')
-  if (cachedAssets) {
-    applyAssetsData(cachedAssets, cachedHistory ?? [])
-    renderCountdowns()
-    loadDailySummary()
-  }
-
-  // 背景拉新資料
-  const [assetsRes, historyRes, catsRes] = await Promise.all([
-    api.getAssets(),
-    api.getAssetHistory(12),
-    api.getCategories(),
-  ])
-  if (catsRes.ok) allCategories = catsRes.data
-  if (!assetsRes.ok) return
-
-  swr.set('assets', assetsRes.data)
-  if (historyRes.ok) swr.set('asset-history', historyRes.data)
-
-  applyAssetsData(assetsRes.data, historyRes.data ?? [])
-  if (!cachedAssets) {
-    renderCountdowns()
-    loadDailySummary()
-  }
+.rec-item { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border); }
+.rec-item:last-child { border-bottom:none; }
+.rec-item-info { flex:1; min-width:0; }
+.rec-item-name { font-weight:600; font-size:14px; }
+.rec-item-meta { font-size:12px; color:var(--text-muted); margin-top:2px; }
+.rec-meta-sep { display:inline; }
+.rec-meta-card { display:inline; }
+.rec-item-right { text-align:right; flex-shrink:0; }
+.rec-item-amt { font-size:15px; font-weight:700; }
+.rec-item-next { font-size:11px; color:var(--text-muted); margin-top:2px; }
+.rec-group-hd { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); padding:12px 0 6px; border-bottom:1px solid var(--border); margin-bottom:4px; display:flex; align-items:center; justify-content:space-between; }
+@media (max-width:768px) {
+  .rec-meta-sep { display:none; }
+  .rec-meta-card { display:block; }
 }
 
-function renderAccounts() {
-  const container = document.getElementById('accounts-list')
+/* 分類管理 */
+.cat-manage-btn { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:14px; padding:2px 6px; border-radius:4px; }
+.cat-manage-btn:hover { color:var(--text); }
+.cat-item { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border); }
+.cat-item:last-child { border-bottom:none; }
 
-  // 依類別分組
-  const groups = {}
-  for (const acc of allAccounts) {
-    const label = TYPE_LABEL[acc.type] ?? acc.type
-    if (!groups[label]) groups[label] = []
-    groups[label].push(acc)
-  }
+@media (max-width: 640px) {
+  .cal-cell { padding:5px 3px 3px 5px; }
+  .cal-grid { height:282px; }
+  .cal-d { font-size:14px; }
+  .cal-inc, .cal-exp { font-size:9px; }
+  .cal-dow { font-size:10px; padding-left:4px; }
+}
 
-  // 證券戶特殊處理：顯示投資市值
-  const invByAccount = {}
-  for (const inv of allInvestments) {
-    if (!invByAccount[inv.account]) invByAccount[inv.account] = 0
-    invByAccount[inv.account] += inv.market_value
-  }
+</style>
+<div class="main">
+  <div class="header">
+    <h1>消費記錄</h1>
+    <div class="header-actions">
+      <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ 新增</button>
+      <button class="btn btn-secondary btn-sm" onclick="loadMonth()">↻ 重新整理</button>
+    </div>
+  </div>
 
-  const order = ['銀行', '證券戶', '信用卡', '現金']
-  let html = ''
+  <div class="content">
+    <!-- Tab 切換 -->
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-btn-records" onclick="switchTab('records')">📋 記錄</button>
+      <button class="tab-btn" id="tab-btn-recurring" onclick="switchTab('recurring')">🔄 定期</button>
+    </div>
 
-  for (const type of order) {
-    const accs = groups[type]
-    if (!accs?.length) continue
-
-    const included = accs.filter(a => (a.include_in_total ?? 1) !== 0)
-    const groupTotal = included.reduce((s, a) => s + (type === '證券戶' ? (invByAccount[a.name] ?? a.balance) : a.balance), 0)
-    const groupTotalDisplay = groupTotal < 0
-      ? `<span style="color:var(--danger)">-${formatMoney(groupTotal)}</span>`
-      : `<span style="color:var(--accent)">${formatMoney(groupTotal)}</span>`
-    html += `<div class="account-group">
-      <div class="account-group-title">
-        <span>${TYPE_ICON[type] ?? ''} ${type}</span>
-        ${groupTotalDisplay}
-      </div>`
-
-    for (const acc of accs) {
-      const displayBalance = (type === '證券戶') ? (invByAccount[acc.name] ?? acc.balance) : acc.balance
-      const balanceColor = displayBalance < 0 ? 'var(--danger)' : 'var(--accent)'
-      const balanceSign = displayBalance < 0 ? '-' : ''
-      const excluded = (acc.include_in_total ?? 1) === 0
-      html += `<div class="account-row" style="${excluded ? 'opacity:0.5' : ''}" onclick="openEditModal('${acc.id}','${escJs(acc.name)}',${acc.balance},'${acc.type}',${acc.include_in_total ?? 1},${acc.billing_day ?? 'null'},${acc.payment_day ?? 'null'},${acc.credit_limit ?? 0},'${acc.payment_method ?? 'manual'}','${escJs(acc.payment_account ?? '')}')">
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-            ${escHtml(acc.name)}
-            ${excluded ? '<span style="font-size:10px;color:var(--warning);margin-left:4px;vertical-align:middle">不計入</span>' : ''}
+    <!-- ── 記錄 Tab ── -->
+    <div id="panel-records">
+      <div class="card" style="margin-bottom:16px">
+        <div class="cal-header">
+          <div class="cal-title" id="cal-title" onclick="jumpToToday()" style="cursor:pointer">–</div>
+          <div class="cal-nav">
+            <button onclick="changeMonth(-1)">‹</button>
+            <button onclick="changeMonth(1)">›</button>
           </div>
-          ${acc.bank ? `<div class="text-muted text-small">${escHtml(acc.bank)}</div>` : ''}
-          ${type === '信用卡' && acc.credit_limit ? `<div class="text-muted text-small">可用 NT$${(acc.credit_limit + acc.balance).toLocaleString()} / ${acc.credit_limit.toLocaleString()}（${Math.max(0, Math.round((acc.credit_limit + acc.balance) / acc.credit_limit * 100))}%）</div>` : ''}
         </div>
-        <div style="font-weight:600;color:${balanceColor};white-space:nowrap;text-align:right">${balanceSign}${formatMoney(displayBalance)}</div>
-      </div>`
-    }
-
-    html += '</div>'
-  }
-
-  if (!html) {
-    html = '<div class="empty-state">尚無帳戶<p>點擊「新增帳戶」開始設定</p></div>'
-  }
-
-  container.innerHTML = html
-}
-
-function renderTrendChart(history, liveTotalAssets) {
-  const ctx = document.getElementById('trendChart').getContext('2d')
-  if (trendChart) trendChart.destroy()
-
-  // 建立快照索引（以 YYYY-MM 為 key）
-  const snapMap = {}
-  for (const h of history) snapMap[h.snapshot_date.slice(0, 7)] = h.total_assets
-
-  // 產生近 12 個月的完整月份格子
-  const nowTaipei = new Date(Date.now() + 8 * 60 * 60 * 1000)
-  const labels = [], values = []
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(nowTaipei)
-    d.setUTCMonth(d.getUTCMonth() - i)
-    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`
-    const label = `${d.getUTCFullYear()}/${String(d.getUTCMonth()+1).padStart(2,'0')}`
-    labels.push(label)
-    values.push(snapMap[key] ?? null)
-  }
-
-  // 今天的即時資產永遠補在最右邊（覆蓋本月）
-  values[values.length - 1] = liveTotalAssets
-
-  // 用前一個已知值填補空白（carry forward）
-  let _last = null
-  for (let i = 0; i < values.length; i++) {
-    if (values[i] !== null) _last = values[i]
-    else if (_last !== null) values[i] = _last
-  }
-
-  if (values.every(v => v === null)) {
-    ctx.canvas.parentElement.innerHTML = '<div class="empty-state">尚無歷史資料<p>系統每日午夜自動記錄，或手動點「快照」</p></div>'
-    return
-  }
-
-  trendChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        label: '總資產',
-        data: values,
-        borderColor: '#58a6ff',
-        backgroundColor: 'rgba(88,166,255,0.1)',
-        fill: true, tension: 0.3, pointRadius: 3, pointHoverRadius: 5,
-        spanGaps: false,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: {
-        callbacks: { label: ctx => ctx.raw != null ? 'NT$' + ctx.raw.toLocaleString() : '無資料' }
-      }},
-      scales: {
-        x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 11 } } },
-        y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 11 },
-          callback: v => 'NT$' + (Math.abs(v) >= 10000 ? (v/10000).toFixed(0)+'W' : v.toLocaleString()) } }
-      },
-      interaction: { mode: 'index', intersect: false },
-    }
-  })
-}
-
-async function renderCountdowns() {
-  const now = new Date()
-  const y = now.getFullYear(), m = now.getMonth()
-
-  function nextDate(day) {
-    let t = new Date(y, m, day)
-    const tStr = t.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
-    if (tStr < today) t = new Date(y, m + 1, day)
-    const daysUntil = Math.ceil((t - now) / 86400000)
-    return { month: t.getMonth() + 1, day, daysUntil }
-  }
-
-  // 查詢某信用卡的帳單期間交易（含上期延後入帳），判斷是否已對帳 + 總金額
-  async function getBillingStatus(accName, billingDay) {
-    const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-
-    // 取最近一個「已過」的結算日
-    let periodEnd = new Date(y, m, billingDay)
-    if (periodEnd > now) periodEnd = new Date(y, m - 1, billingDay)
-    if (periodEnd > now) return null  // 結算日還沒到過
-
-    // 當期起始 = 上個結算日的隔天
-    const periodStart = new Date(periodEnd)
-    periodStart.setMonth(periodStart.getMonth() - 1)
-    periodStart.setDate(billingDay + 1)
-
-    // 上期起始（用來撈延後入帳）
-    const prevStart = new Date(periodStart)
-    prevStart.setMonth(prevStart.getMonth() - 1)
-
-    const startStr = fmt(periodStart)
-    const endStr = fmt(periodEnd)
-    const prevStartStr = fmt(prevStart)
-
-    const res = await api.getTransactions({ date_from: prevStartStr, date_to: endStr, limit: 5000 })
-    if (!res.ok) return null
-
-    const txns = (res.data ?? []).filter(t =>
-      t.card === accName && !t.transfer_id && t.type !== '收入' && (
-        (t.date >= startStr && t.date <= endStr && t.status !== '延後入帳') ||
-        (t.status === '延後入帳' && t.date >= prevStartStr && t.date < startStr)
-      )
-    )
-
-    if (!txns.length) return { noTxns: true, endStr }
-    const reconciled = txns.every(t => t.status !== '待確認')
-    const amount = txns.filter(t => t.status === '已對帳').reduce((s, t) => s + t.amount, 0)
-    return { reconciled, amount, endStr }
-  }
-
-  async function checkPaymentDone(cardName, periodEnd) {
-    const d = new Date(periodEnd)
-    d.setDate(d.getDate() + 60)
-    const laterEnd = d.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
-    const res = await api.getTransactions({ date_from: periodEnd, date_to: laterEnd, card: cardName, limit: 100 })
-    if (!res.ok) return false
-    return (res.data ?? []).some(t => (t.name === '手動繳款' || t.name === '自動扣繳') && t.transfer_id)
-  }
-
-  const ccAccounts = allAccounts.filter(a => a.type === '信用卡')
-
-  if (!ccAccounts.length) {
-    document.getElementById('upcoming-bills').innerHTML = '<div class="empty-state" style="padding:12px 0">無信用卡帳戶</div>'
-    return
-  }
-
-  function paymentColor(days) {
-    if (days <= 1) return 'var(--danger)'
-    if (days <= 3) return 'var(--warning)'
-    if (days <= 5) return 'var(--success)'
-    return 'var(--text-muted)'
-  }
-
-  // 根據結算日結果計算實際扣款日期字串
-  function calcPaymentDateStr(periodEndStr, billingDay, paymentDay) {
-    const [ey, em, ed] = periodEndStr.split('-').map(Number)
-    // payment_day > billing_day → 同月；否則 → 下個月
-    const sameMonth = paymentDay > billingDay
-    const t = new Date(ey, sameMonth ? em - 1 : em, paymentDay)
-    return t.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
-  }
-
-  let html = ''
-  for (const acc of ccAccounts) {
-    // 對帳狀態
-    const status = acc.billing_day ? await getBillingStatus(acc.name, acc.billing_day) : null
-    const isPaid = (status && !status.noTxns) ? await checkPaymentDone(acc.name, status.endStr) : false
-
-    // 判斷扣款日是否已過
-    let paymentPast = false
-    if (status && acc.payment_day) {
-      const payDateStr = calcPaymentDateStr(status.endStr, acc.billing_day, acc.payment_day)
-      paymentPast = payDateStr < today
-    }
-
-    // 扣款日已過且已繳款或無消費 → 回到空窗期，顯示 –
-    const backToIdle = paymentPast && (isPaid || status?.noTxns)
-
-    let statusHtml = ''
-    if (status === null || backToIdle) {
-      statusHtml = `<span style="color:var(--text-muted);font-size:12px">–</span>`
-    } else if (status.noTxns) {
-      statusHtml = `<span style="color:var(--text-muted);font-size:12px">本期無消費</span>`
-    } else if (isPaid) {
-      statusHtml = `<span style="color:var(--success);font-size:13px;font-weight:600">已繳款</span>`
-    } else if (paymentPast) {
-      statusHtml = `<span style="color:var(--danger);font-size:13px;font-weight:600">未繳款</span>`
-    } else if (status.reconciled) {
-      statusHtml = `<span style="color:var(--success);font-size:13px;font-weight:600">NT$${status.amount.toLocaleString()} 應繳</span>`
-    } else {
-      statusHtml = `<span style="color:var(--warning);font-size:13px">未對帳</span>`
-    }
-
-    // 結算日列
-    let billingRow = ''
-    if (acc.billing_day) {
-      if (status !== null && !backToIdle) {
-        // 當期結算日已過 → 顯示當期日期 + 已結算
-        const [ey, em, ed] = status.endStr.split('-').map(Number)
-        billingRow = `<div class="bill-sub-row">
-          <span class="bill-sub-label">結算日</span>
-          <span>${em} 月 ${ed} 日</span>
-          <span style="flex:1"></span>
-          <span style="color:var(--text-muted);font-size:11px">已結算</span>
-        </div>`
-      } else {
-        // 結算日還沒到（或空窗期等下期）→ 顯示即將到來的結算日
-        const b = nextDate(acc.billing_day)
-        billingRow = `<div class="bill-sub-row">
-          <span class="bill-sub-label">結算日</span>
-          <span>${b.month} 月 ${b.day} 日</span>
-          <span style="flex:1"></span>
-          <span style="color:var(--text-muted)">${b.daysUntil} 天後</span>
-        </div>`
-      }
-    }
-
-    // 扣款日列（有顏色）
-    let paymentRow = ''
-    if (acc.payment_day) {
-      let payDateStr = null
-      if (status !== null && !backToIdle) {
-        // 從當期結算日推算扣款日
-        payDateStr = calcPaymentDateStr(status.endStr, acc.billing_day, acc.payment_day)
-      } else {
-        // 結算日還沒到 → 從下一個結算日推算扣款日
-        const b = nextDate(acc.billing_day)
-        const fakeEnd = `${y + (b.month === 1 && m === 12 ? 1 : 0)}-${String(b.month).padStart(2,'0')}-${String(b.day).padStart(2,'0')}`
-        payDateStr = calcPaymentDateStr(fakeEnd, acc.billing_day, acc.payment_day)
-      }
-      if (payDateStr) {
-        const payD = new Date(payDateStr + 'T00:00:00')
-        const daysUntil = Math.ceil((payD - now) / 86400000)
-        const col = paymentColor(daysUntil)
-        const [, pm, pd] = payDateStr.split('-').map(Number)
-        const label = daysUntil > 0 ? `${daysUntil} 天後` : daysUntil === 0 ? '今天' : `${Math.abs(daysUntil)} 天前`
-        paymentRow = `<div class="bill-sub-row">
-          <span class="bill-sub-label">扣款日</span>
-          <span>${pm} 月 ${pd} 日</span>
-          <span style="flex:1"></span>
-          <span style="color:${daysUntil >= 0 ? col : 'var(--text-muted)'};font-weight:600">${label}</span>
-        </div>`
-      }
-    }
-
-    if (!acc.billing_day && !acc.payment_day) {
-      billingRow = `<div class="bill-sub-row"><span class="text-muted text-small">尚未設定結算日 / 扣款日</span></div>`
-    }
-
-    html += `<div class="bill-card">
-      <div class="bill-card-header">
-        <div style="font-weight:600">💳 ${acc.name}</div>
-        <div>${statusHtml}</div>
-      </div>
-      ${billingRow}${paymentRow}
-    </div>`
-  }
-
-  document.getElementById('upcoming-bills').innerHTML = html
-}
-
-function mergeTransferPairs(txns) {
-  const result = []
-  const seen = new Set()
-  for (const t of txns) {
-    if (t.transfer_id) {
-      if (seen.has(t.transfer_id)) continue
-      seen.add(t.transfer_id)
-      const out = txns.find(x => x.transfer_id === t.transfer_id && x.type === '支出') || t
-      const inc = txns.find(x => x.transfer_id === t.transfer_id && x.type === '收入') || t
-      result.push({ ...out, _isMergedTransfer: true, _xfrFrom: out.card, _xfrTo: inc.card })
-    } else {
-      result.push(t)
-    }
-  }
-  return result
-}
-
-async function loadDailySummary() {
-  const el = document.getElementById('daily-summary')
-  const month = today.slice(0, 7)
-  const res = await api.getTransactions({ month, limit: 500 })
-  if (!res.ok) { el.innerHTML = '<div class="text-muted" style="font-size:13px">載入失敗</div>'; return }
-  const txns = res.data.filter(t => t.date === today)
-  if (!txns.length) { el.innerHTML = '<div class="empty-state" style="padding:16px 0">今日無消費記錄</div>'; return }
-
-  const realTxns = txns.filter(t => !t.transfer_id)
-  const expTotal = realTxns.filter(t => t.type !== '收入').reduce((s,t) => s+t.amount, 0)
-  const incTotal = realTxns.filter(t => t.type === '收入').reduce((s,t) => s+t.amount, 0)
-
-  let html = mergeTransferPairs(txns).map(t => {
-    if (t._isMergedTransfer) {
-      const icon = `<div style="width:36px;height:36px;border-radius:50%;background:rgba(208,112,48,0.15);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">↔</div>`
-      return `<div class="txn-row">
-        ${icon}
-        <div class="txn-info">
-          <div class="txn-name">${escHtml(t.note || '轉帳')}</div>
-          <div class="txn-meta">${escHtml(t._xfrFrom)} → ${escHtml(t._xfrTo)}</div>
+        <div class="cal-dows">
+          <div class="cal-dow">週一</div><div class="cal-dow">週二</div>
+          <div class="cal-dow">週三</div><div class="cal-dow">週四</div>
+          <div class="cal-dow">週五</div>
+          <div class="cal-dow sat">週六</div><div class="cal-dow sun">週日</div>
         </div>
-        <div class="txn-right">
-          <span class="txn-amt" style="color:#d07030">NT$${t.amount.toLocaleString()}</span>
+        <div class="cal-wrap">
+          <div class="cal-strip" id="cal-strip">
+            <div id="cal-grid-prev" class="cal-grid"></div>
+            <div id="cal-grid" class="cal-grid"></div>
+            <div id="cal-grid-next" class="cal-grid"></div>
+          </div>
         </div>
-      </div>`
-    }
-    const recBadge = t.source === '定期' ? ' <span style="font-size:12px">🔁</span>' : ''
-    return `<div class="txn-row">
-      ${catCircleHtml(t.category, 36)}
-      <div class="txn-info">
-        <div class="txn-name">${escHtml(t.name || t.category)}${recBadge}</div>
-        <div class="txn-meta">${t.card ? escHtml(t.card) : ''}</div>
+        <div class="cal-footer" id="cal-footer"></div>
       </div>
-      <div class="txn-right">
-        <span class="txn-amt ${t.type==='收入'?'amt-inc':'amt-exp'}">${fmtSigned(t.amount,t.type)}</span>
+
+      <div class="card">
+        <div class="detail-hd">
+          <div class="detail-hd-title" id="detail-title">當日總覽</div>
+          <button class="overview-btn" id="overview-btn" onclick="toggleMonthly()">
+            總覽 <span id="overview-arrow">▾</span>
+          </button>
+        </div>
+        <div id="daily-view">
+          <div class="empty-state" style="padding:20px 0">點選月曆中的日期查看當日記錄</div>
+        </div>
+        <div id="monthly-view" style="display:none"></div>
       </div>
-    </div>`
-  }).join('')
+    </div>
 
-  if (txns.length > 1) {
-    const parts = []
-    if (expTotal > 0) parts.push(`支出 <b style="color:var(--danger)">$${expTotal.toLocaleString()}</b>`)
-    if (incTotal > 0) parts.push(`收入 <b style="color:#3fb950">$${incTotal.toLocaleString()}</b>`)
-    if (parts.length) html += `<div style="padding:6px 0 0;font-size:12px;color:var(--text-muted);display:flex;gap:14px">${parts.join('')}</div>`
+    <!-- ── 定期 Tab ── -->
+    <div id="panel-recurring" style="display:none">
+      <div class="monthly-bar" id="rec-monthly-bar"></div>
+      <div class="card">
+        <div style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:16px">
+          <button class="btn btn-primary btn-sm" onclick="openRecModal()">+ 新增</button>
+        </div>
+        <div id="rec-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 新增/編輯交易 Modal -->
+<div class="modal-overlay" id="txn-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">新增支出</div>
+      <button class="modal-close" onclick="closeTxnModal()">×</button>
+    </div>
+    <input type="hidden" id="edit-id">
+    <input type="hidden" id="edit-recurring-id">
+    <div class="type-toggle">
+      <button id="btn-expense" class="active-expense" onclick="setType('支出')">支出</button>
+      <button id="btn-income" onclick="setType('收入')">收入</button>
+      <button id="btn-transfer-type" onclick="setType('轉帳')">↔ 轉帳</button>
+    </div>
+
+    <!-- 支出 / 收入欄位 -->
+    <div id="fields-normal">
+      <div class="form-group">
+        <label class="form-label">日期 *</label>
+        <input type="date" id="f-date">
+      </div>
+      <div class="form-group">
+        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">
+          <span>分類</span>
+          <button class="cat-manage-btn" onclick="openCatModal()">⚙️</button>
+        </label>
+        <select id="f-category"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">金額 (NT$) *</label>
+        <input type="number" id="f-amount" placeholder="0" class="calc-input" oninput="updateNormalTotal()">
+      </div>
+      <div id="fee-section-normal" style="display:none">
+        <div class="form-group" style="margin-bottom:4px">
+          <label class="form-label">手續費 (NT$)</label>
+          <input type="number" id="f-fee" placeholder="0" class="calc-input" oninput="updateNormalTotal()">
+        </div>
+        <div id="fee-total-normal" style="font-size:12px;color:var(--text-muted);padding:0 0 8px;font-weight:500"></div>
+      </div>
+      <button type="button" id="fee-toggle-normal" onclick="toggleFeeSection('normal')" style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0 0 10px;font-family:inherit;text-align:left;display:block">＋ 加入手續費</button>
+      <div class="form-group">
+        <label class="form-label">名稱 <span style="color:var(--text-muted);font-weight:400;font-size:11px">選填</span></label>
+        <input type="text" id="f-name" placeholder="例：全家、薪資">
+      </div>
+      <div class="form-group">
+        <label class="form-label">帳戶</label>
+        <select id="f-card"></select>
+      </div>
+      <input type="hidden" id="f-note">
+    </div>
+
+    <!-- 轉帳欄位 -->
+    <div id="fields-transfer" style="display:none">
+      <div style="background:rgba(88,166,255,0.06);border:1px solid rgba(88,166,255,0.2);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--text-muted)">
+        同時建立兩筆關聯記錄：來源帳戶的支出 + 目標帳戶的收入
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">來源帳戶 *</label>
+          <select id="f-xfr-from"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">目標帳戶 *</label>
+          <select id="f-xfr-to"></select>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">金額 (NT$) *</label>
+          <input type="number" id="f-xfr-amount" placeholder="0" class="calc-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label">日期 *</label>
+          <input type="date" id="f-xfr-date">
+        </div>
+      </div>
+      <div id="fee-section-transfer" style="display:none">
+        <div class="form-group" style="margin-bottom:4px">
+          <label class="form-label">手續費 (NT$) <span style="color:var(--text-muted);font-weight:400;font-size:11px">從來源帳戶額外扣除</span></label>
+          <input type="number" id="f-xfr-fee" placeholder="0" class="calc-input">
+        </div>
+      </div>
+      <button type="button" id="fee-toggle-transfer" onclick="toggleFeeSection('transfer')" style="background:none;border:none;color:var(--accent);font-size:12px;cursor:pointer;padding:0 0 10px;font-family:inherit;text-align:left;display:block">＋ 加入手續費</button>
+      <div class="form-group">
+        <label class="form-label">備註</label>
+        <input type="text" id="f-xfr-note" placeholder="選填">
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="modal-delete-btn" style="display:none;margin-right:auto" onclick="deleteFromModal()">刪除</button>
+      <button class="btn btn-secondary" onclick="closeTxnModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveTxn()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 定期紀錄詳細 Modal -->
+<div class="modal-overlay" id="rec-detail-modal">
+  <div class="modal" style="max-width:480px;max-height:82vh;display:flex;flex-direction:column">
+    <div class="modal-header" style="flex-shrink:0;align-items:flex-start">
+      <div style="flex:1;min-width:0">
+        <div class="modal-title" id="rcd-name"></div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="rcd-meta"></div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;margin-left:12px">
+        <div id="rcd-total" style="font-size:18px;font-weight:700"></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:1px" id="rcd-total-label"></div>
+      </div>
+      <button class="modal-close" onclick="document.getElementById('rec-detail-modal').classList.remove('open')" style="margin-left:12px">×</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:0 20px 8px" id="rcd-list"></div>
+    <div style="flex-shrink:0;padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <button class="btn btn-secondary btn-sm" id="rcd-terminate-btn" style="color:var(--danger);border-color:var(--danger);display:none" onclick="terminateRecDetail()">終止定期</button>
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('rec-detail-modal').classList.remove('open')">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 定期刪除範圍 Modal -->
+<div class="modal-overlay" id="rec-delete-scope-modal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <div class="modal-title">刪除定期項目</div>
+      <button class="modal-close" onclick="document.getElementById('rec-delete-scope-modal').classList.remove('open')">×</button>
+    </div>
+    <div style="padding:4px 0 8px">
+      <button onclick="doDeleteRec('this')" style="display:block;width:100%;text-align:left;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;cursor:pointer;color:var(--text)">
+        <div style="font-weight:600;font-size:14px;margin-bottom:4px">刪除此紀錄</div>
+        <div style="font-size:12px;color:var(--text-muted)">只刪除此定期設定，歷史交易紀錄完整保留</div>
+      </button>
+      <button onclick="doDeleteRec('terminate')" style="display:block;width:100%;text-align:left;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;cursor:pointer;color:var(--text)">
+        <div style="font-weight:600;font-size:14px;margin-bottom:4px;color:var(--danger)">終止未來週期</div>
+        <div style="font-size:12px;color:var(--text-muted)">刪除此設定及所有尚未確認的待確認交易，歷史已對帳紀錄保留</div>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 定期修改範圍 Modal -->
+<div class="modal-overlay" id="scope-modal">
+  <div class="modal" style="max-width:340px">
+    <div class="modal-header">
+      <div class="modal-title">修改定期紀錄</div>
+      <button class="modal-close" onclick="document.getElementById('scope-modal').classList.remove('open')">×</button>
+    </div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px" id="scope-txn-name"></div>
+    <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:4px">
+      <button class="btn btn-secondary" style="width:100%;text-align:left;padding:12px 14px" onclick="pickScope('this')">
+        <div style="font-weight:600;margin-bottom:2px">修改此記錄</div>
+        <div style="font-size:12px;color:var(--text-muted)">只更動這一筆，不影響其他</div>
+      </button>
+      <button class="btn btn-secondary" style="width:100%;text-align:left;padding:12px 14px" onclick="pickScope('future')">
+        <div style="font-weight:600;margin-bottom:2px">修改連同未來週期</div>
+        <div style="font-size:12px;color:var(--text-muted)">這筆及之後同週期的紀錄一起更新</div>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 轉帳 Modal -->
+<div class="modal-overlay" id="transfer-modal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">↔ 帳戶轉帳</div>
+      <button class="modal-close" onclick="closeTransferModal()">×</button>
+    </div>
+    <div style="background:rgba(88,166,255,0.06);border:1px solid rgba(88,166,255,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text-muted)">
+      轉帳會同時建立兩筆關聯記錄：來源帳戶的支出和目標帳戶的收入。
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">來源帳戶 *</label>
+        <select id="xfr-from"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">目標帳戶 *</label>
+        <select id="xfr-to"></select>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">金額 (NT$) *</label>
+        <input type="number" id="xfr-amount" placeholder="0" class="calc-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label">日期 *</label>
+        <input type="date" id="xfr-date">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">備註</label>
+      <input type="text" id="xfr-note" placeholder="選填">
+    </div>
+    <input type="hidden" id="edit-transfer-id">
+    <input type="hidden" id="edit-transfer-txn-id">
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="xfr-delete-btn" style="display:none;margin-right:auto" onclick="deleteTransfer()">刪除</button>
+      <button class="btn btn-secondary" onclick="closeTransferModal()">取消</button>
+      <button class="btn btn-primary" id="xfr-save-btn" onclick="saveTransfer()">建立轉帳</button>
+    </div>
+  </div>
+</div>
+
+<!-- 分類管理 Modal -->
+<div class="modal-overlay" id="cat-modal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <div class="modal-title">管理分類</div>
+      <button class="modal-close" onclick="closeCatModal()">×</button>
+    </div>
+    <div id="cat-list" style="margin-bottom:16px;max-height:280px;overflow-y:auto"></div>
+    <button onclick="fixCategoryRecords()" style="width:100%;background:none;border:1px dashed var(--border);color:var(--text-muted);border-radius:8px;padding:8px;font-size:12px;cursor:pointer;font-family:inherit;margin-bottom:12px">🔧 修復舊紀錄（同步分類名稱）</button>
+    <div style="background:var(--surface2);border-radius:8px;padding:10px;margin-bottom:8px">
+      <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px">新增支出分類</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="new-expense-cat" placeholder="分類名稱" style="flex:1">
+        <button class="btn btn-secondary btn-sm" onclick="addCategory('支出')">新增</button>
+      </div>
+    </div>
+    <div style="background:var(--surface2);border-radius:8px;padding:10px">
+      <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px">新增收入分類</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="new-income-cat" placeholder="分類名稱" style="flex:1">
+        <button class="btn btn-secondary btn-sm" onclick="addCategory('收入')">新增</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 定期 新增/編輯 Modal -->
+<div class="modal-overlay" id="rec-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="rec-modal-title">新增定期支出</div>
+      <button class="modal-close" onclick="closeRecModal()">×</button>
+    </div>
+    <input type="hidden" id="rec-edit-id">
+    <div class="type-toggle">
+      <button id="rec-btn-exp" class="active-expense" onclick="setRecType('支出')">支出</button>
+      <button id="rec-btn-inc" onclick="setRecType('收入')">收入</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">名稱 *</label>
+      <input type="text" id="r-name" placeholder="例：Netflix、房租">
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">金額 (NT$) *</label>
+        <input type="number" id="r-amount" placeholder="0" class="calc-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label">頻率</label>
+        <select id="r-frequency" onchange="onFreqChange()">
+          <option value="monthly">每月</option>
+          <option value="weekly">每週</option>
+          <option value="yearly">每年</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" id="r-day-group">
+      <label class="form-label">每月幾號</label>
+      <select id="r-day"></select>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">分類 *</label>
+        <select id="r-category"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">帳戶</label>
+        <select id="r-card"></select>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">起始日期 *</label>
+        <input type="date" id="r-start-date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">結束日期 <span style="color:var(--text-muted);font-weight:400;font-size:11px">選填，空白＝無限</span></label>
+        <input type="date" id="r-end-date">
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:4px">
+      <label class="form-label">手續費 (NT$) <span style="color:var(--text-muted);font-weight:400;font-size:11px">選填，每次觸發自動加入</span></label>
+      <input type="number" id="r-fee" placeholder="0" class="calc-input">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeRecModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveRecurring()">儲存</button>
+    </div>
+  </div>
+</div>
+</template>
+
+<template id="tpl-reconcile" data-title="帳戶對帳">
+<style>
+
+.rec-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  margin: 20px 0 10px;
+}
+
+/* 信用卡列 */
+.cc-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.cc-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.cc-card-name { font-weight: 600; font-size: 15px; }
+.cc-card-rows { display: flex; flex-direction: column; gap: 6px; }
+.cc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+.cc-row-label { color: var(--text-muted); }
+.cc-card-footer {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 帳戶列表 */
+.acct-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(48,54,61,.5);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.acct-row:last-child { border-bottom: none; }
+.acct-row:active { opacity: .7; }
+.acct-row-icon {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--surface2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+}
+.acct-row-info { flex: 1; min-width: 0; }
+.acct-row-name { font-size: 14px; font-weight: 500; }
+.acct-row-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.acct-row-balance { font-size: 14px; font-weight: 600; text-align: right; flex-shrink: 0; }
+
+/* ── 對帳 Modal ── */
+#rec-modal {
+  position: fixed; inset: 0;
+  z-index: 300;
+  display: none;
+  overscroll-behavior: contain;
+}
+#rec-modal.open { display: flex; }
+
+/* 浮動視窗：四面留邊，觸碰不穿透背景 */
+#rec-modal, #acct-view-modal {
+  background: rgba(0,0,0,.65);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* overlay padding 同時處理動態島（上）和 Home 條（下）安全區 */
+  padding: max(env(safe-area-inset-top) + 10px, 24px) 16px max(env(safe-area-inset-bottom) + 70px, 80px);
+  touch-action: none;
+}
+.rec-modal-inner, .acct-view-inner {
+  display: flex; flex-direction: column;
+  background: #0d1117;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 720px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 32px rgba(0,0,0,.6);
+}
+
+/* 桌面：更寬的浮動視窗 */
+@media (min-width: 769px) {
+  #rec-modal, #acct-view-modal {
+    backdrop-filter: blur(3px);
+    padding: 40px;
+    touch-action: auto;
   }
-  el.innerHTML = html
-}
-
-// --- 帳戶操作 ---
-
-window.openAddAccountModal = function() {
-  document.getElementById('acc-name').value = ''
-  document.getElementById('acc-type').value = '銀行'
-  document.getElementById('acc-bank').value = ''
-  document.getElementById('acc-balance').value = '0'
-  document.getElementById('acc-billing-day').value = ''
-  document.getElementById('acc-payment-day').value = ''
-  document.getElementById('acc-credit-limit').value = ''
-  document.getElementById('acc-payment-method').value = 'manual'
-  document.getElementById('acc-payment-account-group').style.display = 'none'
-  const nonCC = allAccounts.filter(a => a.type !== '信用卡')
-  document.getElementById('acc-payment-account').innerHTML =
-    '<option value="">－ 未設定 －</option>' +
-    nonCC.map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
-  document.getElementById('acc-cc-fields').style.display = 'none'
-  document.getElementById('add-account-modal').classList.add('open')
-}
-
-document.getElementById('acc-type').addEventListener('change', function() {
-  document.getElementById('acc-cc-fields').style.display = this.value === '信用卡' ? 'block' : 'none'
-})
-
-window.closeAccountModal = function() {
-  document.getElementById('add-account-modal').classList.remove('open')
-}
-
-window.addAccount = async function() {
-  const name = document.getElementById('acc-name').value.trim()
-  const type = document.getElementById('acc-type').value
-  const bank = document.getElementById('acc-bank').value.trim()
-  let balance = parseInt(document.getElementById('acc-balance').value) || 0
-  if (type === '信用卡' && balance > 0) balance = -balance
-  const include_in_total = document.getElementById('acc-include').checked ? 1 : 0
-  const billing_day = type === '信用卡' ? (parseInt(document.getElementById('acc-billing-day').value) || null) : null
-  const payment_day = type === '信用卡' ? (parseInt(document.getElementById('acc-payment-day').value) || null) : null
-  const credit_limit = type === '信用卡' ? (parseInt(document.getElementById('acc-credit-limit').value) || null) : null
-  const payment_method = type === '信用卡' ? document.getElementById('acc-payment-method').value : null
-  const payment_account = type === '信用卡' ? (document.getElementById('acc-payment-account').value || null) : null
-
-  if (!name) { toast('請輸入帳戶名稱', 'error'); return }
-
-  const res = await api.addAsset({ name, type, bank, balance, include_in_total, billing_day, payment_day, credit_limit, payment_method, payment_account })
-  if (res.ok) {
-    closeAccountModal()
-    toast(`已新增「${name}」`)
-    load()
-  } else {
-    toast(res.error ?? '新增失敗', 'error')
+  .rec-modal-inner, .acct-view-inner {
+    width: 560px; max-width: 90vw;
+    max-height: 680px;
   }
 }
 
-window.openEditModal = function(id, name, balance, type, includeInTotal, billingDay, paymentDay, creditLimit, paymentMethod, paymentAccount) {
-  document.getElementById('edit-acc-id').value = id
-  document.getElementById('edit-acc-orig-balance').value = balance
-  document.getElementById('edit-acc-name-input').value = name
-  document.getElementById('edit-acc-type').value = type ?? '銀行'
-  document.getElementById('edit-acc-balance').value = balance
-  document.getElementById('edit-acc-include').checked = includeInTotal !== 0
-  document.getElementById('adjustment-preview').style.display = 'none'
-  const isCC = (type === '信用卡')
-  document.getElementById('edit-cc-fields').style.display = isCC ? 'block' : 'none'
-  document.getElementById('edit-acc-billing-day').value = billingDay ?? ''
-  document.getElementById('edit-acc-payment-day').value = paymentDay ?? ''
-  document.getElementById('edit-acc-credit-limit').value = creditLimit ?? ''
-  document.getElementById('edit-acc-payment-method').value = paymentMethod ?? 'manual'
-  // 填入扣款帳戶選項
-  const nonCC = allAccounts.filter(a => a.type !== '信用卡')
-  const paySel = document.getElementById('edit-acc-payment-account')
-  paySel.innerHTML = '<option value="">－ 未設定 －</option>' +
-    nonCC.map(a => `<option value="${escHtml(a.name)}"${a.name === paymentAccount ? ' selected' : ''}>${escHtml(a.name)}</option>`).join('')
-  document.getElementById('edit-payment-account-group').style.display = (paymentMethod === 'auto') ? 'block' : 'none'
-  previewInclude()
-  document.getElementById('edit-balance-modal').classList.add('open')
+.rec-modal-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.rec-modal-close {
+  background: var(--surface2); border: none;
+  width: 30px; height: 30px; border-radius: 50%;
+  color: var(--text); font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0;
+}
+.rec-modal-title { flex: 1; min-width: 0; }
+.rec-modal-title-name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rec-modal-title-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.rec-modal-card-total { font-size: 16px; font-weight: 700; color: var(--danger); flex-shrink: 0; }
+.rec-modal-search {
+  padding: 7px 14px; flex-shrink: 0;
+}
+.rec-modal-search input {
+  width: 100%; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); padding: 7px 12px; font-size: 13px;
+  outline: none;
+}
+.rec-modal-list { flex: 1; overflow-y: auto; padding: 0 14px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.rec-modal-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 18px 12px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 16px 16px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.rec-modal-footer-item { display: flex; gap: 6px; align-items: baseline; }
+.rec-modal-footer-label { color: var(--text-muted); }
+.rec-modal-footer-val { font-weight: 600; font-size: 14px; }
+
+/* 日期群組 */
+.rec-date-header {
+  font-size: 11px; color: var(--text-muted);
+  padding: 10px 0 4px;
+  border-bottom: 1px solid rgba(48,54,61,.3);
 }
 
-window.togglePaymentAccount = function() {
-  const isAuto = document.getElementById('edit-acc-payment-method').value === 'auto'
-  document.getElementById('edit-payment-account-group').style.display = isAuto ? 'block' : 'none'
+/* MOZE 交易列 */
+.rec-txn-row {
+  position: relative;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(48,54,61,.35);
+}
+.rec-txn-row:last-child { border-bottom: none; }
+.rec-txn-row.decided { opacity: .42; }
+.rec-txn-row.decided::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--text-muted);
+  pointer-events: none;
+}
+.rec-txn-main {
+  display: flex; align-items: center; gap: 8px;
+}
+.rec-txn-icon {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--surface2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; flex-shrink: 0;
+}
+.rec-txn-info { flex: 1; min-width: 0; overflow: hidden; }
+.rec-txn-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rec-txn-sub { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+.rec-inline-actions {
+  display: flex; gap: 4px; flex-shrink: 0;
+  width: 60px; justify-content: flex-end;
+}
+.rec-act {
+  width: 26px; height: 26px; border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent; color: var(--text-muted);
+  font-size: 12px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+.rec-act.act-confirm { border-color: var(--success); color: var(--success); }
+.rec-act.act-defer { border-color: var(--warning); color: var(--warning); }
+.rec-act.active-confirm { background: var(--success); color: #fff; border-color: var(--success); }
+.rec-act.active-defer { background: rgba(210,153,34,.2); color: var(--warning); border-color: var(--warning); }
+.rec-txn-amount {
+  font-size: 14px; font-weight: 600;
+  text-align: right; flex-shrink: 0;
+  min-width: 90px; margin-left: 8px;
 }
 
-window.toggleAddPaymentAccount = function() {
-  const isAuto = document.getElementById('acc-payment-method').value === 'auto'
-  document.getElementById('acc-payment-account-group').style.display = isAuto ? 'block' : 'none'
+/* 帳戶 view modal */
+#acct-view-modal {
+  position: fixed; inset: 0;
+  z-index: 300;
+  display: none;
+  overscroll-behavior: contain;
+}
+#acct-view-modal.open { display: flex; }
+
+.acct-view-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.acct-view-list { flex: 1; overflow-y: auto; padding: 0 14px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.acct-view-footer {
+  padding: 10px 18px 12px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 16px 16px;
+  display: flex; justify-content: space-between;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.av-txn-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(48,54,61,.4);
+}
+.av-txn-row:last-child { border-bottom: none; }
+.av-txn-icon {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--surface2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; flex-shrink: 0;
+}
+.av-txn-info { flex: 1; min-width: 0; }
+.av-txn-name { font-size: 13px; font-weight: 500; }
+.av-txn-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.av-txn-amt { font-size: 14px; font-weight: 600; }
+
+</style>
+<div class="main">
+  <div class="header">
+    <h1>帳戶對帳</h1>
+    <div class="header-actions">
+      <button class="btn btn-secondary btn-sm" onclick="renderAll()">↻ 重新整理</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- 信用卡區 -->
+    <div class="rec-section-title">信用卡</div>
+    <div id="cc-section"><div class="loading">載入中…</div></div>
+
+    <!-- 帳戶記錄區 -->
+    <div class="rec-section-title" style="margin-top:24px">帳戶記錄</div>
+    <div class="card" style="padding:0 16px">
+      <div id="acct-section"><div class="loading" style="padding:16px 0">載入中…</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 對帳 Modal ── -->
+<div id="rec-modal">
+  <div class="rec-modal-inner">
+    <div class="rec-modal-header">
+      <button class="rec-modal-close" onclick="closeRecModal()">✕</button>
+      <div class="rec-modal-title">
+        <div class="rec-modal-title-name" id="rec-modal-card-name"></div>
+        <div class="rec-modal-title-sub" id="rec-modal-period"></div>
+      </div>
+      <div class="rec-modal-card-total" id="rec-modal-card-total"></div>
+      <button class="rec-modal-close" style="font-size:20px;font-weight:300;line-height:1;flex-shrink:0" title="新增記錄" onclick="openNewTxnForCard()">+</button>
+    </div>
+    <div class="rec-modal-search">
+      <input type="text" id="rec-search" placeholder="搜尋交易名稱 / 分類" oninput="filterRecTxns(this.value)">
+    </div>
+    <div class="rec-modal-list" id="rec-modal-list"></div>
+    <div class="rec-modal-footer">
+      <div class="rec-modal-footer-item">
+        <span class="rec-modal-footer-label">對帳筆數</span>
+        <span class="rec-modal-footer-val" id="rec-count">0/0</span>
+      </div>
+      <span id="rec-pending-hint" style="display:none;font-size:11px;color:var(--warning);font-weight:600;background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.3);border-radius:6px;padding:3px 8px"></span>
+      <div class="rec-modal-footer-item">
+        <span class="rec-modal-footer-label">對帳金額</span>
+        <span class="rec-modal-footer-val" id="rec-amount">NT$0</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 帳戶 View Modal ── -->
+<div id="acct-view-modal">
+  <div class="acct-view-inner">
+    <div class="acct-view-header">
+      <button class="rec-modal-close" onclick="closeAcctView()">✕</button>
+      <div class="rec-modal-title" id="acct-view-title"></div>
+      <div id="acct-view-balance" style="font-size:14px;font-weight:700;flex-shrink:0"></div>
+      <button class="rec-modal-close" style="font-size:20px;font-weight:300;line-height:1" title="新增記錄" onclick="openNewTxnForAcct()">+</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <button id="acct-month-prev" onclick="acctMonthNav(-1)" style="background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:0 6px;line-height:1">‹</button>
+      <span id="acct-month-display" style="font-size:13px;font-weight:600;min-width:100px;text-align:center"></span>
+      <button id="acct-month-next" onclick="acctMonthNav(1)" style="background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:0 6px;line-height:1">›</button>
+    </div>
+    <div class="acct-view-list" id="acct-view-list"></div>
+    <div class="acct-view-footer">
+      <span style="color:var(--text-muted)">共 <span id="acct-view-count">0</span> 筆</span>
+      <span>合計 <strong id="acct-view-total">NT$0</strong></span>
+    </div>
+  </div>
+</div>
+
+<!-- ── 信用卡付款 Modal ── -->
+<div class="modal-overlay" id="payment-modal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">💳 新增信用卡付款</div>
+      <button class="modal-close" onclick="closePaymentModal()">×</button>
+    </div>
+    <div style="background:rgba(88,166,255,.06);border:1px solid rgba(88,166,255,.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text-muted)">
+      建立一筆從銀行帳戶到信用卡的轉帳，代表本月帳單的繳款。
+    </div>
+    <div class="form-group">
+      <label class="form-label">付款帳戶（扣款銀行）</label>
+      <select id="pay-from-account"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">信用卡帳戶</label>
+      <input type="text" id="pay-to-account-display" readonly style="background:var(--surface2);cursor:default;color:var(--text-muted)">
+      <input type="hidden" id="pay-to-account">
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">付款金額 (NT$)</label>
+        <input type="number" id="pay-amount" placeholder="0" class="calc-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label">付款日期</label>
+        <input type="date" id="pay-date">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closePaymentModal()">取消</button>
+      <button class="btn btn-primary" onclick="confirmPayment()">建立付款轉帳</button>
+    </div>
+  </div>
+</div>
+</template>
+
+<template id="tpl-investments" data-title="投資損益">
+<style>
+
+/* 帳戶分組 */
+.broker-section { margin-bottom: 8px; }
+.broker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.broker-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.broker-summary { font-size: 12px; color: var(--text-muted); display: flex; gap: 12px; }
+
+/* 個股卡片（可點擊） */
+.inv-card {
+  padding: 14px 8px;
+  border-bottom: 1px solid rgba(48,54,61,0.5);
+  cursor: pointer;
+  border-radius: 8px;
+  margin: 0 -8px;
+  transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.inv-card:last-child { border-bottom: none; }
+.inv-card:hover { background: rgba(56,68,77,0.35); }
+.inv-card:active { background: rgba(56,68,77,0.55); }
+.inv-symbol {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  font-family: monospace;
+  letter-spacing: 0.5px;
+}
+.inv-name { font-size: 15px; font-weight: 600; margin-top: 1px; }
+
+/* 詳情滑入面板 */
+.detail-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: var(--bg);
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.detail-panel.open { transform: translateX(0); }
+
+.detail-topbar {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 10;
+}
+.detail-back-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.detail-title-text {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+.detail-body {
+  padding: 20px 16px;
+  padding-bottom: calc(100px + env(safe-area-inset-bottom));
+  max-width: 600px;
+  margin: 0 auto;
 }
 
-document.getElementById('edit-acc-type').addEventListener('change', function() {
-  document.getElementById('edit-cc-fields').style.display = this.value === '信用卡' ? 'block' : 'none'
-})
+/* 詳情表格 */
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.detail-table td {
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(48,54,61,0.5);
+  font-size: 14px;
+}
+.detail-table td:first-child { color: var(--text-muted); }
+.detail-table td:last-child { text-align: right; font-weight: 500; }
+.detail-table tr:last-child td { border-bottom: none; }
 
-window.closeEditModal = function() {
-  document.getElementById('edit-balance-modal').classList.remove('open')
+/* 損益區塊 */
+.detail-pnl-block {
+  background: var(--surface2);
+  border-radius: 10px;
+  padding: 4px 14px;
+  margin-bottom: 24px;
+}
+.detail-pnl-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(48,54,61,0.4);
+  font-size: 14px;
+}
+.detail-pnl-row:last-child { border-bottom: none; }
+.detail-pnl-label { color: var(--text-muted); }
+
+/* 交易記錄 */
+.trade-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(48,54,61,0.3);
+  font-size: 13px;
+  gap: 8px;
+}
+.trade-row:last-child { border-bottom: none; }
+.trade-type {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.type-buy { background: rgba(63,185,80,0.15); color: #3fb950; }
+.type-sell { background: rgba(248,81,73,0.15); color: #f85149; }
+.trade-del, .trade-edit {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0.6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.trade-edit:active, .trade-edit:hover { opacity: 1; background: rgba(88,166,255,0.15); }
+.trade-del:active, .trade-del:hover { opacity: 1; background: rgba(248,81,73,0.15); }
+.trade-del:hover { opacity: 1; background: rgba(248,81,73,0.15); }
+
+/* 更新市價 icon 按鈕 */
+.btn-refresh-icon {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-muted);
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.btn-refresh-icon:hover { background: var(--surface2); color: var(--text); }
+.btn-refresh-icon:disabled { opacity: 0.4; cursor: wait; }
+
+/* loading spin */
+.spin { display: inline-block; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 已實現損益表格 */
+.pnl-table { width:100%; border-collapse:collapse; font-size:13px; }
+.pnl-table th { text-align:left; color:var(--text-muted); font-weight:500; padding:6px 8px; border-bottom:1px solid var(--border); }
+.pnl-table td { padding:10px 8px; border-bottom:1px solid rgba(48,54,61,0.5); vertical-align:middle; }
+.pnl-table tr:last-child td { border-bottom:none; }
+.pnl-table tr:hover td { background:rgba(48,54,61,0.3); }
+.pnl-pos { color:var(--success); font-weight:600; }
+.pnl-neg { color:var(--danger); font-weight:600; }
+
+</style>
+<div class="main">
+  <div class="header">
+    <h1>投資損益</h1>
+    <div class="header-actions">
+      <button class="btn btn-primary btn-sm" onclick="openAddTradeModal()">+ 新增交易</button>
+      <button class="btn btn-secondary btn-sm" onclick="load()">↻ 重新整理</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- 總覽卡片 -->
+    <div class="grid-4" style="margin-bottom:20px">
+      <div class="card">
+        <div class="card-title">投資總市值</div>
+        <div class="card-value blue" id="total-value">–</div>
+        <div class="card-sub" id="total-cost-sub">–</div>
+      </div>
+      <div class="card">
+        <div class="card-title">今日損益</div>
+        <div class="card-value" id="total-daily-pnl">–</div>
+        <div class="card-sub" id="holding-count">–</div>
+      </div>
+      <div class="card">
+        <div class="card-title">未實現損益</div>
+        <div class="card-value" id="total-pnl">–</div>
+        <div class="card-sub" id="overall-return-sub">–</div>
+      </div>
+      <div class="card">
+        <div class="card-title">已實現損益</div>
+        <div class="card-value" id="total-realized-pnl">–</div>
+        <div class="card-sub">累計賣出收益</div>
+      </div>
+    </div>
+
+    <!-- 持股明細（按證券戶分組） -->
+
+    <div class="card" style="margin-bottom:20px">
+      <div class="section-header">
+        <div class="section-title">持股明細</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div id="refresh-status" style="font-size:11px;color:var(--text-muted)"></div>
+          <button class="btn-refresh-icon" id="refresh-all-btn" onclick="refreshAll()" title="更新市價">🔄</button>
+        </div>
+      </div>
+      <div id="inv-list"><div class="loading">載入中…</div></div>
+    </div>
+
+    <!-- 已實現損益記錄 -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="section-header">
+        <div class="section-title">已實現損益記錄</div>
+        <div id="pnl-total-badge" style="font-size:13px;font-weight:600"></div>
+      </div>
+      <div id="pnl-list"><div class="loading">載入中…</div></div>
+    </div>
+
+    <!-- 圖表 -->
+    <div class="grid-2" style="margin-bottom:20px">
+      <div class="card">
+        <div class="section-title" style="margin-bottom:12px">持股市值分布</div>
+        <div class="chart-container" style="height:200px"><canvas id="holdingChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div class="section-title">投資資產成長</div>
+          <div style="display:flex;gap:4px">
+            <button id="btn-range-week" class="btn btn-sm btn-secondary" onclick="setGrowthRange('week')">週</button>
+            <button id="btn-range-month" class="btn btn-sm" onclick="setGrowthRange('month')">月</button>
+            <button id="btn-range-year" class="btn btn-sm btn-secondary" onclick="setGrowthRange('year')">年</button>
+          </div>
+        </div>
+        <div class="chart-container" style="height:200px"><canvas id="growthChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 個股詳情面板 ══ -->
+<div id="detail-panel" class="detail-panel">
+  <div class="detail-topbar">
+    <button class="detail-back-btn" onclick="closeDetail()">← 返回</button>
+    <div id="detail-title" class="detail-title-text"></div>
+    <button class="btn btn-secondary btn-sm" onclick="openEditDetail()">編輯</button>
+  </div>
+  <div id="detail-body" class="detail-body"></div>
+</div>
+
+<!-- ══ 編輯持股 Modal ══ -->
+<div class="modal-overlay" id="edit-inv-modal">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-header">
+      <div class="modal-title">編輯持股</div>
+      <button class="modal-close" onclick="closeEditInv()">×</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">股數</label>
+      <input type="number" id="edit-shares" step="1" min="0" placeholder="0" inputmode="numeric">
+    </div>
+    <div class="form-group">
+      <label class="form-label">平均成本（元）</label>
+      <input type="number" id="edit-avg-cost" step="0.01" min="0" placeholder="0.00" inputmode="decimal">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeEditInv()">取消</button>
+      <button class="btn btn-primary" onclick="saveEditInv()">儲存</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══ 新增交易 Modal ══ -->
+<div class="modal-overlay" id="add-trade-modal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title" id="trade-modal-title">新增交易</div>
+      <button class="modal-close" onclick="closeAddTradeModal()">×</button>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">股票代號</label>
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <div style="flex-shrink:0">
+          <input type="text" id="trade-symbol" placeholder="如：0050" style="width:90px;text-transform:uppercase"
+            oninput="onSymbolInput(this.value)">
+        </div>
+        <div style="flex:1">
+          <input type="text" id="trade-name" placeholder="名稱（自動填入）" readonly
+            style="background:var(--surface2);color:var(--text-muted)">
+          <div id="trade-lookup-hint" style="font-size:11px;color:var(--text-muted);margin-top:4px;min-height:16px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">證券戶</label>
+      <select id="trade-account"></select>
+    </div>
+
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">類型</label>
+        <select id="trade-type">
+          <option value="買入">📈 買入</option>
+          <option value="賣出">📉 賣出</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">日期</label>
+        <input type="date" id="trade-date">
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">股數</label>
+        <input type="number" id="trade-shares" placeholder="0" min="1" step="1" inputmode="numeric" oninput="calcTradeAmount()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">成交價（元）</label>
+        <input type="number" id="trade-price" placeholder="0.00" step="0.01" inputmode="decimal" oninput="calcTradeAmount()">
+      </div>
+    </div>
+
+    <div id="trade-amount-preview" style="display:none;padding:10px 12px;background:var(--surface2);border-radius:6px;font-size:13px;margin-bottom:8px;color:var(--text-muted)">
+      預計交易金額：<strong id="trade-amount-value" style="color:var(--text)">–</strong>
+      <span id="trade-pnl-preview" style="display:none;margin-left:12px">已實現損益：<strong id="trade-pnl-value">–</strong></span>
+    </div>
+
+    <div class="form-group" id="to-account-group" style="display:none">
+      <label class="form-label">賣出入帳帳戶</label>
+      <select id="trade-to-account">
+        <option value="">－ 不指定 －</option>
+      </select>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">選擇後自動建立轉帳記錄至該帳戶</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">備註（選填）</label>
+      <input type="text" id="trade-note" placeholder="如：定期定額">
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeAddTradeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveTrade()">儲存</button>
+    </div>
+  </div>
+</div>
+</template>
+
+<template id="tpl-report" data-title="報表">
+<style>
+
+/* ── 日期導航 ── */
+.report-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px 0 4px;
+}
+.report-nav-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 6px;
+  line-height: 1;
+}
+.report-nav-btn:hover { background: var(--surface2); color: var(--text); }
+.report-nav-label {
+  font-size: 16px;
+  font-weight: 600;
+  min-width: 160px;
+  text-align: center;
+}
+.report-mode-toggle {
+  display: flex;
+  gap: 4px;
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 3px;
+}
+.report-mode-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.report-mode-btn.active {
+  background: var(--surface);
+  color: var(--text);
 }
 
-window.previewAdjustment = function() {
-  const orig = parseInt(document.getElementById('edit-acc-orig-balance').value) || 0
-  const newVal = parseInt(document.getElementById('edit-acc-balance').value)
-  const preview = document.getElementById('adjustment-preview')
-  if (isNaN(newVal) || newVal === orig) { preview.style.display = 'none'; return }
-  const diff = newVal - orig
-  preview.style.display = 'block'
-  preview.innerHTML = `餘額調整：<strong style="color:${diff >= 0 ? 'var(--success)' : 'var(--danger)'}">NT$${Math.abs(diff).toLocaleString()}</strong>`
+/* ── Tab 列 ── */
+.report-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin: 12px 0 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.report-tabs::-webkit-scrollbar { display: none; }
+.report-tab {
+  flex-shrink: 0;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+}
+.report-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
 }
 
-window.previewInclude = function() {
-  const checked = document.getElementById('edit-acc-include').checked
-  document.getElementById('include-hint').textContent = checked
-    ? '此帳戶餘額納入總資產淨值計算'
-    : '⚠️ 此帳戶不計入總資產淨值（僅供追蹤）'
-  document.getElementById('include-hint').style.color = checked ? 'var(--text-muted)' : 'var(--warning)'
+/* ── 總覽 ── */
+.summary-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(48,54,61,0.5);
+}
+.summary-row:last-child { border-bottom: none; }
+.summary-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+.summary-label { font-size: 14px; min-width: 52px; flex-shrink: 0; }
+.summary-bar-wrap { flex: 1; min-width: 0; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+.summary-bar { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
+.summary-amount { font-size: 14px; font-weight: 600; flex-shrink: 0; min-width: 80px; text-align: right; }
+
+/* ── 類別圓圈 ── */
+.cat-circles {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.cat-circles::-webkit-scrollbar { display: none; }
+.cat-circle-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.cat-circle-label { font-size: 12px; color: var(--text-muted); }
+.cat-circle-amt { font-size: 13px; font-weight: 600; color: var(--danger); }
+.cat-donut-wrap { position: relative; width: 72px; height: 72px; }
+.cat-donut-wrap canvas { width: 72px !important; height: 72px !important; }
+.cat-donut-pct {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
 }
 
-window.saveBalance = async function() {
-  const id = document.getElementById('edit-acc-id').value
-  const name = document.getElementById('edit-acc-name-input').value.trim()
-  const type = document.getElementById('edit-acc-type').value
-  let balance = parseInt(document.getElementById('edit-acc-balance').value)
-  const include_in_total = document.getElementById('edit-acc-include').checked ? 1 : 0
-  const billing_day = type === '信用卡' ? (parseInt(document.getElementById('edit-acc-billing-day').value) || null) : null
-  const payment_day = type === '信用卡' ? (parseInt(document.getElementById('edit-acc-payment-day').value) || null) : null
-  const credit_limit = type === '信用卡' ? (parseInt(document.getElementById('edit-acc-credit-limit').value) || null) : null
-  const payment_method = type === '信用卡' ? document.getElementById('edit-acc-payment-method').value : null
-  const payment_account = type === '信用卡' ? (document.getElementById('edit-acc-payment-account').value || null) : null
+/* ── 明細 chart ── */
+.detail-chart-wrap { height: 160px; position: relative; margin-bottom: 4px; }
 
-  if (!name) { toast('請輸入帳戶名稱', 'error'); return }
-  if (isNaN(balance)) { toast('請輸入有效金額', 'error'); return }
-  if (type === '信用卡' && balance > 0) balance = -balance
+/* ── 類別/帳戶 list ── */
+.breakdown-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(48,54,61,0.5);
+}
+.breakdown-row:last-child { border-bottom: none; }
+.breakdown-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--surface2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.breakdown-info { flex: 1; min-width: 0; }
+.breakdown-name { font-size: 14px; font-weight: 500; }
+.breakdown-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.breakdown-right { text-align: right; flex-shrink: 0; }
+.breakdown-amt { font-size: 14px; font-weight: 600; color: var(--danger); }
+.breakdown-pct { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
 
-  const res = await api.updateAsset(id, { name, type, balance, include_in_total, billing_day, payment_day, credit_limit, payment_method, payment_account })
-  if (res.ok) {
-    closeEditModal()
-    toast('已更新')
-    load()
-  } else {
-    toast(res.error ?? '更新失敗', 'error')
-  }
+/* ── 大 donut 圖 ── */
+.main-donut-wrap { position: relative; width: 200px; height: 200px; margin: 12px auto; }
+.main-donut-wrap canvas { width: 200px !important; height: 200px !important; }
+.main-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.main-donut-total { font-size: 22px; font-weight: 700; }
+.main-donut-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* ── 明細 list ── */
+.detail-date-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 14px 0 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(48,54,61,0.3);
+}
+.detail-txn-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(48,54,61,0.35);
+}
+.detail-txn-row:last-child { border-bottom: none; }
+.detail-txn-icon {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--surface2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; flex-shrink: 0;
+}
+.detail-txn-info { flex: 1; min-width: 0; }
+.detail-txn-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.detail-txn-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.detail-txn-amt { font-size: 13px; font-weight: 600; text-align: right; flex-shrink: 0; }
+
+/* ── 淨額 highlight ── */
+.net-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 0 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+.net-label { font-size: 14px; font-weight: 600; }
+.net-amt { font-size: 18px; font-weight: 700; }
+
+/* year bar chart */
+.year-bars { display: flex; align-items: flex-end; gap: 4px; height: 100px; margin: 8px 0 4px; }
+.year-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.year-bar { width: 100%; border-radius: 3px 3px 0 0; min-height: 2px; transition: height .3s; }
+.year-bar-label { font-size: 9px; color: var(--text-muted); }
+.year-bar-val { font-size: 8px; color: var(--text-muted); white-space: nowrap; }
+
+@media (max-width: 768px) {
+  .report-nav-label { min-width: 130px; font-size: 15px; }
 }
 
-window.deleteAccountFromModal = async function() {
-  const id = document.getElementById('edit-acc-id').value
-  const name = document.getElementById('edit-acc-name-input').value
-  if (!confirm(`確定要刪除「${name}」帳戶？`)) return
-  const res = await api.deleteAsset(id)
-  if (res.ok) { closeEditModal(); toast(`已刪除「${name}」`); load() }
-  else toast(res.error ?? '刪除失敗', 'error')
-}
+</style>
+<div class="main">
+  <div class="header">
+    <h1>報表</h1>
+  </div>
 
+  <div class="content">
 
-function escJs(s) { return s.replace(/'/g, "\\'").replace(/"/g, '\\"') }
+    <!-- 日期導航 -->
+    <div class="card" style="margin-bottom:16px;padding-bottom:0">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <div class="report-mode-toggle" style="flex-shrink:0">
+          <button class="report-mode-btn active" id="mode-month" onclick="setMode('month')">月</button>
+          <button class="report-mode-btn" id="mode-year" onclick="setMode('year')">年</button>
+        </div>
+        <div class="report-nav" style="flex:1;justify-content:center;padding:0">
+          <button class="report-nav-btn" onclick="prevPeriod()">‹</button>
+          <div class="report-nav-label" id="period-label">–</div>
+          <button class="report-nav-btn" onclick="nextPeriod()">›</button>
+        </div>
+      </div>
 
-document.getElementById('last-sync').textContent =
-  '今天 ' + new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
+      <!-- Tab 列 -->
+      <div class="report-tabs" id="report-tabs">
+        <button class="report-tab active" onclick="setTab('overview')">總覽</button>
+        <button class="report-tab" onclick="setTab('detail')">明細</button>
+        <button class="report-tab" onclick="setTab('category')">類別</button>
+        <button class="report-tab" onclick="setTab('account')">帳戶</button>
+      </div>
+    </div>
 
-initAppName()
+    <!-- Tab 內容（4 個固定 panel，切換時 show/hide） -->
+    <div id="tab-content">
+      <div id="panel-overview"></div>
+      <div id="panel-detail"   style="display:none"></div>
+      <div id="panel-category" style="display:none"></div>
+      <div id="panel-account"  style="display:none"></div>
+      <div id="panel-drill"    style="display:none"></div>
+    </div>
 
-function hideSplash() {
-  const s = document.getElementById('splash')
-  if (!s || s.classList.contains('hide')) return
-  s.classList.add('hide')
-  setTimeout(() => s.remove(), 400)
-}
+  </div>
+</div>
+</template>
 
-// 有 cache 時最多等 600ms，沒 cache 等資料回來
-const hasCachedData = !!(swr.get('assets'))
-if (hasCachedData) setTimeout(hideSplash, 600)
-load().then(hideSplash)
-</script>
-<script src="/js/calc-keyboard.js?v=1784541104574"></script>
-
-<nav class="bottom-nav">
-  <a href="/" class="bottom-nav-item active"><span class="nav-icon">🏠</span><span>總覽</span></a>
-  <a href="/report.html" class="bottom-nav-item"><span class="nav-icon">📊</span><span>報表</span></a>
-  <a href="/transactions.html" class="bottom-nav-item add-center"><span class="nav-icon">+</span></a>
-  <a href="/reconcile.html" class="bottom-nav-item"><span class="nav-icon">🔍</span><span>對帳</span></a>
-  <a href="/investments.html" class="bottom-nav-item"><span class="nav-icon">📈</span><span>投資</span></a>
-</nav>
+<script src="/js/calc-keyboard.js?v=1784552459510"></script>
+<script type="module" src="/js/router.js?v=1784552459510"></script>
 </body>
 </html>

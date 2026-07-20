@@ -26,20 +26,6 @@ if ('serviceWorker' in navigator) {
   })
 })()
 
-// ── Prefetch 其他頁面（讓切換秒跳）──
-const _PAGES = ['/index.html', '/transactions.html', '/investments.html', '/reconcile.html', '/report.html', '/add.html']
-window.addEventListener('load', () => {
-  requestIdleCallback(() => {
-    _PAGES.forEach(p => {
-      if (location.pathname === p || (p === '/index.html' && location.pathname === '/')) return
-      const link = document.createElement('link')
-      link.rel = 'prefetch'
-      link.href = p
-      document.head.appendChild(link)
-    })
-  }, { timeout: 2000 })
-})
-
 // ── App config（公開，不需 token）──
 let _appName = null
 const _APP_NAME_KEY = 'finance_app_name_' + location.hostname.replace(/[^a-z0-9]/gi, '').slice(-12)
@@ -537,24 +523,13 @@ export const swr = {
   },
 }
 
-// ── 背景預載：讓切換頁面時 JS 模組已解析完、HTML 已快取 ──
+// ── 背景預載：SPA 下所有頁面模組先解析好，切頁零等待 ──
 ;(function () {
   const idle = 'requestIdleCallback' in window ? f => requestIdleCallback(f, { timeout: 2000 }) : f => setTimeout(f, 800)
   idle(() => {
-    // 1. 預載 txn-modal（最大的 JS 模組，transactions + reconcile 都用到）
-    //    用 import.meta.url 取得和 api.js 一樣的版本號，確保快取命中
-    const v = new URL(import.meta.url).searchParams.get('v')
-    if (v) import(`/js/txn-modal.js?v=${v}`).catch(() => {})
-
-    // 2. 用 <link rel="prefetch"> 把其他頁面 HTML 塞進 SW 快取
-    const all = ['/index.html', '/transactions.html', '/investments.html', '/report.html', '/reconcile.html', '/add.html']
-    const cur = location.pathname === '/' ? '/index.html' : location.pathname
-    all.filter(p => p !== cur).forEach(p => {
-      const el = document.createElement('link')
-      el.rel = 'prefetch'
-      el.href = p
-      document.head.appendChild(el)
-    })
+    import('/js/txn-modal.js').catch(() => {})
+    ;['overview', 'transactions', 'reconcile', 'investments', 'report'].forEach(p =>
+      import(`/js/pages/${p}.js`).catch(() => {}))
   })
 })()
 

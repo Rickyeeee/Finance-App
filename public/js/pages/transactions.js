@@ -13,8 +13,14 @@ export async function prefetch() {
       if (ar.ok) swr.set('accounts', ar.data.accounts ?? [])
     }))
   }
-  if (!swr.get(`txns-${month}`)) {
-    jobs.push(api.getTransactions({ month, limit: 500 }).then(r => { if (r.ok) swr.set(`txns-${month}`, r.data) }))
+  // 當月 + 上個月（往回滑月曆時金額立刻出現，不用等網路）
+  const [y, m] = month.split('-').map(Number)
+  const prevDate = new Date(y, m - 2, 1)
+  const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`
+  for (const mo of [month, prevMonth]) {
+    if (!swr.get(`txns-${mo}`)) {
+      jobs.push(api.getTransactions({ month: mo, limit: 500 }).then(r => { if (r.ok) swr.set(`txns-${mo}`, r.data) }))
+    }
   }
   if (!swr.get('recurring')) {
     jobs.push(api.getRecurring().then(r => { if (r.ok) swr.set('recurring', r.data) }))
@@ -1313,25 +1319,10 @@ init()
 // bottom-nav「+」由 router 呼叫：帶當前選取日期跳到快速新增頁
 window.__getAddHref = () => '/add.html?date=' + (selectedDate || today)
 
-// ── 手機滑動：月曆左右滑動切換月份 ──
+// ── 手機：Modal 向下滑動關閉 ──
+// 註：月曆換月滑動由上面的 cal-strip 三格滑條處理，這裡不能再掛一套
+// 簡易滑動偵測（會和滑條同時觸發造成畫面閃跳，舊版因 bug 未執行所以沒發現）
 if (window.innerWidth <= 768) {
-  let _sx = 0, _sy = 0
-  const calCard = document.querySelector('#panel-records .card')
-  if (calCard) {
-    calCard.addEventListener('touchstart', e => {
-      _sx = e.touches[0].clientX
-      _sy = e.touches[0].clientY
-    }, { passive: true })
-    calCard.addEventListener('touchend', e => {
-      const dx = e.changedTouches[0].clientX - _sx
-      const dy = e.changedTouches[0].clientY - _sy
-      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-        dx < 0 ? changeMonth(1) : changeMonth(-1)
-      }
-    }, { passive: true })
-  }
-
-  // Modal 向下滑動關閉
   document.querySelectorAll('.modal').forEach(modal => {
     let sy = 0
     modal.addEventListener('touchstart', e => { sy = e.touches[0].clientY }, { passive: true })

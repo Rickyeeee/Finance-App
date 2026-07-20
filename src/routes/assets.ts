@@ -33,7 +33,9 @@ app.get('/', async (c) => {
     .reduce((s, i) => s + i.market_value, 0)
   const totalInvestments = brokerAccounts.length > 0 ? includedInvTotal : 0
 
-  const investmentPnL = investments.reduce((s, i) => s + i.profit_loss, 0)
+  const investmentPnL = investments
+    .filter(i => brokerNames.size === 0 || brokerNames.has(i.account))
+    .reduce((s, i) => s + i.profit_loss, 0)
 
   return c.json({
     ok: true,
@@ -53,7 +55,7 @@ app.get('/', async (c) => {
 
 // 新增帳戶
 app.post('/', async (c) => {
-  const body = await c.req.json<{ name: string; type: string; bank?: string; balance?: number; include_in_total?: number; billing_day?: number | null; payment_day?: number | null; credit_limit?: number | null }>()
+  const body = await c.req.json<{ name: string; type: string; bank?: string; balance?: number; include_in_total?: number; billing_day?: number | null; payment_day?: number | null; credit_limit?: number | null; payment_method?: string | null; payment_account?: string | null }>()
 
   if (!body.name || !body.type) {
     return c.json({ ok: false, error: '缺少 name 或 type' }, 400)
@@ -72,6 +74,8 @@ app.post('/', async (c) => {
     billing_day: body.billing_day ?? null,
     payment_day: body.payment_day ?? null,
     credit_limit: body.credit_limit ?? null,
+    payment_method: body.payment_method ?? 'manual',
+    payment_account: body.payment_account ?? null,
   })
 
   return c.json({ ok: true, id }, 201)
@@ -147,11 +151,12 @@ app.post('/snapshot', async (c) => {
 
   const totalCash = assets.filter(a => a.type === '銀行' || a.type === '現金' || a.type === '銀行存款')
     .reduce((s, a) => s + a.balance, 0)
+  const creditBalance = assets.filter(a => a.type === '信用卡').reduce((s, a) => s + a.balance, 0)
   const totalInvestments = investments.reduce((s, i) => s + i.market_value, 0)
 
   await recordAssetSnapshot(c.env.DB, {
     snapshot_date: now.toISOString().slice(0, 10),
-    total_assets: totalCash + totalInvestments,
+    total_assets: totalCash + totalInvestments + creditBalance,
     total_investments: totalInvestments,
     total_cash: totalCash,
     monthly_expense: monthlyExpense,

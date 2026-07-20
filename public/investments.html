@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="瑞奇財務">
 <meta name="theme-color" content="#161b22">
 <link rel="apple-touch-icon" href="/icons/icon.svg">
-<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/style.css?v=1784541104574">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 /* 帳戶分組 */
@@ -211,9 +211,11 @@
   <nav class="sidebar-nav">
     <a href="/" class="nav-item"><span class="icon">🏠</span><span>資產總覽</span></a>
     <a href="/transactions.html" class="nav-item"><span class="icon">📋</span><span>消費記錄</span></a>
-    <a href="/reconcile.html" class="nav-item"><span class="icon">🔍</span><span>信用卡對帳</span></a>
+    <a href="/reconcile.html" class="nav-item"><span class="icon">🔍</span><span>帳戶對帳</span></a>
     <a href="/investments.html" class="nav-item active"><span class="icon">📈</span><span>投資損益</span></a>
+    <a href="/report.html" class="nav-item"><span class="icon">📊</span><span>報表</span></a>
   </nav>
+  <button class="sidebar-update-btn" onclick="import('/js/api.js?v=1784541104574').then(m=>m.openUpdateModal())">↑ 更新系統</button>
 </aside>
 
 <div class="main">
@@ -405,7 +407,7 @@
 </div>
 
 <script type="module">
-import { api, toast, formatMoney, initAppName } from '/js/api.js'
+import { api, toast, formatMoney, initAppName, swr } from '/js/api.js?v=1784541104574'
 
 let holdingChart = null
 let growthChart = null
@@ -420,7 +422,29 @@ let currentDetailId = null   // investment.id，唯一識別 (symbol, account) �
 const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
 
 // ── 資料載入 ──────────────────────────────
+function applyInvData({ investments, trades, brokers, summary, pnl, pnlTotal }) {
+  allInvestments = investments
+  allTrades = trades
+  brokerAccountNames = brokers
+
+  renderSummary(summary)
+  renderInvestmentCards()
+  renderCharts()
+  updateAccountDatalist()
+  renderPnlRecords(pnl, pnlTotal)
+
+  if (currentDetailId) {
+    const stillExists = allInvestments.some(i => i.id === currentDetailId)
+    if (stillExists) renderDetail(allInvestments.find(i => i.id === currentDetailId))
+    else closeDetail()
+  }
+}
+
 async function loadData() {
+  // 快取先渲染
+  const cached = swr.get('investments')
+  if (cached) applyInvData(cached)
+
   const [invRes, tradeRes, assetsRes, pnlRes] = await Promise.all([
     api.getInvestments(),
     api.getInvestmentTrades(),
@@ -428,7 +452,6 @@ async function loadData() {
     api.getInvestmentPnl(),
   ])
 
-  // 從帳戶管理抓證券戶清單，fallback 到現有投資的帳戶名稱
   if (assetsRes?.ok) {
     const accounts = assetsRes.data?.accounts ?? []
     window._allAssetAccounts = accounts
@@ -437,28 +460,25 @@ async function loadData() {
   }
   if (!invRes.ok) return false
 
-  allInvestments = invRes.data
-
-  allTrades = {}
+  const trades = {}
   if (tradeRes.ok) {
     for (const t of tradeRes.data) {
       const key = t.symbol + '|' + t.account
-      if (!allTrades[key]) allTrades[key] = []
-      allTrades[key].push(t)
+      if (!trades[key]) trades[key] = []
+      trades[key].push(t)
     }
   }
 
-  renderSummary(invRes.summary)
-  renderInvestmentCards()
-  renderCharts()
-  updateAccountDatalist()
-  renderPnlRecords(pnlRes?.ok ? pnlRes.data : [], pnlRes?.total_realized_pnl ?? 0)
-
-  if (currentDetailId) {
-    const stillExists = allInvestments.some(i => i.id === currentDetailId)
-    if (stillExists) renderDetail(allInvestments.find(i => i.id === currentDetailId))
-    else closeDetail()
+  const payload = {
+    investments: invRes.data,
+    trades,
+    brokers: brokerAccountNames,
+    summary: invRes.summary,
+    pnl: pnlRes?.ok ? pnlRes.data : [],
+    pnlTotal: pnlRes?.total_realized_pnl ?? 0,
   }
+  swr.set('investments', payload)
+  applyInvData(payload)
   return true
 }
 
@@ -1158,11 +1178,11 @@ async function renderGrowthChart(range) {
         borderColor: lineColor,
         backgroundColor: fillColor,
         borderWidth: 2,
-        pointRadius: labels.length <= 12 ? 3 : 0,
+        pointRadius: (ctx) => ctx.raw !== null ? (nonNull.length <= 14 ? 3 : 0) : 0,
         pointHoverRadius: 5,
         fill: true,
         tension: 0.3,
-        spanGaps: false,
+        spanGaps: true,
       }]
     },
     options: {
@@ -1199,8 +1219,8 @@ load()
 
 <nav class="bottom-nav">
   <a href="/" class="bottom-nav-item"><span class="nav-icon">🏠</span><span>總覽</span></a>
-  <a href="/transactions.html" class="bottom-nav-item"><span class="nav-icon">📋</span><span>記錄</span></a>
-  <a href="/add.html" class="bottom-nav-item add-center"><span class="nav-icon">+</span></a>
+  <a href="/report.html" class="bottom-nav-item"><span class="nav-icon">📊</span><span>報表</span></a>
+  <a href="/transactions.html" class="bottom-nav-item add-center"><span class="nav-icon">+</span></a>
   <a href="/reconcile.html" class="bottom-nav-item"><span class="nav-icon">🔍</span><span>對帳</span></a>
   <a href="/investments.html" class="bottom-nav-item active"><span class="nav-icon">📈</span><span>投資</span></a>
 </nav>

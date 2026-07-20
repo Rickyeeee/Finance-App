@@ -276,11 +276,122 @@ app.get('/history', async (c) => {
   return c.json({ ok: true, data: results, start: startDate, end: today })
 })
 
+// 投資資產成長歷史（週/月/年）
+app.get('/history', async (c) => {
+  const range = c.req.query('range') ?? 'month'
+
+  // 台北時間（UTC+8）
+  const taipeiNow = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  const today = taipeiNow.toISOString().slice(0, 10)
+
+  if (range === 'week') {
+    // 過去 7 天（含今天）
+    const start = new Date(taipeiNow)
+    start.setUTCDate(start.getUTCDate() - 6)
+    const startDate = start.toISOString().slice(0, 10)
+    const { results } = await c.env.DB.prepare(`
+      SELECT snapshot_date, total_investments FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      ORDER BY snapshot_date ASC
+    `).bind(startDate, today).all<{ snapshot_date: string; total_investments: number }>()
+    return c.json({ ok: true, data: results, start: startDate, end: today })
+  }
+
+  if (range === 'month') {
+    // 過去 30 天（含今天）
+    const start = new Date(taipeiNow)
+    start.setUTCDate(start.getUTCDate() - 29)
+    const startDate = start.toISOString().slice(0, 10)
+    const { results } = await c.env.DB.prepare(`
+      SELECT snapshot_date, total_investments FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      ORDER BY snapshot_date ASC
+    `).bind(startDate, today).all<{ snapshot_date: string; total_investments: number }>()
+    return c.json({ ok: true, data: results, start: startDate, end: today })
+  }
+
+  // year：過去 365 天，每月取最後一筆
+  const start = new Date(taipeiNow)
+  start.setUTCDate(start.getUTCDate() - 364)
+  const startDate = start.toISOString().slice(0, 10)
+  const { results } = await c.env.DB.prepare(`
+    SELECT snapshot_date, total_investments
+    FROM asset_history
+    WHERE snapshot_date IN (
+      SELECT MAX(snapshot_date) FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      GROUP BY substr(snapshot_date, 1, 7)
+    )
+    ORDER BY snapshot_date ASC
+  `).bind(startDate, today).all<{ snapshot_date: string; total_investments: number }>()
+  return c.json({ ok: true, data: results, start: startDate, end: today })
+})
+
+// 投資資產成長歷史（週/月/年）
+app.get('/history', async (c) => {
+  const range = c.req.query('range') ?? 'month'
+
+  // 台北時間（UTC+8）
+  const taipeiNow = new Date(Date.now() + 8 * 60 * 60 * 1000)
+  const today = taipeiNow.toISOString().slice(0, 10)
+
+  if (range === 'week') {
+    // 過去 7 天（含今天）
+    const start = new Date(taipeiNow)
+    start.setUTCDate(start.getUTCDate() - 6)
+    const startDate = start.toISOString().slice(0, 10)
+    const { results } = await c.env.DB.prepare(`
+      SELECT snapshot_date, total_investments FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      ORDER BY snapshot_date ASC
+    `).bind(startDate, today).all<{ snapshot_date: string; total_investments: number }>()
+    return c.json({ ok: true, data: results, start: startDate, end: today })
+  }
+
+  if (range === 'month') {
+    // 過去 30 天（含今天）
+    const start = new Date(taipeiNow)
+    start.setUTCDate(start.getUTCDate() - 29)
+    const startDate = start.toISOString().slice(0, 10)
+    const { results } = await c.env.DB.prepare(`
+      SELECT snapshot_date, total_investments FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      ORDER BY snapshot_date ASC
+    `).bind(startDate, today).all<{ snapshot_date: string; total_investments: number }>()
+    return c.json({ ok: true, data: results, start: startDate, end: today })
+  }
+
+  // year：過去 365 天，每月取最後一筆
+  const start = new Date(taipeiNow)
+  start.setUTCDate(start.getUTCDate() - 364)
+  const startDate = start.toISOString().slice(0, 10)
+  const { results } = await c.env.DB.prepare(`
+    SELECT snapshot_date, total_investments
+    FROM asset_history
+    WHERE snapshot_date IN (
+      SELECT MAX(snapshot_date) FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      GROUP BY substr(snapshot_date, 1, 7)
+    )
+    ORDER BY snapshot_date ASC
+  `).bind(startDate, today).all<{ snapshot_date: string; total_investments: number }>()
+  return c.json({ ok: true, data: results, start: startDate, end: today })
+})
+
 // 取得交易記錄
 app.get('/trades', async (c) => {
   const symbol = c.req.query('symbol')
   const trades = await getInvestmentTrades(c.env.DB, symbol)
   return c.json({ ok: true, data: trades })
+})
+
+// 已實現損益記錄（所有賣出交易）
+app.get('/pnl', async (c) => {
+  const { results } = await c.env.DB
+    .prepare(`SELECT * FROM investment_trades WHERE type = '賣出' ORDER BY date DESC, created_at DESC`)
+    .all<InvestmentTrade>()
+  const total = results.reduce((s, t) => s + (t.realized_pnl ?? 0), 0)
+  return c.json({ ok: true, data: results, total_realized_pnl: total })
 })
 
 // 已實現損益記錄（所有賣出交易）
@@ -406,6 +517,142 @@ app.post('/trades', async (c) => {
   }
 
   return c.json({ ok: true, id })
+})
+
+// 編輯交易記錄（並重算持倉）
+app.patch('/trades/:id', async (c) => {
+  const id = c.req.param('id')
+  const body = await c.req.json<{
+    type?: string; shares?: number; price?: number; date?: string; account?: string; note?: string | null
+  }>()
+
+  const trade = await c.env.DB
+    .prepare('SELECT * FROM investment_trades WHERE id = ?')
+    .bind(id).first<InvestmentTrade>()
+  if (!trade) return c.json({ ok: false, error: '找不到此記錄' }, 404)
+
+  const newType    = body.type    ?? trade.type
+  const newShares  = body.shares  ?? trade.shares
+  const newPrice   = body.price   ?? trade.price
+  const newDate    = body.date    ?? trade.date
+  const newAccount = body.account ?? trade.account
+  const newNote    = 'note' in body ? body.note : trade.note
+  const newAmount  = Math.round(newShares * newPrice)
+
+  await c.env.DB.prepare(
+    'UPDATE investment_trades SET type=?, shares=?, price=?, amount=?, date=?, account=?, note=? WHERE id=?'
+  ).bind(newType, newShares, newPrice, newAmount, newDate, newAccount, newNote ?? null, id).run()
+
+  // 重算持倉：按 (symbol, account) 分開
+  const effectiveAccount = newAccount || trade.account
+  const allForPair = await getInvestmentTrades(c.env.DB, trade.symbol, effectiveAccount)
+  const allInv = await getInvestments(c.env.DB)
+  const inv = allInv.find(i => i.symbol === trade.symbol && i.account === effectiveAccount)
+  if (!inv) return c.json({ ok: true })
+
+  const remaining = allForPair.map(t =>
+    t.id === id ? { ...t, type: newType, shares: newShares, price: newPrice, date: newDate } : t
+  )
+
+  const sorted = [...remaining].sort((a, b) => a.date.localeCompare(b.date))
+  let shares = 0, avgCost = 0, realizedPnl = 0
+  for (const t of sorted) {
+    if (t.type === '買入') {
+      const ns = shares + t.shares
+      avgCost = ns > 0 ? (shares * avgCost + t.shares * t.price) / ns : t.price
+      shares = ns
+    } else {
+      realizedPnl += (t.price - avgCost) * t.shares
+      shares = Math.max(0, shares - t.shares)
+    }
+  }
+
+  const currentPerShare = inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : 0)
+  const newMarketValue = Math.round(shares * currentPerShare)
+  const newTotalCost = Math.round(shares * avgCost)
+  const newProfitLoss = newMarketValue - newTotalCost
+  const newReturnRate = newTotalCost > 0 ? Math.round((newProfitLoss / newTotalCost) * 10000) / 100 : 0
+
+  await upsertInvestment(c.env.DB, {
+    ...inv,
+    shares,
+    avg_cost: Math.round(avgCost * 100) / 100,
+    market_value: newMarketValue,
+    profit_loss: newProfitLoss,
+    return_rate: newReturnRate,
+    realized_pnl: Math.round(realizedPnl),
+    updated_at: new Date().toISOString().slice(0, 10),
+  })
+
+  return c.json({ ok: true })
+})
+
+// 編輯交易記錄（並重算持倉）
+app.patch('/trades/:id', async (c) => {
+  const id = c.req.param('id')
+  const body = await c.req.json<{
+    type?: string; shares?: number; price?: number; date?: string; account?: string; note?: string | null
+  }>()
+
+  const trade = await c.env.DB
+    .prepare('SELECT * FROM investment_trades WHERE id = ?')
+    .bind(id).first<InvestmentTrade>()
+  if (!trade) return c.json({ ok: false, error: '找不到此記錄' }, 404)
+
+  const newType    = body.type    ?? trade.type
+  const newShares  = body.shares  ?? trade.shares
+  const newPrice   = body.price   ?? trade.price
+  const newDate    = body.date    ?? trade.date
+  const newAccount = body.account ?? trade.account
+  const newNote    = 'note' in body ? body.note : trade.note
+  const newAmount  = Math.round(newShares * newPrice)
+
+  await c.env.DB.prepare(
+    'UPDATE investment_trades SET type=?, shares=?, price=?, amount=?, date=?, account=?, note=? WHERE id=?'
+  ).bind(newType, newShares, newPrice, newAmount, newDate, newAccount, newNote ?? null, id).run()
+
+  // 重算持倉：按 (symbol, account) 分開
+  const effectiveAccount = newAccount || trade.account
+  const allForPair = await getInvestmentTrades(c.env.DB, trade.symbol, effectiveAccount)
+  const allInv = await getInvestments(c.env.DB)
+  const inv = allInv.find(i => i.symbol === trade.symbol && i.account === effectiveAccount)
+  if (!inv) return c.json({ ok: true })
+
+  const remaining = allForPair.map(t =>
+    t.id === id ? { ...t, type: newType, shares: newShares, price: newPrice, date: newDate } : t
+  )
+
+  const sorted = [...remaining].sort((a, b) => a.date.localeCompare(b.date))
+  let shares = 0, avgCost = 0, realizedPnl = 0
+  for (const t of sorted) {
+    if (t.type === '買入') {
+      const ns = shares + t.shares
+      avgCost = ns > 0 ? (shares * avgCost + t.shares * t.price) / ns : t.price
+      shares = ns
+    } else {
+      realizedPnl += (t.price - avgCost) * t.shares
+      shares = Math.max(0, shares - t.shares)
+    }
+  }
+
+  const currentPerShare = inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : 0)
+  const newMarketValue = Math.round(shares * currentPerShare)
+  const newTotalCost = Math.round(shares * avgCost)
+  const newProfitLoss = newMarketValue - newTotalCost
+  const newReturnRate = newTotalCost > 0 ? Math.round((newProfitLoss / newTotalCost) * 10000) / 100 : 0
+
+  await upsertInvestment(c.env.DB, {
+    ...inv,
+    shares,
+    avg_cost: Math.round(avgCost * 100) / 100,
+    market_value: newMarketValue,
+    profit_loss: newProfitLoss,
+    return_rate: newReturnRate,
+    realized_pnl: Math.round(realizedPnl),
+    updated_at: new Date().toISOString().slice(0, 10),
+  })
+
+  return c.json({ ok: true })
 })
 
 // 編輯交易記錄（並重算持倉）

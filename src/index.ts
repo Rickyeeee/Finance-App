@@ -6,13 +6,14 @@ import installerRoute from './routes/installer'
 import investmentsRoute from './routes/investments'
 import summaryRoute from './routes/summary'
 import reconcileRoute from './routes/reconcile'
-import gmailRoute from './routes/gmail'
 import assetsRoute from './routes/assets'
 import categoriesRoute from './routes/categories'
 import recurringRoute from './routes/recurring'
 import authRoute from './routes/auth'
-import { syncGmailWithDB } from './services/gmail'
-import { upsertDailySummary, getTransactions, getCategories, getAssets, processRecurring, createTransfer, getInvestments, getMonthlySummary, recordAssetSnapshot } from './db/queries'
+import { getAssets, getCategories, processRecurring, createTransfer, getInvestments, getMonthlySummary, recordAssetSnapshot } from './db/queries'
+import { generateShortcut } from './shortcut-generator'
+import { generateShortcut } from './shortcut-generator'
+import { generateShortcut } from './shortcut-generator'
 
 const app = new Hono<{ Bindings: Bindings }>()
 
@@ -23,13 +24,55 @@ app.use('/api/*', cors({
 }))
 
 // 公開端點：不需要驗證
-app.get('/api/app-config', (c) => {
-  return c.json({ app_name: c.env.APP_NAME || '我的財務' })
+app.get('/api/app-config', async (c) => {
+  try {
+    const row = await c.env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind('app_name').first<{ value: string }>()
+    const app_name = row?.value || c.env.APP_NAME || '我的財務'
+    return c.json({ app_name })
+  } catch {
+    return c.json({ app_name: c.env.APP_NAME || '我的財務' })
+  }
 })
 
-// 動態 manifest.json（使用 APP_NAME 設定）
-app.get('/manifest.json', (c) => {
-  const appName = c.env.APP_NAME || '我的財務'
+// add.html 專用 manifest
+app.get('/add-manifest.json', async (c) => {
+  return c.json({
+    name: '記帳',
+    short_name: '記帳',
+    description: '快速新增記錄',
+    start_url: '/add.html',
+    scope: '/',
+    display: 'standalone',
+    background_color: '#0d1117',
+    theme_color: '#0d1117',
+    orientation: 'portrait-primary',
+    icons: [{ src: '/icons/add-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }],
+  }, 200, { 'Content-Type': 'application/manifest+json' })
+})
+
+// add.html 專用 manifest
+app.get('/add-manifest.json', async (c) => {
+  return c.json({
+    name: '記帳',
+    short_name: '記帳',
+    description: '快速新增記錄',
+    start_url: '/add.html',
+    scope: '/',
+    display: 'standalone',
+    background_color: '#0d1117',
+    theme_color: '#0d1117',
+    orientation: 'portrait-primary',
+    icons: [{ src: '/icons/add-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' }],
+  }, 200, { 'Content-Type': 'application/manifest+json' })
+})
+
+// 動態 manifest.json（從 DB 讀 app_name）
+app.get('/manifest.json', async (c) => {
+  let appName = c.env.APP_NAME || '我的財務'
+  try {
+    const row = await c.env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind('app_name').first<{ value: string }>()
+    if (row?.value) appName = row.value
+  } catch {}
   return c.json({
     name: appName,
     short_name: appName,
@@ -53,6 +96,7 @@ app.use('/api/*', async (c, next) => {
   // cron 有自己的 CRON_SECRET 驗證
   if (c.req.path === '/api/cron/run') return next()
 
+  if (c.req.path.startsWith('/api/installer')) return next()
   const token = c.req.header('Authorization')?.replace('Bearer ', '')
   if (!token || token !== c.env.AUTH_TOKEN) {
     return c.json({ ok: false, error: '未授權' }, 401)
@@ -60,14 +104,75 @@ app.use('/api/*', async (c, next) => {
   return next()
 })
 
+// 更新 app 名稱（需驗證）
+app.patch('/api/app-config', async (c) => {
+  const body = await c.req.json<{ app_name: string }>()
+  const name = (body.app_name ?? '').trim()
+  if (!name) return c.json({ ok: false, error: '名稱不能為空' }, 400)
+  await c.env.DB.prepare(
+    'INSERT INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
+  ).bind('app_name', name).run()
+  return c.json({ ok: true, app_name: name })
+})
+
 // 安裝程式（不需要驗證，自帶 Cloudflare API token）
 app.route('/api/installer', installerRoute)
+
+// iOS 捷徑動態生成（token 嵌入）— 不需要驗證，token 來自 query param
+app.get('/api/shortcut/download', async (c) => {
+  const token = c.req.query('t')
+  if (!token) return c.json({ ok: false, error: 'missing token' }, 400)
+  try {
+    const buf = generateShortcut(token)
+    return new Response(buf, {
+      headers: {
+        'Content-Type': 'application/vnd.apple.shortcut',
+        'Content-Disposition': 'attachment; filename=jizhang.shortcut'
+      }
+    })
+  } catch (e: any) {
+    return c.json({ ok: false, error: String(e?.message ?? e) }, 500)
+  }
+})
+
+// iOS 捷徑動態生成（token 嵌入）— 不需要驗證，token 來自 query param
+app.get('/api/shortcut/download', async (c) => {
+  const token = c.req.query('t')
+  if (!token) return c.json({ ok: false, error: 'missing token' }, 400)
+  try {
+    const buf = generateShortcut(token)
+    return new Response(buf, {
+      headers: {
+        'Content-Type': 'application/vnd.apple.shortcut',
+        'Content-Disposition': 'attachment; filename=jizhang.shortcut'
+      }
+    })
+  } catch (e: any) {
+    return c.json({ ok: false, error: String(e?.message ?? e) }, 500)
+  }
+})
+
+// iOS 捷徑動態生成（token 嵌入）— 不需要驗證，token 來自 query param
+app.get('/api/shortcut/download', async (c) => {
+  const token = c.req.query('t')
+  if (!token) return c.json({ ok: false, error: 'missing token' }, 400)
+  try {
+    const buf = generateShortcut(token)
+    return new Response(buf, {
+      headers: {
+        'Content-Type': 'application/vnd.apple.shortcut',
+        'Content-Disposition': 'attachment; filename=jizhang.shortcut'
+      }
+    })
+  } catch (e: any) {
+    return c.json({ ok: false, error: String(e?.message ?? e) }, 500)
+  }
+})
 
 app.route('/api/transactions', transactionsRoute)
 app.route('/api/investments', investmentsRoute)
 app.route('/api/summary', summaryRoute)
 app.route('/api/reconcile', reconcileRoute)
-app.route('/api/gmail', gmailRoute)
 app.route('/api/assets', assetsRoute)
 app.route('/api/categories', categoriesRoute)
 app.route('/api/recurring', recurringRoute)
@@ -83,6 +188,7 @@ app.get('/api/shortcut/data', async (c) => {
     accounts: assets.filter(a => a.type !== '投資帳戶').map(a => a.name),
     expense_category_objects: expCats.map(ct => ({ name: ct.name, icon: ct.icon ?? null })),
     income_category_objects:  incCats.map(ct => ({ name: ct.name, icon: ct.icon ?? null })),
+    account_objects: assets.filter(a => a.type !== '投資帳戶').map(a => ({ id: a.id, name: a.name, type: a.type })),
   })
 })
 
@@ -97,86 +203,87 @@ app.post('/api/cron/run', async (c) => {
     .catch(e => c.json({ ok: false, error: String(e) }, 500))
 })
 
+// 靜態檔案 fallback（讓 ASSETS binding 處理所有未匹配的路由）
+app.all('*', async (c) => {
+  const res = await (c.env.ASSETS as Fetcher).fetch(c.req.raw)
+  const ct = res.headers.get('content-type') ?? ''
+  const path = new URL(c.req.url).pathname
+  if (path === '/sw.js') {
+    // SW 絕對不能被快取，否則瀏覽器拿不到新版本
+    const newRes = new Response(res.body, res)
+    newRes.headers.set('Cache-Control', 'no-store')
+    return newRes
+  }
+  if (ct.includes('text/html')) {
+    const newRes = new Response(res.body, res)
+    newRes.headers.set('Cache-Control', 'no-cache')
+    return newRes
+  }
+  return res
+})
+
 // Cloudflare Scheduled Worker（每天 22:00 台北時間 = UTC 14:00）
 export default {
   fetch: app.fetch,
 
   async scheduled(_event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
-    ctx.waitUntil(runNightlyJob(env))
+    ctx.waitUntil(runDayStart(env))
   },
 }
 
-async function runNightlyJob(env: Bindings) {
-  const { GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, DB } = env
+// 每天 00:00 台北時間：記錄昨日快照 + 生成今日定期交易 + 自動扣繳
+async function runDayStart(env: Bindings) {
+  const { DB } = env
+  const taipeiNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Taipei' }))
+  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  const todayStr = fmt(taipeiNow)
+  const yesterday = new Date(taipeiNow)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayStr = fmt(yesterday)
 
-  if (!GMAIL_CLIENT_ID || !GMAIL_CLIENT_SECRET || !GMAIL_REFRESH_TOKEN) {
-    return { skipped: true, reason: 'Gmail OAuth not configured' }
-  }
-
-  // 處理定期交易
-  const recurringCount = await processRecurring(DB)
-
-  // 自動扣繳：結算日當天，找出 payment_method='auto' 的信用卡並建立付款轉帳
-  const taiwanNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Taipei' }))
-  const todayDay = taiwanNow.getDate()
-  const todayStr = `${taiwanNow.getFullYear()}-${String(taiwanNow.getMonth()+1).padStart(2,'0')}-${String(taiwanNow.getDate()).padStart(2,'0')}`
-  const allAssets = await getAssets(DB)
-  for (const cc of allAssets) {
-    if (cc.type !== '信用卡' || cc.payment_method !== 'auto' || !cc.payment_account || cc.billing_day !== todayDay) continue
-    const y = taiwanNow.getFullYear(), m = taiwanNow.getMonth() + 1
-    const monthStr = `${y}-${String(m).padStart(2,'0')}`
-    const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-    const periodStart = fmt(new Date(y, m - 2, cc.billing_day + 1))
-    const { data: txns } = await getTransactions(DB, { date_from: periodStart, date_to: todayStr, card: cc.name, limit: 1000 })
-    const billAmount = txns.filter(t => t.type !== '收入' && !t.transfer_id).reduce((s, t) => s + t.amount, 0)
-    if (billAmount > 0) {
-      await createTransfer(DB, { from_account: cc.payment_account, to_account: cc.name, amount: billAmount, date: todayStr, note: `${monthStr} 自動扣繳`, outName: '自動扣繳', inName: '自動扣繳' })
-    }
-  }
-
-  const result = await syncGmailWithDB(GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, DB)
-
-  const today = new Date().toISOString().slice(0, 10)
-
-  // 取得今天所有消費（含已存在的）
-  const { data: txns } = await getTransactions(DB, { date: today, limit: 100 })
-  const totalAmount = txns.reduce((s, t) => s + t.amount, 0)
-  const lines = txns.map(t => `• ${t.name} $${t.amount.toLocaleString()}（${t.category}）`)
-  const summaryText = txns.length
-    ? `📊 ${today} 消費摘要\n共 ${txns.length} 筆，總金額 NT$${totalAmount.toLocaleString()}\n\n${lines.join('\n')}\n\n已寫入系統 ✅`
-    : `📊 ${today} 消費摘要\n今日無消費記錄`
-
-  await upsertDailySummary(DB, today, {
-    total_amount: totalAmount,
-    transaction_count: txns.length,
-    summary_text: summaryText,
-  })
-
-  // 每日資產快照（用於折線圖）
+  // 記錄昨日資產快照
   const [allAssetsSnap, allInvestmentsSnap] = await Promise.all([
     getAssets(DB),
     getInvestments(DB),
   ])
-  const monthKey = today.slice(0, 7)
+  const monthKey = yesterdayStr.slice(0, 7)
   const { total: monthlyExpense } = await getMonthlySummary(DB, monthKey)
   const totalCash = allAssetsSnap
     .filter(a => a.type === '銀行' || a.type === '現金' || a.type === '銀行存款')
     .reduce((s, a) => s + a.balance, 0)
   const totalInvestmentsValue = allInvestmentsSnap.reduce((s, i) => s + i.market_value, 0)
   await recordAssetSnapshot(DB, {
-    snapshot_date: today,
+    snapshot_date: yesterdayStr,
     total_assets: totalCash + totalInvestmentsValue,
     total_investments: totalInvestmentsValue,
     total_cash: totalCash,
     monthly_expense: monthlyExpense,
   })
 
+  // 生成今日定期交易
+  const recurringCount = await processRecurring(DB)
+
+  // 自動扣繳
+  const todayDay = taipeiNow.getDate()
+  const allAssets = await getAssets(DB)
+  for (const cc of allAssets) {
+    if (cc.type !== '信用卡' || cc.payment_method !== 'auto' || !cc.payment_account || cc.billing_day !== todayDay) continue
+    const y = taipeiNow.getFullYear(), m = taipeiNow.getMonth() + 1
+    const monthStr = `${y}-${String(m).padStart(2,'0')}`
+    const periodStart = fmt(new Date(y, m - 2, cc.billing_day + 1))
+    const { results: ccTxns } = await DB.prepare(
+      `SELECT * FROM transactions WHERE date >= ? AND date <= ? AND card = ? AND type != '收入' AND transfer_id IS NULL LIMIT 1000`
+    ).bind(periodStart, todayStr, cc.name).all<any>()
+    const billAmount = ccTxns.reduce((s: number, t: any) => s + t.amount, 0)
+    if (billAmount > 0) {
+      await createTransfer(DB, { from_account: cc.payment_account, to_account: cc.name, amount: billAmount, date: todayStr, note: `${monthStr} 自動扣繳`, outName: '自動扣繳', inName: '自動扣繳' })
+    }
+  }
+
   return {
-    date: today,
+    snapshot_date: yesterdayStr,
+    today: todayStr,
     recurring_generated: recurringCount,
-    gmail_synced: result.synced,
-    gmail_skipped: result.skipped,
-    total_today: txns.length,
-    summary: summaryText,
+    snapshot: { total_assets: totalCash + totalInvestmentsValue, total_investments: totalInvestmentsValue },
   }
 }

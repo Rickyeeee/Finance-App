@@ -24,13 +24,23 @@ app.use('/api/*', cors({
 }))
 
 // 公開端點
-app.get('/api/app-config', (c) => {
-  return c.json({ app_name: c.env.APP_NAME || '我的財務' })
+app.get('/api/app-config', async (c) => {
+  try {
+    const row = await c.env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind('app_name').first<{ value: string }>()
+    const app_name = row?.value || c.env.APP_NAME || '我的財務'
+    return c.json({ app_name })
+  } catch {
+    return c.json({ app_name: c.env.APP_NAME || '我的財務' })
+  }
 })
 
-// 動態 manifest.json
-app.get('/manifest.json', (c) => {
-  const appName = c.env.APP_NAME || '我的財務'
+// 動態 manifest.json（從 DB 讀 app_name）
+app.get('/manifest.json', async (c) => {
+  let appName = c.env.APP_NAME || '我的財務'
+  try {
+    const row = await c.env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind('app_name').first<{ value: string }>()
+    if (row?.value) appName = row.value
+  } catch {}
   return c.json({
     name: appName,
     short_name: appName,
@@ -57,6 +67,42 @@ app.use('/api/*', async (c, next) => {
     return c.json({ ok: false, error: '未授權' }, 401)
   }
   return next()
+})
+
+// 更新 app 名稱（需驗證）
+app.patch('/api/app-config', async (c) => {
+  const body = await c.req.json<{ app_name: string }>()
+  const name = (body.app_name ?? '').trim()
+  if (!name) return c.json({ ok: false, error: '名稱不能為空' }, 400)
+  await c.env.DB.prepare(
+    'INSERT INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
+  ).bind('app_name', name).run()
+  return c.json({ ok: true, app_name: name })
+})
+
+app.post('/api/self-update', async (c) => {
+  const token = c.env.CF_API_TOKEN
+  const workerName = c.env.WORKER_NAME
+  if (!token || !workerName) {
+    return c.json({ ok: false, error: '此版本不支援一鍵更新，請重新安裝' }, 400)
+  }
+  const bundleRes = await fetch((c.env.STATIC_ORIGIN || 'https://ricky-finance.ke877857.workers.dev') + '/installer-worker.js')
+  if (!bundleRes.ok) {
+    return c.json({ ok: false, error: '無法取得最新版本' }, 502)
+  }
+  const bundle = await bundleRes.text()
+
+  const upstream = (c.env.STATIC_ORIGIN || 'https://ricky-finance.ke877857.workers.dev') + '/api/installer/update'
+  const res = await fetch(upstream, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ api_token: token, worker_name: workerName, bundle }),
+  })
+
+  return new Response(res.body, {
+    status: res.status,
+    headers: { 'Content-Type': res.headers.get('Content-Type') || 'text/event-stream' },
+  })
 })
 
 app.route('/api/transactions', transactionsRoute)
@@ -91,21 +137,19 @@ app.post('/api/cron/run', async (c) => {
     .catch(e => c.json({ ok: false, error: String(e) }, 500))
 })
 
-// 靜態檔案：proxy 回原始 Worker
+// 靜態檔案：proxy 回 Ricky 的靜態站（cross-account fetch 可正常運作）
 app.all('*', async (c) => {
   const origin = c.env.STATIC_ORIGIN || 'https://ricky-finance.ke877857.workers.dev'
   const url = new URL(c.req.url)
   try {
-    const res = await fetch(origin + url.pathname + url.search, {
-      headers: { 'User-Agent': 'installer-proxy/1.0' },
-    })
+    const res = await fetch(origin + url.pathname + url.search)
     const contentType = res.headers.get('Content-Type') || 'text/html; charset=utf-8'
     return new Response(res.body, {
       status: res.status,
       headers: { 'Content-Type': contentType },
     })
   } catch {
-    return c.text('靜態資源載入失敗，請確認原始服務正常運作', 502)
+    return c.text('載入失敗，請稍後再試', 502)
   }
 })
 

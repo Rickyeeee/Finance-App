@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>信用卡對帳 — 瑞奇財務</title>
+<title>帳戶對帳 — 瑞奇財務</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="瑞奇財務">
 <meta name="theme-color" content="#161b22">
 <link rel="apple-touch-icon" href="/icons/icon.svg">
-<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/style.css?v=1784541104574">
 <style>
 .rec-section-title {
   font-size: 12px;
@@ -90,14 +90,13 @@
   align-items: center;
   justify-content: center;
   /* overlay padding 同時處理動態島（上）和 Home 條（下）安全區 */
-  padding: max(env(safe-area-inset-top) + 10px, 24px) 16px max(env(safe-area-inset-bottom) + 10px, 24px);
+  padding: max(env(safe-area-inset-top) + 10px, 24px) 16px max(env(safe-area-inset-bottom) + 70px, 80px);
   touch-action: none;
 }
 .rec-modal-inner, .acct-view-inner {
   display: flex; flex-direction: column;
   background: #0d1117;
   width: 100%;
-  /* 撐滿 overlay 內可用高度，最高 720px；清單在裡面滾動 */
   flex: 1 1 auto;
   min-height: 0;
   max-height: 720px;
@@ -266,14 +265,16 @@
   <nav class="sidebar-nav">
     <a href="/" class="nav-item"><span class="icon">🏠</span><span>資產總覽</span></a>
     <a href="/transactions.html" class="nav-item"><span class="icon">📋</span><span>消費記錄</span></a>
-    <a href="/reconcile.html" class="nav-item active"><span class="icon">🔍</span><span>信用卡對帳</span></a>
+    <a href="/reconcile.html" class="nav-item active"><span class="icon">🔍</span><span>帳戶對帳</span></a>
     <a href="/investments.html" class="nav-item"><span class="icon">📈</span><span>投資損益</span></a>
+    <a href="/report.html" class="nav-item"><span class="icon">📊</span><span>報表</span></a>
   </nav>
+  <button class="sidebar-update-btn" onclick="import('/js/api.js?v=1784541104574').then(m=>m.openUpdateModal())">↑ 更新系統</button>
 </aside>
 
 <div class="main">
   <div class="header">
-    <h1>信用卡對帳</h1>
+    <h1>帳戶對帳</h1>
     <div class="header-actions">
       <button class="btn btn-secondary btn-sm" onclick="renderAll()">↻ 重新整理</button>
     </div>
@@ -286,11 +287,6 @@
 
     <!-- 帳戶記錄區 -->
     <div class="rec-section-title" style="margin-top:24px">帳戶記錄</div>
-    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:12px">
-      <button id="month-prev" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">‹</button>
-      <div id="month-display" style="font-size:15px;font-weight:600;min-width:90px;text-align:center"></div>
-      <button id="month-next" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">›</button>
-    </div>
     <div class="card" style="padding:0 16px">
       <div id="acct-section"><div class="loading" style="padding:16px 0">載入中…</div></div>
     </div>
@@ -307,6 +303,7 @@
         <div class="rec-modal-title-sub" id="rec-modal-period"></div>
       </div>
       <div class="rec-modal-card-total" id="rec-modal-card-total"></div>
+      <button class="rec-modal-close" style="font-size:20px;font-weight:300;line-height:1;flex-shrink:0" title="新增記錄" onclick="openNewTxnForCard()">+</button>
     </div>
     <div class="rec-modal-search">
       <input type="text" id="rec-search" placeholder="搜尋交易名稱 / 分類" oninput="filterRecTxns(this.value)">
@@ -332,7 +329,13 @@
     <div class="acct-view-header">
       <button class="rec-modal-close" onclick="closeAcctView()">✕</button>
       <div class="rec-modal-title" id="acct-view-title"></div>
-      <a href="/add.html" class="rec-modal-close" style="text-decoration:none;font-size:20px;font-weight:300;line-height:1" title="新增記錄">+</a>
+      <div id="acct-view-balance" style="font-size:14px;font-weight:700;flex-shrink:0"></div>
+      <button class="rec-modal-close" style="font-size:20px;font-weight:300;line-height:1" title="新增記錄" onclick="openNewTxnForAcct()">+</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <button id="acct-month-prev" onclick="acctMonthNav(-1)" style="background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:0 6px;line-height:1">‹</button>
+      <span id="acct-month-display" style="font-size:13px;font-weight:600;min-width:100px;text-align:center"></span>
+      <button id="acct-month-next" onclick="acctMonthNav(1)" style="background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:0 6px;line-height:1">›</button>
     </div>
     <div class="acct-view-list" id="acct-view-list"></div>
     <div class="acct-view-footer">
@@ -378,16 +381,25 @@
   </div>
 </div>
 
-<script src="/js/calc-keyboard.js"></script>
+<script src="/js/calc-keyboard.js?v=1784541104574"></script>
 <script type="module">
-import { api, toast, catIcon, initAppName } from '/js/api.js'
+import { api, toast, catIcon, initAppName, swr } from '/js/api.js?v=1784541104574'
+import { openAddTxnModal, openEditTxnModal, preloadTxnModalData } from '/js/txn-modal.js?v=1784541104574'
 
 let allAccounts = []
 let recTxns = []       // 目前對帳 modal 裡的交易
 let recCardAcc = null  // 目前對帳的信用卡 account 物件
 let recSearchVal = ''
-// 暫存延後入帳變更，key=id, value={ originalStatus, needsApi }
+// 暫存所有本地狀態變更，key=id, value={ originalStatus, originalDate }
+let pendingChanges = new Map()
+// 相容舊邏輯（延後入帳需額外資訊）
 let pendingDeferrals = new Map()
+
+// 帳戶 view 狀態
+let acctViewTxns = []
+let _currentAcctViewId = ''
+let _currentAcctViewName = ''
+let _currentAcctViewMonth = ''
 
 const WEEKDAYS = ['日','一','二','三','四','五','六']
 
@@ -427,44 +439,17 @@ function groupedAccountOptions(accounts) {
   return html || '<option>無可用帳戶</option>'
 }
 
-// ── 帳戶記錄月份導覽 ──
-let currentMonth = (() => {
+// ── 帳戶 View 月份狀態（各帳戶共用同一個月份，開 modal 時獨立切換）──
+const _nowMonth = (() => {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
 })()
-
-function getMonthValue() { return currentMonth }
-
-function setMonth(val) {
-  currentMonth = val
-  document.getElementById('month-display').textContent = val.replace('-', ' 年 ') + ' 月'
-  const month = getMonthValue()
-  renderAcctSection(month)
-}
-
-function initMonthSelect() {
+const _minAcctMonth = (() => {
   const now = new Date()
-  const minMonth = (() => {
-    const d = new Date(now.getFullYear(), now.getMonth() - 11, 1)
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
-  })()
-  const maxMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
-
-  document.getElementById('month-display').textContent = currentMonth.replace('-', ' 年 ') + ' 月'
-
-  document.getElementById('month-prev').addEventListener('click', () => {
-    const [y, m] = currentMonth.split('-').map(Number)
-    const prev = new Date(y, m - 2, 1)
-    const val = `${prev.getFullYear()}-${String(prev.getMonth()+1).padStart(2,'0')}`
-    if (val >= minMonth) setMonth(val)
-  })
-  document.getElementById('month-next').addEventListener('click', () => {
-    const [y, m] = currentMonth.split('-').map(Number)
-    const next = new Date(y, m, 1)
-    const val = `${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}`
-    if (val <= maxMonth) setMonth(val)
-  })
-}
+  const d = new Date(now.getFullYear(), now.getMonth() - 23, 1)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+})()
+let acctViewMonth = _nowMonth
 
 // ── 每張信用卡獨立的帳單期間狀態 ──
 const cardMonths = {}
@@ -517,6 +502,20 @@ const _nowStr = (() => {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
 })()
+
+// 每張卡的最大可導覽月份：結算日已過 → 下個月；尚未到 → 本月
+function getCardMaxMonth(billingDay) {
+  const now = new Date()
+  const todayStr = now.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
+  const td = parseInt(todayStr.slice(8), 10)
+  const ty = parseInt(todayStr.slice(0, 4), 10)
+  const tm = parseInt(todayStr.slice(5, 7), 10)
+  if (billingDay && td > billingDay) {
+    const next = new Date(ty, tm, 1)
+    return `${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}`
+  }
+  return `${ty}-${String(tm).padStart(2,'0')}`
+}
 const _minMonth = (() => {
   const now = new Date()
   const d = new Date(now.getFullYear(), now.getMonth() - 23, 1)
@@ -527,9 +526,10 @@ window.cardPeriodNav = async function(accId, dir) {
   const [y, m] = getCardMonth(accId).split('-').map(Number)
   const next = dir === 1 ? new Date(y, m, 1) : new Date(y, m - 2, 1)
   const val = `${next.getFullYear()}-${String(next.getMonth()+1).padStart(2,'0')}`
-  if (val > _nowStr || val < _minMonth) return
-  cardMonths[accId] = val
   const acc = allAccounts.find(a => a.id === accId)
+  const maxMonth = acc ? getCardMaxMonth(acc.billing_day) : _nowStr
+  if (val > maxMonth || val < _minMonth) return
+  cardMonths[accId] = val
   if (!acc) return
   const el = document.getElementById('cc-card-' + accId)
   if (el) el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">載入中…</div>'
@@ -563,8 +563,8 @@ async function fetchBillingTxns(cardName, billingDay, month) {
   const txns = (res.data ?? []).filter(t =>
     t.card === cardName &&
     !t.transfer_id && (
-      // 當期：排除已標記延後入帳的（它們將出現在下期）
-      (t.date >= start && t.date <= end && t.status !== '延後入帳') ||
+      // 當期：全部顯示（含延後入帳，讓使用者可取消）
+      (t.date >= start && t.date <= end) ||
       // 上期延後入帳：帶入當期顯示
       (t.status === '延後入帳' && t.date >= prevStart && t.date < start)
     )
@@ -593,17 +593,26 @@ function getBillingStatus(txns) {
   const decided = txns.filter(t => t.status !== '待確認')
   const confirmed = txns.filter(t => t.status === '已對帳')
   const allDecided = decided.length === txns.length
-  const amount = confirmed.reduce((s, t) => s + t.amount, 0)
-  return { allDecided, confirmedCount: confirmed.length, total: txns.length, amount }
+  const amount = confirmed.reduce((s, t) => t.type === '收入' ? s - t.amount : s + t.amount, 0)
+  const totalExpense = txns.reduce((s, t) => t.type === '收入' ? s - t.amount : s + t.amount, 0)
+  return { allDecided, confirmedCount: confirmed.length, total: txns.length, amount, totalExpense }
 }
 
 // ── 渲染全頁 ──
 async function renderAll() {
-  const res = await api.getAssets()
+  const cached = swr.get('reconcile-accounts')
+  if (cached) {
+    allAccounts = cached
+    await renderCCSection()
+    renderAcctSection()
+  }
+  const [res, cRes] = await Promise.all([api.getAssets(), api.getCategories()])
   if (!res.ok) return
   allAccounts = res.data.accounts ?? []
+  swr.set('reconcile-accounts', allAccounts)
+  preloadTxnModalData(allAccounts, cRes.ok ? cRes.data : [])
   await renderCCSection()
-  renderAcctSection(getMonthValue())
+  renderAcctSection()
 }
 
 // ── 單張信用卡 HTML 建構 ──
@@ -662,8 +671,10 @@ async function buildCCCardHtml(acc) {
   if (!acc.billing_day) {
     statusHtml = `<span style="color:var(--text-muted);font-size:12px">–</span>`
   } else if (periodEnd && periodEnd > todayStr) {
-    // 結算日尚未到 → 帳單未出
-    statusHtml = `<span style="color:var(--text-muted);font-size:12px">–</span>`
+    // 結算日尚未到 → 顯示累計消費金額
+    statusHtml = billingStatus?.totalExpense
+      ? `<span style="color:var(--text-muted);font-size:13px;font-weight:600">NT$${billingStatus.totalExpense.toLocaleString()}</span>`
+      : `<span style="color:var(--text-muted);font-size:12px">本期無消費</span>`
   } else if (!billingStatus) {
     // 結算日已過但無交易
     statusHtml = `<span style="color:var(--text-muted);font-size:12px">本期無消費</span>`
@@ -675,7 +686,8 @@ async function buildCCCardHtml(acc) {
   } else if (billingStatus.allDecided) {
     statusHtml = `<span style="color:var(--success);font-size:13px;font-weight:600">NT$${billingStatus.amount.toLocaleString()} 應繳</span>`
   } else {
-    statusHtml = `<span style="color:var(--warning);font-size:13px">未對帳</span>`
+    const totalStr = billingStatus.totalExpense ? ` · NT$${billingStatus.totalExpense.toLocaleString()}` : ''
+    statusHtml = `<span style="color:var(--warning);font-size:13px">未對帳${totalStr}</span>`
   }
 
   // 帳單期間導覽列（每張卡獨立）
@@ -684,7 +696,7 @@ async function buildCCCardHtml(acc) {
     const { start, end } = getBillingPeriod(acc.billing_day, month)
     const shortFmt = s => s.slice(5).replace('-', '/')
     const canPrev = month > _minMonth
-    const canNext = month < _nowStr
+    const canNext = month < getCardMaxMonth(acc.billing_day)
     periodNav = `<div style="display:flex;align-items:center;justify-content:center;gap:10px;padding:8px 0 4px;border-bottom:1px solid var(--border);margin-bottom:8px">
       <button onclick="cardPeriodNav('${escHtml(acc.id)}',-1)" style="background:none;border:none;color:${canPrev ? 'var(--text)' : 'var(--border)'};font-size:18px;cursor:${canPrev ? 'pointer' : 'default'};padding:0 4px;line-height:1">‹</button>
       <span style="font-size:12px;color:var(--text-muted);min-width:120px;text-align:center">${shortFmt(start)} ～ ${shortFmt(end)}</span>
@@ -732,9 +744,11 @@ async function buildCCCardHtml(acc) {
         ? `<span style="opacity:0.4;font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;cursor:default">自動扣繳</span>`
         : isPaid
           ? `<span style="opacity:0.4;font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;cursor:default">手動繳款</span>`
-          : billingStatus?.allDecided
-            ? `<button class="btn btn-primary btn-sm" onclick="openPaymentModal('${escHtml(acc.name)}',${billingStatus.amount})">手動繳款</button>`
-            : `<button class="btn btn-secondary btn-sm" style="opacity:0.4" onclick="paymentNotReady()">手動繳款</button>`
+          : (periodEnd && periodEnd > todayStr)
+            ? `<button class="btn btn-secondary btn-sm" style="opacity:0.4" onclick="paymentNotReady()">手動繳款</button>`
+            : billingStatus?.allDecided
+              ? `<button class="btn btn-primary btn-sm" onclick="openPaymentModal('${escHtml(acc.name)}',${billingStatus.amount})">手動繳款</button>`
+              : `<button class="btn btn-secondary btn-sm" style="opacity:0.4" onclick="paymentNotReady()">手動繳款</button>`
       }
       ${(isPaid || !billingStatus)
         ? `<button class="btn btn-secondary btn-sm" style="opacity:0.4;cursor:default" disabled>開始對帳</button>`
@@ -752,10 +766,13 @@ async function renderCCSection() {
     container.innerHTML = '<div class="empty-state" style="padding:16px 0">無信用卡帳戶</div>'
     return
   }
-  // 先放佔位，再全部並行載入
-  container.innerHTML = ccAccs.map(acc =>
-    `<div id="cc-card-${escHtml(acc.id)}" class="cc-card"><div style="padding:20px;text-align:center;color:var(--text-muted)">載入中…</div></div>`
-  ).join('')
+  // 第一次才建立佔位；已有內容時直接更新，避免閃爍
+  const hasExisting = ccAccs.every(acc => document.getElementById('cc-card-' + acc.id))
+  if (!hasExisting) {
+    container.innerHTML = ccAccs.map(acc =>
+      `<div id="cc-card-${escHtml(acc.id)}" class="cc-card"><div style="padding:20px;text-align:center;color:var(--text-muted)">載入中…</div></div>`
+    ).join('')
+  }
   await Promise.all(ccAccs.map(async acc => {
     const html = await buildCCCardHtml(acc)
     const el = document.getElementById('cc-card-' + acc.id)
@@ -764,7 +781,7 @@ async function renderCCSection() {
 }
 
 // ── 帳戶記錄區 ──
-function renderAcctSection(month) {
+function renderAcctSection() {
   const nonCC = allAccounts.filter(a => a.type !== '信用卡')
   const container = document.getElementById('acct-section')
   if (!nonCC.length) {
@@ -772,9 +789,9 @@ function renderAcctSection(month) {
     return
   }
 
-  const iconMap = { '銀行':'🏦','銀行存款':'🏦','證券戶':'📈','投資帳戶':'📈','現金':'💵' }
-  const typeLabel = { '銀行':'銀行', '銀行存款':'銀行', '證券戶':'證券戶', '投資帳戶':'證券戶', '現金':'現金' }
-  const typeOrder = ['銀行', '證券戶', '現金']
+  const iconMap = { '銀行':'🏦','銀行存款':'🏦','現金':'💵','證券戶':'📈','投資帳戶':'📈','信用卡':'💳' }
+  const typeLabel = { '銀行':'銀行', '銀行存款':'銀行', '證券戶':'證券戶', '投資帳戶':'證券戶', '現金':'現金', '信用卡':'信用卡' }
+  const typeOrder = ['銀行', '證券戶', '現金', '信用卡']
 
   // 依類型分組
   const groups = {}
@@ -789,7 +806,7 @@ function renderAcctSection(month) {
     const bal = acc.balance >= 0
       ? `<span style="color:var(--accent)">NT$${acc.balance.toLocaleString()}</span>`
       : `<span style="color:var(--danger)">NT$${Math.abs(acc.balance).toLocaleString()}</span>`
-    return `<div class="acct-row" onclick="openAcctView('${escHtml(acc.id)}','${escHtml(acc.name)}','${month}')">
+    return `<div class="acct-row" onclick="openAcctView('${escHtml(acc.id)}','${escHtml(acc.name)}')">
       <div class="acct-row-icon">${icon}</div>
       <div class="acct-row-info">
         <div class="acct-row-name">${escHtml(acc.name)}</div>
@@ -834,23 +851,34 @@ window.openRecModal = async function(accId) {
   document.body.style.overflow = 'hidden'
   document.getElementById('rec-modal-list').innerHTML = '<div style="padding:20px 0;color:var(--text-muted);text-align:center">載入中…</div>'
 
+  pendingChanges.clear()
   pendingDeferrals.clear()
   recTxns = await fetchBillingTxns(recCardAcc.name, recCardAcc.billing_day, month)
   renderRecModal()
 }
 
 window.closeRecModal = async function() {
-  if (pendingDeferrals.size > 0) {
-    const count = pendingDeferrals.size
-    const confirmed = confirm(`有 ${count} 筆紀錄標記為「延後入帳」，儲存後將移至下期。\n\n確認儲存？`)
-    if (confirmed) {
-      await savePendingDeferrals()
+  const totalPending = pendingChanges.size + pendingDeferrals.size
+  if (totalPending > 0) {
+    const deferCount = pendingDeferrals.size
+    const confirmCount = pendingChanges.size
+    let msg = `有 ${totalPending} 筆未儲存的變更`
+    if (deferCount > 0) msg += `（含 ${deferCount} 筆延後入帳將移至下期）`
+    msg += '。\n\n確認儲存？'
+    const ok = confirm(msg)
+    if (ok) {
+      await saveAllPending()
     } else {
-      // 捨棄：還原本機暫存的狀態
+      // 捨棄：還原所有本機暫存
+      for (const [id, info] of pendingChanges) {
+        const t = recTxns.find(x => x.id === id)
+        if (t) { t.status = info.originalStatus; t.date = info.originalDate }
+      }
       for (const [id, info] of pendingDeferrals) {
         const t = recTxns.find(x => x.id === id)
         if (t) t.status = info.originalStatus
       }
+      pendingChanges.clear()
       pendingDeferrals.clear()
     }
   }
@@ -858,41 +886,60 @@ window.closeRecModal = async function() {
   if (!document.getElementById('acct-view-modal').classList.contains('open')) {
     document.body.style.overflow = ''
   }
-  // 只重新渲染被對帳的那張卡
-  if (recCardAcc) {
-    const html = await buildCCCardHtml(recCardAcc)
-    const el = document.getElementById('cc-card-' + recCardAcc.id)
-    if (el) el.outerHTML = html
-  }
+  // 退出時整頁同步更新：所有卡片金額 + 帳戶餘額（新增/更新/刪除都會反映）
+  await renderAll()
 }
 
-async function savePendingDeferrals() {
-  for (const [id, info] of pendingDeferrals) {
-    if (info.needsApi) {
-      await api.updateTransaction(id, { status: '延後入帳' })
+async function saveAllPending() {
+  // 批次儲存所有狀態變更
+  const promises = []
+  for (const [id] of pendingChanges) {
+    const t = recTxns.find(x => x.id === id)
+    if (!t) continue
+    const body = { status: t.status }
+    if (t.status === '待確認') {
+      // 若 deferred_to 有記錄原始日期（上期延後入帳被確認後取消），一起還原
+      body.deferred_to = null
+      if (t.deferred_to) body.date = t.deferred_to
     }
+    if (t._fromPrevPeriod && t.status === '已對帳') {
+      const newDate = pendingChanges.get(id)?.newDate ?? t.date
+      body.date = newDate
+      body.deferred_to = t.date  // 保存原始日期，讓之後能還原
+    }
+    promises.push(api.updateTransaction(id, body))
   }
-  // 從當期顯示中移除已儲存的延後紀錄
-  const deferredIds = new Set(pendingDeferrals.keys())
-  recTxns = recTxns.filter(t => !deferredIds.has(t.id))
+  for (const [id, info] of pendingDeferrals) {
+    if (info.needsApi) promises.push(api.updateTransaction(id, { status: '延後入帳' }))
+  }
+  await Promise.all(promises)
+  pendingChanges.clear()
   pendingDeferrals.clear()
   renderRecModal()
 }
 
 function renderRecModal() {
-  // 總消費（支出）= 所有交易加總（皆為正數，但要顯示為負）
-  const totalExp = recTxns.filter(t => t.type !== '收入').reduce((s, t) => s + t.amount, 0)
-  document.getElementById('rec-modal-card-total').textContent = totalExp ? `NT$${totalExp.toLocaleString()}` : 'NT$0'
+  // 淨額 = 支出 − 收入（折扣會減少帳單）
+  const totalNet = recTxns.reduce((s, t) => t.type === '收入' ? s - t.amount : s + t.amount, 0)
+  document.getElementById('rec-modal-card-total').textContent = totalNet ? `NT$${totalNet.toLocaleString()}` : 'NT$0'
 
-  const decided = recTxns.filter(t => t.status !== '待確認')
-  const confirmedAmt = recTxns.filter(t => t.status === '已對帳').reduce((s,t) => s+t.amount, 0)
+  const decided = recTxns.filter(t => {
+    if (t.status === '待確認') return false
+    const isUntouched = t._fromPrevPeriod && t.status === '延後入帳'
+      && !pendingDeferrals.has(t.id) && !pendingChanges.has(t.id)
+    return !isUntouched
+  })
+  const confirmedNet = recTxns.filter(t => t.status === '已對帳').reduce((s,t) => t.type === '收入' ? s - t.amount : s + t.amount, 0)
   document.getElementById('rec-count').textContent = `${decided.length}/${recTxns.length}`
-  document.getElementById('rec-amount').textContent = 'NT$' + confirmedAmt.toLocaleString()
+  const amtEl = document.getElementById('rec-amount')
+  amtEl.textContent = 'NT$' + Math.abs(confirmedNet).toLocaleString()
+  amtEl.style.color = confirmedNet > 0 ? 'var(--danger)' : confirmedNet < 0 ? 'var(--success)' : ''
 
   // 待儲存提示
+  const totalPending = pendingChanges.size + pendingDeferrals.size
   const pendingEl = document.getElementById('rec-pending-hint')
-  if (pendingDeferrals.size > 0) {
-    pendingEl.textContent = `↓ ${pendingDeferrals.size} 筆待儲存`
+  if (totalPending > 0) {
+    pendingEl.textContent = `${totalPending} 筆待儲存`
     pendingEl.style.display = 'block'
   } else {
     pendingEl.style.display = 'none'
@@ -923,15 +970,12 @@ function renderRecModal() {
       const isPrevPeriod = !!t._fromPrevPeriod
       const isIncome = t.type === '收入'
 
-      // 金額顏色：延後→淡黃，收入→綠，支出→紅
-      const amtColor = isDeferred && !isPrevPeriod ? '#d4b247' : isIncome ? 'var(--success)' : 'var(--danger)'
+      // 金額顏色：一律依收支類型
+      const amtColor = isIncome ? 'var(--success)' : 'var(--danger)'
       const amtDisplay = `NT$${t.amount.toLocaleString()}`
 
-      // 上期延後入帳是否已被操作（按過 ✓ 或 ↓）
       const isPrevActedOn = isPrevPeriod && (isConfirmed || pendingDeferrals.has(t.id))
-
-      // 金額顏色修正：已決定的上期紀錄不再顯示橘黃
-      const amtColorFinal = isPrevActedOn ? (isConfirmed ? 'var(--success)' : '#d4b247') : amtColor
+      const amtColorFinal = amtColor
 
       // 狀態標籤：上期延後入帳的備註接在後面
       let subText = ''
@@ -952,7 +996,7 @@ function renderRecModal() {
       const btnConfirmClass = (isConfirmed && !isPrevPeriod) || (isPrevPeriod && isConfirmed) ? 'rec-act active-confirm' : 'rec-act act-confirm'
       const btnDeferClass = (isDeferred && !isPrevPeriod) || (isPrevPeriod && pendingDeferrals.has(t.id)) ? 'rec-act active-defer' : 'rec-act act-defer'
 
-      html += `<div class="${rowClass}">
+      html += `<div class="${rowClass}" style="cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none" onclick="openEditRecTxn('${escHtml(t.id)}')">
         <div class="rec-txn-main">
           <div class="rec-txn-icon">${catIcon(t.category)}</div>
           <div class="rec-txn-info">
@@ -960,8 +1004,8 @@ function renderRecModal() {
             ${subText}
           </div>
           <div class="rec-inline-actions">
-            <button class="${btnConfirmClass}" title="已入帳" onclick="recSetStatus(event,'${escHtml(t.id)}','已對帳')">✓</button>
             <button class="${btnDeferClass}" title="延後至下期" onclick="recSetStatus(event,'${escHtml(t.id)}','延後入帳',null)">↓</button>
+            <button class="${btnConfirmClass}" title="已入帳" onclick="recSetStatus(event,'${escHtml(t.id)}','已對帳')">✓</button>
           </div>
           <div class="rec-txn-amount" style="color:${amtColorFinal}">${amtDisplay}</div>
         </div>
@@ -976,47 +1020,40 @@ window.recSetStatus = async function(e, id, status) {
   const t = recTxns.find(x => x.id === id)
   if (!t) return
 
-  // 同狀態再按一次 → toggle 回待確認（所有紀錄一致）
-  const newStatus = (t.status === status) ? '待確認' : status
+  // 取真正的原始狀態（DB 中）
+  const savedOrig = pendingChanges.get(id) ?? pendingDeferrals.get(id)
+  const trueOrigStatus = savedOrig?.originalStatus ?? t.status
+  const trueOrigDate = savedOrig?.originalDate ?? t.date
 
-  // ── 延後入帳：暫存，不立即呼叫 API ──
-  if (newStatus === '延後入帳') {
-    if (!pendingDeferrals.has(id)) {
-      // 上期已在 DB 為延後入帳的，不需要再次 API 更新
-      pendingDeferrals.set(id, { originalStatus: t.status, needsApi: !t._fromPrevPeriod })
-    }
-    t.status = '延後入帳'
-    renderRecModal()
-    return
-  }
-
-  // 若從暫存的延後入帳取消（toggle 回待確認）
-  if (pendingDeferrals.has(id) && newStatus === '待確認') {
-    const info = pendingDeferrals.get(id)
+  // 再按一次當前啟動的按鈕 → 一律取消回待確認
+  if (status === t.status) {
+    pendingChanges.delete(id)
     pendingDeferrals.delete(id)
-    t.status = info.originalStatus
+    t.status = '待確認'
+    t.date = trueOrigDate
+    if (trueOrigStatus !== '待確認') {
+      // DB 中不是待確認 → 需要記入待存清單，儲存時才會真的取消
+      pendingChanges.set(id, { originalStatus: trueOrigStatus, originalDate: trueOrigDate })
+    }
     renderRecModal()
     return
   }
 
-  // ── 其餘狀態（已對帳、待確認）：立即呼叫 API ──
-  // 若之前暫存為延後入帳，現在改為已對帳 → 清除暫存
-  if (pendingDeferrals.has(id)) pendingDeferrals.delete(id)
+  // 設定新狀態：先清掉舊的暫存，再記錄原始狀態
+  pendingChanges.delete(id)
+  pendingDeferrals.delete(id)
 
-  const body = { status: newStatus }
-  if (newStatus === '待確認') body.deferred_to = null
-
-  // 上期延後入帳確認已入帳時，把日期移到當期起始，讓金額計入當期
-  if (t._fromPrevPeriod && newStatus === '已對帳' && recCardAcc) {
-    const month = getMonthValue()
-    const { start } = getBillingPeriod(recCardAcc.billing_day, month)
-    body.date = start
+  if (status === '延後入帳') {
+    pendingDeferrals.set(id, { originalStatus: trueOrigStatus, originalDate: trueOrigDate, needsApi: trueOrigStatus !== '延後入帳' })
+  } else {
+    pendingChanges.set(id, { originalStatus: trueOrigStatus, originalDate: trueOrigDate })
+    if (t._fromPrevPeriod && status === '已對帳' && recCardAcc) {
+      const { start } = getBillingPeriod(recCardAcc.billing_day, getCardMonth(recCardAcc.id))
+      pendingChanges.get(id).newDate = start
+    }
   }
 
-  const res = await api.updateTransaction(id, body)
-  if (!res.ok) { toast('更新失敗', 'error'); return }
-  t.status = newStatus
-  if (body.date) t.date = body.date
+  t.status = status
   renderRecModal()
 }
 
@@ -1026,43 +1063,78 @@ window.filterRecTxns = function(val) {
 }
 
 // ── 帳戶 View Modal ──
-window.openAcctView = async function(accId, accName, month) {
-  document.getElementById('acct-view-title').textContent = `${accName} — ${month}`
-  document.getElementById('acct-view-list').innerHTML = '<div style="padding:20px 0;color:var(--text-muted);text-align:center">載入中…</div>'
+window.openAcctView = function(accId, accName) {
+  _currentAcctViewId = accId
+  _currentAcctViewName = accName
+  acctViewMonth = _nowMonth
+  document.getElementById('acct-view-title').textContent = accName
+  const acctObj = allAccounts.find(a => a.id === accId)
+  const balEl = document.getElementById('acct-view-balance')
+  if (acctObj != null) {
+    balEl.textContent = 'NT$' + Math.abs(acctObj.balance).toLocaleString()
+    balEl.style.color = acctObj.balance >= 0 ? 'var(--accent)' : 'var(--danger)'
+  } else {
+    balEl.textContent = ''
+  }
   document.getElementById('acct-view-modal').classList.add('open')
   document.body.style.overflow = 'hidden'
+  loadAcctView()
+}
 
-  const res = await api.getTransactions({ month, card: accName, limit: 500 })
+window.acctMonthNav = function(dir) {
+  const [y, m] = acctViewMonth.split('-').map(Number)
+  const d = dir === 1 ? new Date(y, m, 1) : new Date(y, m - 2, 1)
+  const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+  if (val > _nowMonth || val < _minAcctMonth) return
+  acctViewMonth = val
+  loadAcctView()
+}
+
+async function loadAcctView() {
+  const month = acctViewMonth
+  const [y, m] = month.split('-').map(Number)
+  document.getElementById('acct-month-display').textContent = `${y} 年 ${m} 月`
+  document.getElementById('acct-month-prev').style.color = month > _minAcctMonth ? 'var(--text)' : 'var(--border)'
+  document.getElementById('acct-month-next').style.color = month < _nowMonth ? 'var(--text)' : 'var(--border)'
+  document.getElementById('acct-view-list').innerHTML = '<div style="padding:20px 0;color:var(--text-muted);text-align:center">載入中…</div>'
+
+  const acctObj = allAccounts.find(a => a.id === _currentAcctViewId)
+  const queryParams = acctObj?.id
+    ? { month, account_id: acctObj.id, limit: 500 }
+    : { month, card: _currentAcctViewName, limit: 500 }
+  const res = await api.getTransactions(queryParams)
   if (!res.ok) {
     document.getElementById('acct-view-list').innerHTML = '<div style="padding:20px 0;color:var(--danger);text-align:center">載入失敗</div>'
     return
   }
-  const txns = (res.data ?? []).sort((a, b) => b.date.localeCompare(a.date))
+  acctViewTxns = (res.data ?? []).sort((a, b) => b.date.localeCompare(a.date))
 
-  if (!txns.length) {
+  if (!acctViewTxns.length) {
     document.getElementById('acct-view-list').innerHTML = '<div style="padding:20px 0;color:var(--text-muted);text-align:center">本月無記錄</div>'
     document.getElementById('acct-view-count').textContent = '0'
-    document.getElementById('acct-view-total').textContent = 'NT$0'
+    const totalEl = document.getElementById('acct-view-total')
+    totalEl.textContent = 'NT$0'
+    totalEl.style.color = ''
     return
   }
 
-  const incomeAmt = txns.filter(t => t.type === '收入').reduce((s, t) => s + t.amount, 0)
-  const expenseAmt = txns.filter(t => t.type !== '收入').reduce((s, t) => s + t.amount, 0)
+  const incomeAmt = acctViewTxns.filter(t => t.type === '收入').reduce((s, t) => s + t.amount, 0)
+  const expenseAmt = acctViewTxns.filter(t => t.type !== '收入').reduce((s, t) => s + t.amount, 0)
   const net = incomeAmt - expenseAmt
   const totalEl = document.getElementById('acct-view-total')
   totalEl.textContent = 'NT$' + Math.abs(net).toLocaleString()
   totalEl.style.color = net >= 0 ? 'var(--success)' : 'var(--danger)'
-  document.getElementById('acct-view-count').textContent = txns.length
+  document.getElementById('acct-view-count').textContent = acctViewTxns.length
 
   let html = ''
   let lastDate = ''
-  for (const t of txns) {
+  for (const t of acctViewTxns) {
     if (t.date !== lastDate) {
       html += `<div style="font-size:11px;color:var(--text-muted);padding:10px 0 4px">${fmtDateHeader(t.date)}</div>`
       lastDate = t.date
     }
     const amtColor = t.type === '收入' ? 'var(--success)' : 'var(--danger)'
-    html += `<div class="av-txn-row">
+    html += `<div class="av-txn-row" style="cursor:pointer" onclick="openEditAcctTxn('${escHtml(t.id)}')">
       <div class="av-txn-icon">${catIcon(t.category)}</div>
       <div class="av-txn-info">
         <div class="av-txn-name">${escHtml(t.name || t.category)}</div>
@@ -1079,6 +1151,50 @@ window.closeAcctView = function() {
   if (!document.getElementById('rec-modal').classList.contains('open')) {
     document.body.style.overflow = ''
   }
+}
+
+function _refreshAcctView() {
+  if (_currentAcctViewId) loadAcctView()
+}
+
+window.openNewTxnForAcct = function() {
+  if (window.innerWidth <= 768) { location.href = '/add.html'; return }
+  openAddTxnModal({ prefillCard: _currentAcctViewName, onSave: _refreshAcctView })
+}
+
+window.openEditAcctTxn = function(id) {
+  const t = acctViewTxns.find(x => x.id === id)
+  if (!t) return
+  openEditTxnModal(t, { onSave: _refreshAcctView })
+}
+
+window.openEditRecTxn = function(id) {
+  const t = recTxns.find(x => x.id === id)
+  if (!t) return
+  openEditTxnModal(t, {
+    onSave: async () => {
+      pendingChanges.clear()
+      pendingDeferrals.clear()
+      recTxns = await fetchBillingTxns(recCardAcc.name, recCardAcc.billing_day, getCardMonth(recCardAcc.id))
+      renderRecModal()
+    }
+  })
+}
+
+window.openNewTxnForCard = function() {
+  const month = getCardMonth(recCardAcc.id)
+  const { start, end } = getBillingPeriod(recCardAcc.billing_day, month)
+  const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
+  // 今天在帳單週期內就用今天，否則用週期結束日（避免新增的紀錄撈不到）
+  const prefillDate = (todayStr >= start && todayStr <= end) ? todayStr : end
+  openAddTxnModal({
+    prefillCard: recCardAcc?.name,
+    prefillDate,
+    onSave: async () => {
+      recTxns = await fetchBillingTxns(recCardAcc.name, recCardAcc.billing_day, getCardMonth(recCardAcc.id))
+      renderRecModal()
+    }
+  })
 }
 
 window.paymentNotReady = function() {
@@ -1129,14 +1245,13 @@ document.getElementById('acct-view-modal').addEventListener('click', e => {
 })
 
 initAppName()
-initMonthSelect()
 renderAll()
 </script>
 
 <nav class="bottom-nav">
   <a href="/" class="bottom-nav-item"><span class="nav-icon">🏠</span><span>總覽</span></a>
-  <a href="/transactions.html" class="bottom-nav-item"><span class="nav-icon">📋</span><span>記錄</span></a>
-  <a href="/add.html" class="bottom-nav-item add-center"><span class="nav-icon">+</span></a>
+  <a href="/report.html" class="bottom-nav-item"><span class="nav-icon">📊</span><span>報表</span></a>
+  <a href="/transactions.html" class="bottom-nav-item add-center"><span class="nav-icon">+</span></a>
   <a href="/reconcile.html" class="bottom-nav-item active"><span class="nav-icon">🔍</span><span>對帳</span></a>
   <a href="/investments.html" class="bottom-nav-item"><span class="nav-icon">📈</span><span>投資</span></a>
 </nav>

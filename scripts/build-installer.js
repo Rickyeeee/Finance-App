@@ -37,10 +37,25 @@ if (!workerFile) {
   process.exit(1)
 }
 
-// 複製到 public/
+// 複製到 public/，並把 import 語句移到最頂端（Cloudflare Workers ESM 要求）
 const src = path.join(distDir, workerFile)
 const dest = path.join(__dirname, '..', 'public', 'installer-worker.js')
-fs.copyFileSync(src, dest)
+
+let code = fs.readFileSync(src, 'utf8')
+const importLines = []
+const otherLines = []
+for (const line of code.split('\n')) {
+  if (/^import\s+/.test(line)) {
+    importLines.push(line)
+  } else {
+    otherLines.push(line)
+  }
+}
+if (importLines.length > 0) {
+  code = [...importLines, '', ...otherLines].join('\n')
+  console.log(`  Hoisted ${importLines.length} import statement(s) to top`)
+}
+fs.writeFileSync(dest, code)
 
 console.log(`✅ installer-worker.js built → public/installer-worker.js`)
 console.log(`   Size: ${(fs.statSync(dest).size / 1024).toFixed(1)} KB`)

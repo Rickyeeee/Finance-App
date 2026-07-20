@@ -9,7 +9,7 @@ export function generateId(prefix = 'tx') {
 
 export async function getTransactions(
   db: D1Database,
-  opts: { limit?: number; offset?: number; date?: string; month?: string; date_from?: string; date_to?: string; category?: string; status?: string; type?: string; card?: string }
+  opts: { limit?: number; offset?: number; date?: string; month?: string; date_from?: string; date_to?: string; category?: string; status?: string; type?: string; card?: string; account_id?: string }
 ) {
   const conditions: string[] = []
   const params: (string | number)[] = []
@@ -21,7 +21,8 @@ export async function getTransactions(
   if (opts.category) { conditions.push('category = ?'); params.push(opts.category) }
   if (opts.status) { conditions.push('status = ?'); params.push(opts.status) }
   if (opts.type) { conditions.push('type = ?'); params.push(opts.type) }
-  if (opts.card) { conditions.push('card = ?'); params.push(opts.card) }
+  if (opts.account_id) { conditions.push('account_id = ?'); params.push(opts.account_id) }
+  else if (opts.card) { conditions.push('card = ?'); params.push(opts.card) }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
   const limit = opts.limit ?? 50
@@ -58,8 +59,8 @@ async function calcAssetDelta(db: D1Database, accountName: string, amount: numbe
 export async function createTransaction(db: D1Database, data: Omit<Transaction, 'id' | 'created_at'>) {
   const id = generateId('tx')
   await db
-    .prepare('INSERT INTO transactions (id, name, amount, date, category, card, type, status, source, note, transfer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .bind(id, data.name, data.amount, data.date, data.category, data.card, data.type ?? '支出', data.status, data.source, data.note ?? null, data.transfer_id ?? null)
+    .prepare('INSERT INTO transactions (id, name, amount, date, category, card, account_id, type, status, source, note, transfer_id, recurring_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(id, data.name, data.amount, data.date, data.category, data.card, data.account_id ?? null, data.type ?? '支出', data.status, data.source, data.note ?? null, data.transfer_id ?? null, data.recurring_id ?? null)
     .run()
 
   if (data.source !== '餘額調整' && data.card) {
@@ -109,7 +110,7 @@ export async function createTransfer(db: D1Database, data: {
       status: '已對帳',
       source: '手動輸入',
       note: null,
-      transfer_id: null,
+      transfer_id: transferId,
     })
   }
   return transferId
@@ -138,7 +139,9 @@ export async function updateTransaction(db: D1Database, id: string, data: Partia
   const values = fields.map(f => data[f as keyof typeof data])
   const result = await db.prepare(`UPDATE transactions SET ${sets} WHERE id = ?`).bind(...values, id).run()
 
-  if (result.meta.changes > 0 && old) {
+  const financialFields = new Set(['card', 'amount', 'type'])
+  const hasFinancialChange = fields.some(f => financialFields.has(f))
+  if (result.meta.changes > 0 && old && hasFinancialChange) {
     const newCard   = (data.card   !== undefined ? data.card   : old.card)   || ''
     const newAmount = data.amount  !== undefined ? data.amount  : old.amount
     const newType   = data.type    !== undefined ? data.type    : old.type
@@ -323,6 +326,8 @@ export async function getMonthlySummary(db: D1Database, month: string) {
     SELECT category, SUM(amount) as total, COUNT(*) as count
     FROM transactions
     WHERE strftime('%Y-%m', date) = ?
+      AND type = '支出'
+      AND transfer_id IS NULL
     GROUP BY category
     ORDER BY total DESC
   `).bind(month).all<{ category: string; total: number; count: number }>()
@@ -501,8 +506,9 @@ export async function processRecurring(db: D1Database): Promise<number> {
       type: item.type,
       status: '待確認',
       source: '定期',
-      note: fee > 0 ? `含手續費 NT$${fee.toLocaleString()}` : item.note,
+      note: fee > 0 ? `含手續費 NT${fee.toLocaleString()}` : item.note,
       transfer_id: null,
+      recurring_id: item.id,
     })
     const next = calcNextDate(item.next_date, item.frequency, item.day_of_month)
     await updateRecurring(db, item.id, { next_date: next, last_generated: today })

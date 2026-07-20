@@ -18,18 +18,33 @@ app.get('/', async (c) => {
     status: q.status,
     type: q.type,
     card: q.card,
+    account_id: q.account_id,
   })
   return c.json({ ok: true, ...result })
+})
+
+app.get('/:id', async (c) => {
+  const id = c.req.param('id')
+  const row = await c.env.DB.prepare('SELECT * FROM transactions WHERE id = ?').bind(id).first()
+  if (!row) return c.json({ ok: false, error: '找不到記錄' }, 404)
+  return c.json({ ok: true, data: row })
 })
 
 app.post('/', async (c) => {
   const body = await c.req.json<{
     name: string; amount: number; date: string;
-    category?: string; card?: string; type?: string; note?: string
+    category?: string; card?: string; account_id?: string; type?: string; note?: string
   }>()
 
   if (!body.amount || !body.date) {
     return c.json({ ok: false, error: '缺少必填欄位：amount, date' }, 400)
+  }
+
+  // 若沒傳 account_id，嘗試從帳戶名稱反查
+  let accountId = body.account_id ?? null
+  if (!accountId && body.card) {
+    const found = await c.env.DB.prepare('SELECT id FROM assets WHERE name = ?').bind(body.card).first<{ id: string }>()
+    accountId = found?.id ?? null
   }
 
   const id = await createTransaction(c.env.DB, {
@@ -38,6 +53,7 @@ app.post('/', async (c) => {
     date: body.date,
     category: body.category ?? '其他',
     card: body.card ?? '',
+    account_id: accountId,
     type: body.type ?? '支出',
     status: '待確認',
     source: '手動輸入',
@@ -78,8 +94,8 @@ app.patch('/transfer/:transferId', async (c) => {
   const body = await c.req.json<{ amount?: number; date?: string; note?: string | null; from_account?: string; to_account?: string }>()
 
   const { results } = await c.env.DB
-    .prepare('SELECT id, type, card FROM transactions WHERE transfer_id = ?')
-    .bind(transferId).all<{ id: string; type: string; card: string }>()
+    .prepare('SELECT id, type, card, name FROM transactions WHERE transfer_id = ?')
+    .bind(transferId).all<{ id: string; type: string; card: string; name: string }>()
 
   if (results.length < 2) return c.json({ ok: false, error: '找不到此轉帳記錄' }, 404)
   const outgoing = results.find(t => t.type === '支出')
@@ -94,8 +110,11 @@ app.patch('/transfer/:transferId', async (c) => {
   if (body.date !== undefined) base.date = body.date
   if ('note' in body) base.note = body.note
 
-  await updateTransaction(c.env.DB, outgoing.id, { ...base, card: fromAccount, name: `轉帳 → ${toAccount}` })
-  await updateTransaction(c.env.DB, incoming.id, { ...base, card: toAccount, name: `轉帳 ← ${fromAccount}` })
+  // 只在預設名稱時才更新，保留自訂名稱（如投資賣出）
+  const outName = outgoing.name?.startsWith('轉帳') ? `轉帳 → ${toAccount}` : outgoing.name
+  const inName  = incoming.name?.startsWith('轉帳') ? `轉帳 ← ${fromAccount}` : incoming.name
+  await updateTransaction(c.env.DB, outgoing.id, { ...base, card: fromAccount, name: outName })
+  await updateTransaction(c.env.DB, incoming.id, { ...base, card: toAccount, name: inName })
 
   return c.json({ ok: true })
 })

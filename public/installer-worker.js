@@ -1,3 +1,6 @@
+import { Writable } from "node:stream";
+import { EventEmitter } from "node:events";
+
 var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
@@ -337,7 +340,6 @@ var init_noop = __esm({
 });
 
 // node_modules/unenv/dist/runtime/node/console.mjs
-import { Writable } from "node:stream";
 var _console, _ignoreErrors, _stderr, _stdout, log, info, trace, debug, table, error, warn, createTask, clear, count, countReset, dir, dirxml, group, groupEnd, groupCollapsed, profile, profileEnd, time, timeEnd, timeLog, timeStamp, Console, _times, _stdoutErrorHandler, _stderrErrorHandler;
 var init_console = __esm({
   "node_modules/unenv/dist/runtime/node/console.mjs"() {
@@ -574,7 +576,6 @@ var init_node_version = __esm({
 });
 
 // node_modules/unenv/dist/runtime/node/internal/process/process.mjs
-import { EventEmitter } from "node:events";
 var Process;
 var init_process = __esm({
   "node_modules/unenv/dist/runtime/node/internal/process/process.mjs"() {
@@ -1144,7 +1145,10 @@ async function getTransactions(db, opts) {
     conditions.push("type = ?");
     params.push(opts.type);
   }
-  if (opts.card) {
+  if (opts.account_id) {
+    conditions.push("account_id = ?");
+    params.push(opts.account_id);
+  } else if (opts.card) {
     conditions.push("card = ?");
     params.push(opts.card);
   }
@@ -1167,7 +1171,7 @@ async function calcAssetDelta(db, accountName, amount, type) {
 }
 async function createTransaction(db, data) {
   const id = generateId("tx");
-  await db.prepare("INSERT INTO transactions (id, name, amount, date, category, card, type, status, source, note, transfer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(id, data.name, data.amount, data.date, data.category, data.card, data.type ?? "\u652F\u51FA", data.status, data.source, data.note ?? null, data.transfer_id ?? null).run();
+  await db.prepare("INSERT INTO transactions (id, name, amount, date, category, card, account_id, type, status, source, note, transfer_id, recurring_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(id, data.name, data.amount, data.date, data.category, data.card, data.account_id ?? null, data.type ?? "\u652F\u51FA", data.status, data.source, data.note ?? null, data.transfer_id ?? null, data.recurring_id ?? null).run();
   if (data.source !== "\u9918\u984D\u8ABF\u6574" && data.card) {
     const delta = await calcAssetDelta(db, data.card, data.amount, data.type ?? "\u652F\u51FA");
     await adjustAssetBalance(db, data.card, delta);
@@ -1211,7 +1215,7 @@ async function createTransfer(db, data) {
       status: "\u5DF2\u5C0D\u5E33",
       source: "\u624B\u52D5\u8F38\u5165",
       note: null,
-      transfer_id: null
+      transfer_id: transferId
     });
   }
   return transferId;
@@ -1233,7 +1237,9 @@ async function updateTransaction(db, id, data) {
   const sets = fields.map((f) => `${f} = ?`).join(", ");
   const values = fields.map((f) => data[f]);
   const result = await db.prepare(`UPDATE transactions SET ${sets} WHERE id = ?`).bind(...values, id).run();
-  if (result.meta.changes > 0 && old) {
+  const financialFields = /* @__PURE__ */ new Set(["card", "amount", "type"]);
+  const hasFinancialChange = fields.some((f) => financialFields.has(f));
+  if (result.meta.changes > 0 && old && hasFinancialChange) {
     const newCard = (data.card !== void 0 ? data.card : old.card) || "";
     const newAmount = data.amount !== void 0 ? data.amount : old.amount;
     const newType = data.type !== void 0 ? data.type : old.type;
@@ -1396,6 +1402,8 @@ async function getMonthlySummary(db, month) {
     SELECT category, SUM(amount) as total, COUNT(*) as count
     FROM transactions
     WHERE strftime('%Y-%m', date) = ?
+      AND type = '\u652F\u51FA'
+      AND transfer_id IS NULL
     GROUP BY category
     ORDER BY total DESC
   `).bind(month).all();
@@ -1545,8 +1553,9 @@ async function processRecurring(db) {
       type: item.type,
       status: "\u5F85\u78BA\u8A8D",
       source: "\u5B9A\u671F",
-      note: fee > 0 ? `\u542B\u624B\u7E8C\u8CBB NT$${fee.toLocaleString()}` : item.note,
-      transfer_id: null
+      note: fee > 0 ? `\u542B\u624B\u7E8C\u8CBB NT${fee.toLocaleString()}` : item.note,
+      transfer_id: null,
+      recurring_id: item.id
     });
     const next = calcNextDate(item.next_date, item.frequency, item.day_of_month);
     await updateRecurring(db, item.id, { next_date: next, last_generated: today });
@@ -3945,14 +3954,26 @@ app.get("/", async (c) => {
     category: q.category,
     status: q.status,
     type: q.type,
-    card: q.card
+    card: q.card,
+    account_id: q.account_id
   });
   return c.json({ ok: true, ...result });
+});
+app.get("/:id", async (c) => {
+  const id = c.req.param("id");
+  const row = await c.env.DB.prepare("SELECT * FROM transactions WHERE id = ?").bind(id).first();
+  if (!row) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u8A18\u9304" }, 404);
+  return c.json({ ok: true, data: row });
 });
 app.post("/", async (c) => {
   const body = await c.req.json();
   if (!body.amount || !body.date) {
     return c.json({ ok: false, error: "\u7F3A\u5C11\u5FC5\u586B\u6B04\u4F4D\uFF1Aamount, date" }, 400);
+  }
+  let accountId = body.account_id ?? null;
+  if (!accountId && body.card) {
+    const found = await c.env.DB.prepare("SELECT id FROM assets WHERE name = ?").bind(body.card).first();
+    accountId = found?.id ?? null;
   }
   const id = await createTransaction(c.env.DB, {
     name: body.name ?? "",
@@ -3960,6 +3981,7 @@ app.post("/", async (c) => {
     date: body.date,
     category: body.category ?? "\u5176\u4ED6",
     card: body.card ?? "",
+    account_id: accountId,
     type: body.type ?? "\u652F\u51FA",
     status: "\u5F85\u78BA\u8A8D",
     source: "\u624B\u52D5\u8F38\u5165",
@@ -3989,7 +4011,7 @@ app.post("/transfer", async (c) => {
 app.patch("/transfer/:transferId", async (c) => {
   const transferId = c.req.param("transferId");
   const body = await c.req.json();
-  const { results } = await c.env.DB.prepare("SELECT id, type, card FROM transactions WHERE transfer_id = ?").bind(transferId).all();
+  const { results } = await c.env.DB.prepare("SELECT id, type, card, name FROM transactions WHERE transfer_id = ?").bind(transferId).all();
   if (results.length < 2) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u6B64\u8F49\u5E33\u8A18\u9304" }, 404);
   const outgoing = results.find((t) => t.type === "\u652F\u51FA");
   const incoming = results.find((t) => t.type === "\u6536\u5165");
@@ -4000,8 +4022,10 @@ app.patch("/transfer/:transferId", async (c) => {
   if (body.amount !== void 0) base.amount = body.amount;
   if (body.date !== void 0) base.date = body.date;
   if ("note" in body) base.note = body.note;
-  await updateTransaction(c.env.DB, outgoing.id, { ...base, card: fromAccount, name: `\u8F49\u5E33 \u2192 ${toAccount}` });
-  await updateTransaction(c.env.DB, incoming.id, { ...base, card: toAccount, name: `\u8F49\u5E33 \u2190 ${fromAccount}` });
+  const outName = outgoing.name?.startsWith("\u8F49\u5E33") ? `\u8F49\u5E33 \u2192 ${toAccount}` : outgoing.name;
+  const inName = incoming.name?.startsWith("\u8F49\u5E33") ? `\u8F49\u5E33 \u2190 ${fromAccount}` : incoming.name;
+  await updateTransaction(c.env.DB, outgoing.id, { ...base, card: fromAccount, name: outName });
+  await updateTransaction(c.env.DB, incoming.id, { ...base, card: toAccount, name: inName });
   return c.json({ ok: true });
 });
 app.patch("/:id", async (c) => {
@@ -4143,29 +4167,64 @@ function parseCSVLine(line) {
 __name(parseCSVLine, "parseCSVLine");
 function parseSinopacBillText(text) {
   const items = [];
-  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
-  const dateAmountPattern = /(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)\s+(.+?)\s+([\d,]+)(?:\s|$)/;
   const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
-  for (const line of lines) {
-    const match2 = line.match(dateAmountPattern);
-    if (!match2) continue;
-    const [, rawDate, name, rawAmount] = match2;
-    const amount = parseInt(rawAmount.replace(/,/g, ""), 10);
-    if (!amount || amount <= 0) continue;
-    const parts = rawDate.split(/[\/\-]/);
-    let date = "";
-    if (parts.length === 2) {
-      date = `${currentYear}-${parts[0].padStart(2, "0")}-${parts[1].padStart(2, "0")}`;
-    } else if (parts.length === 3) {
-      const y = parts[0].length === 4 ? parts[0] : `${currentYear}`;
-      const m = (parts[0].length === 4 ? parts[1] : parts[0]).padStart(2, "0");
-      const d = (parts[0].length === 4 ? parts[2] : parts[1]).padStart(2, "0");
-      date = `${y}-${m}-${d}`;
+  const lines = text.split(/\n/).map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const dateRe = /^\d{2}\/\d{2}$/;
+  const cardRe = /^\d{4}$/;
+  const amountRe = /^[－—–‐\-]?[\d,]+[－—–‐\-]?$/;
+  const tokens = lines.flatMap((l) => l.split(" ")).filter(Boolean);
+  let i = 0;
+  while (i < tokens.length) {
+    if (!dateRe.test(tokens[i])) {
+      i++;
+      continue;
     }
-    if (!date) continue;
-    items.push({ name: name.trim().slice(0, 50), amount, date });
+    const txnDate = tokens[i];
+    if (i + 1 >= tokens.length || !dateRe.test(tokens[i + 1])) {
+      i++;
+      continue;
+    }
+    if (i + 2 >= tokens.length || !cardRe.test(tokens[i + 2])) {
+      i++;
+      continue;
+    }
+    const cardLast4 = tokens[i + 2];
+    let j = i + 3;
+    const nameParts = [];
+    while (j < tokens.length && !amountRe.test(tokens[j])) {
+      nameParts.push(tokens[j]);
+      j++;
+    }
+    if (j >= tokens.length || !nameParts.length) {
+      i++;
+      continue;
+    }
+    const normalizedRaw = tokens[j].replace(/[－—–‐]/g, "-");
+    const isTrailingMinus = /[\d,]-$/.test(normalizedRaw);
+    let amount = parseInt(normalizedRaw.replace(/,/g, "").replace(/-$/, ""), 10) * (isTrailingMinus ? -1 : 1);
+    let nextIdx = j + 1;
+    if (nextIdx < tokens.length && /^[－—–‐\-]$/.test(tokens[nextIdx])) {
+      amount = -Math.abs(amount);
+      nextIdx++;
+    }
+    const name = nameParts.join(" ").slice(0, 60);
+    const [mm, dd] = txnDate.split("/");
+    const date = `${currentYear}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+    const hasDateInName = nameParts.some((p) => dateRe.test(p));
+    if (name && !isNaN(amount) && amount !== 0 && !hasDateInName) {
+      items.push({ name, amount, date, card: cardLast4 });
+    }
+    i = nextIdx;
   }
-  return items;
+  const merged = [];
+  for (const item of items) {
+    if (merged.length > 0 && item.date === merged[merged.length - 1].date && (item.name.includes("\u570B\u5916\u4EA4\u6613\u670D\u52D9\u8CBB") || item.name.includes("\u570B\u5916\u4EA4\u6613\u624B\u7E8C\u8CBB"))) {
+      merged[merged.length - 1].amount += item.amount;
+    } else {
+      merged.push(item);
+    }
+  }
+  return merged;
 }
 __name(parseSinopacBillText, "parseSinopacBillText");
 
@@ -4402,10 +4461,97 @@ app2.get("/history", async (c) => {
   `).bind(startDate, today).all();
   return c.json({ ok: true, data: results, start: startDate, end: today });
 });
+app2.get("/history", async (c) => {
+  const range = c.req.query("range") ?? "month";
+  const taipeiNow = new Date(Date.now() + 8 * 60 * 60 * 1e3);
+  const today = taipeiNow.toISOString().slice(0, 10);
+  if (range === "week") {
+    const start2 = new Date(taipeiNow);
+    start2.setUTCDate(start2.getUTCDate() - 6);
+    const startDate2 = start2.toISOString().slice(0, 10);
+    const { results: results2 } = await c.env.DB.prepare(`
+      SELECT snapshot_date, total_investments FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      ORDER BY snapshot_date ASC
+    `).bind(startDate2, today).all();
+    return c.json({ ok: true, data: results2, start: startDate2, end: today });
+  }
+  if (range === "month") {
+    const start2 = new Date(taipeiNow);
+    start2.setUTCDate(start2.getUTCDate() - 29);
+    const startDate2 = start2.toISOString().slice(0, 10);
+    const { results: results2 } = await c.env.DB.prepare(`
+      SELECT snapshot_date, total_investments FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      ORDER BY snapshot_date ASC
+    `).bind(startDate2, today).all();
+    return c.json({ ok: true, data: results2, start: startDate2, end: today });
+  }
+  const start = new Date(taipeiNow);
+  start.setUTCDate(start.getUTCDate() - 364);
+  const startDate = start.toISOString().slice(0, 10);
+  const { results } = await c.env.DB.prepare(`
+    SELECT snapshot_date, total_investments
+    FROM asset_history
+    WHERE snapshot_date IN (
+      SELECT MAX(snapshot_date) FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      GROUP BY substr(snapshot_date, 1, 7)
+    )
+    ORDER BY snapshot_date ASC
+  `).bind(startDate, today).all();
+  return c.json({ ok: true, data: results, start: startDate, end: today });
+});
+app2.get("/history", async (c) => {
+  const range = c.req.query("range") ?? "month";
+  const taipeiNow = new Date(Date.now() + 8 * 60 * 60 * 1e3);
+  const today = taipeiNow.toISOString().slice(0, 10);
+  if (range === "week") {
+    const start2 = new Date(taipeiNow);
+    start2.setUTCDate(start2.getUTCDate() - 6);
+    const startDate2 = start2.toISOString().slice(0, 10);
+    const { results: results2 } = await c.env.DB.prepare(`
+      SELECT snapshot_date, total_investments FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      ORDER BY snapshot_date ASC
+    `).bind(startDate2, today).all();
+    return c.json({ ok: true, data: results2, start: startDate2, end: today });
+  }
+  if (range === "month") {
+    const start2 = new Date(taipeiNow);
+    start2.setUTCDate(start2.getUTCDate() - 29);
+    const startDate2 = start2.toISOString().slice(0, 10);
+    const { results: results2 } = await c.env.DB.prepare(`
+      SELECT snapshot_date, total_investments FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      ORDER BY snapshot_date ASC
+    `).bind(startDate2, today).all();
+    return c.json({ ok: true, data: results2, start: startDate2, end: today });
+  }
+  const start = new Date(taipeiNow);
+  start.setUTCDate(start.getUTCDate() - 364);
+  const startDate = start.toISOString().slice(0, 10);
+  const { results } = await c.env.DB.prepare(`
+    SELECT snapshot_date, total_investments
+    FROM asset_history
+    WHERE snapshot_date IN (
+      SELECT MAX(snapshot_date) FROM asset_history
+      WHERE snapshot_date >= ? AND snapshot_date <= ?
+      GROUP BY substr(snapshot_date, 1, 7)
+    )
+    ORDER BY snapshot_date ASC
+  `).bind(startDate, today).all();
+  return c.json({ ok: true, data: results, start: startDate, end: today });
+});
 app2.get("/trades", async (c) => {
   const symbol = c.req.query("symbol");
   const trades = await getInvestmentTrades(c.env.DB, symbol);
   return c.json({ ok: true, data: trades });
+});
+app2.get("/pnl", async (c) => {
+  const { results } = await c.env.DB.prepare(`SELECT * FROM investment_trades WHERE type = '\u8CE3\u51FA' ORDER BY date DESC, created_at DESC`).all();
+  const total = results.reduce((s, t) => s + (t.realized_pnl ?? 0), 0);
+  return c.json({ ok: true, data: results, total_realized_pnl: total });
 });
 app2.get("/pnl", async (c) => {
   const { results } = await c.env.DB.prepare(`SELECT * FROM investment_trades WHERE type = '\u8CE3\u51FA' ORDER BY date DESC, created_at DESC`).all();
@@ -4502,6 +4648,110 @@ app2.post("/trades", async (c) => {
     });
   }
   return c.json({ ok: true, id });
+});
+app2.patch("/trades/:id", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+  const trade = await c.env.DB.prepare("SELECT * FROM investment_trades WHERE id = ?").bind(id).first();
+  if (!trade) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u6B64\u8A18\u9304" }, 404);
+  const newType = body.type ?? trade.type;
+  const newShares = body.shares ?? trade.shares;
+  const newPrice = body.price ?? trade.price;
+  const newDate = body.date ?? trade.date;
+  const newAccount = body.account ?? trade.account;
+  const newNote = "note" in body ? body.note : trade.note;
+  const newAmount = Math.round(newShares * newPrice);
+  await c.env.DB.prepare(
+    "UPDATE investment_trades SET type=?, shares=?, price=?, amount=?, date=?, account=?, note=? WHERE id=?"
+  ).bind(newType, newShares, newPrice, newAmount, newDate, newAccount, newNote ?? null, id).run();
+  const effectiveAccount = newAccount || trade.account;
+  const allForPair = await getInvestmentTrades(c.env.DB, trade.symbol, effectiveAccount);
+  const allInv = await getInvestments(c.env.DB);
+  const inv = allInv.find((i) => i.symbol === trade.symbol && i.account === effectiveAccount);
+  if (!inv) return c.json({ ok: true });
+  const remaining = allForPair.map(
+    (t) => t.id === id ? { ...t, type: newType, shares: newShares, price: newPrice, date: newDate } : t
+  );
+  const sorted = [...remaining].sort((a, b) => a.date.localeCompare(b.date));
+  let shares = 0, avgCost = 0, realizedPnl = 0;
+  for (const t of sorted) {
+    if (t.type === "\u8CB7\u5165") {
+      const ns = shares + t.shares;
+      avgCost = ns > 0 ? (shares * avgCost + t.shares * t.price) / ns : t.price;
+      shares = ns;
+    } else {
+      realizedPnl += (t.price - avgCost) * t.shares;
+      shares = Math.max(0, shares - t.shares);
+    }
+  }
+  const currentPerShare = inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : 0);
+  const newMarketValue = Math.round(shares * currentPerShare);
+  const newTotalCost = Math.round(shares * avgCost);
+  const newProfitLoss = newMarketValue - newTotalCost;
+  const newReturnRate = newTotalCost > 0 ? Math.round(newProfitLoss / newTotalCost * 1e4) / 100 : 0;
+  await upsertInvestment(c.env.DB, {
+    ...inv,
+    shares,
+    avg_cost: Math.round(avgCost * 100) / 100,
+    market_value: newMarketValue,
+    profit_loss: newProfitLoss,
+    return_rate: newReturnRate,
+    realized_pnl: Math.round(realizedPnl),
+    updated_at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)
+  });
+  return c.json({ ok: true });
+});
+app2.patch("/trades/:id", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+  const trade = await c.env.DB.prepare("SELECT * FROM investment_trades WHERE id = ?").bind(id).first();
+  if (!trade) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u6B64\u8A18\u9304" }, 404);
+  const newType = body.type ?? trade.type;
+  const newShares = body.shares ?? trade.shares;
+  const newPrice = body.price ?? trade.price;
+  const newDate = body.date ?? trade.date;
+  const newAccount = body.account ?? trade.account;
+  const newNote = "note" in body ? body.note : trade.note;
+  const newAmount = Math.round(newShares * newPrice);
+  await c.env.DB.prepare(
+    "UPDATE investment_trades SET type=?, shares=?, price=?, amount=?, date=?, account=?, note=? WHERE id=?"
+  ).bind(newType, newShares, newPrice, newAmount, newDate, newAccount, newNote ?? null, id).run();
+  const effectiveAccount = newAccount || trade.account;
+  const allForPair = await getInvestmentTrades(c.env.DB, trade.symbol, effectiveAccount);
+  const allInv = await getInvestments(c.env.DB);
+  const inv = allInv.find((i) => i.symbol === trade.symbol && i.account === effectiveAccount);
+  if (!inv) return c.json({ ok: true });
+  const remaining = allForPair.map(
+    (t) => t.id === id ? { ...t, type: newType, shares: newShares, price: newPrice, date: newDate } : t
+  );
+  const sorted = [...remaining].sort((a, b) => a.date.localeCompare(b.date));
+  let shares = 0, avgCost = 0, realizedPnl = 0;
+  for (const t of sorted) {
+    if (t.type === "\u8CB7\u5165") {
+      const ns = shares + t.shares;
+      avgCost = ns > 0 ? (shares * avgCost + t.shares * t.price) / ns : t.price;
+      shares = ns;
+    } else {
+      realizedPnl += (t.price - avgCost) * t.shares;
+      shares = Math.max(0, shares - t.shares);
+    }
+  }
+  const currentPerShare = inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : 0);
+  const newMarketValue = Math.round(shares * currentPerShare);
+  const newTotalCost = Math.round(shares * avgCost);
+  const newProfitLoss = newMarketValue - newTotalCost;
+  const newReturnRate = newTotalCost > 0 ? Math.round(newProfitLoss / newTotalCost * 1e4) / 100 : 0;
+  await upsertInvestment(c.env.DB, {
+    ...inv,
+    shares,
+    avg_cost: Math.round(avgCost * 100) / 100,
+    market_value: newMarketValue,
+    profit_loss: newProfitLoss,
+    return_rate: newReturnRate,
+    realized_pnl: Math.round(realizedPnl),
+    updated_at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)
+  });
+  return c.json({ ok: true });
 });
 app2.patch("/trades/:id", async (c) => {
   const id = c.req.param("id");
@@ -4902,7 +5152,7 @@ app5.get("/", async (c) => {
   const brokerNames = new Set(brokerAccounts.map((a) => a.name));
   const includedInvTotal = investments.filter((i) => brokerNames.size === 0 || brokerNames.has(i.account)).reduce((s, i) => s + i.market_value, 0);
   const totalInvestments = brokerAccounts.length > 0 ? includedInvTotal : 0;
-  const investmentPnL = investments.reduce((s, i) => s + i.profit_loss, 0);
+  const investmentPnL = investments.filter((i) => brokerNames.size === 0 || brokerNames.has(i.account)).reduce((s, i) => s + i.profit_loss, 0);
   return c.json({
     ok: true,
     data: {
@@ -4934,7 +5184,9 @@ app5.post("/", async (c) => {
     include_in_total: body.include_in_total ?? 1,
     billing_day: body.billing_day ?? null,
     payment_day: body.payment_day ?? null,
-    credit_limit: body.credit_limit ?? null
+    credit_limit: body.credit_limit ?? null,
+    payment_method: body.payment_method ?? "manual",
+    payment_account: body.payment_account ?? null
   });
   return c.json({ ok: true, id }, 201);
 });
@@ -4994,10 +5246,11 @@ app5.post("/snapshot", async (c) => {
   const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const { total: monthlyExpense } = await getMonthlySummary(c.env.DB, month);
   const totalCash = assets.filter((a) => a.type === "\u9280\u884C" || a.type === "\u73FE\u91D1" || a.type === "\u9280\u884C\u5B58\u6B3E").reduce((s, a) => s + a.balance, 0);
+  const creditBalance = assets.filter((a) => a.type === "\u4FE1\u7528\u5361").reduce((s, a) => s + a.balance, 0);
   const totalInvestments = investments.reduce((s, i) => s + i.market_value, 0);
   await recordAssetSnapshot(c.env.DB, {
     snapshot_date: now.toISOString().slice(0, 10),
-    total_assets: totalCash + totalInvestments,
+    total_assets: totalCash + totalInvestments + creditBalance,
     total_investments: totalInvestments,
     total_cash: totalCash,
     monthly_expense: monthlyExpense
@@ -5103,6 +5356,110 @@ app7.delete("/:id", async (c) => {
   const ok = await deleteRecurring(c.env.DB, id);
   return c.json({ ok });
 });
+app7.get("/:id/transactions", async (c) => {
+  const id = c.req.param("id");
+  const { results } = await c.env.DB.prepare(
+    "SELECT * FROM transactions WHERE recurring_id = ? ORDER BY date DESC"
+  ).bind(id).all();
+  return c.json({ ok: true, data: results });
+});
+app7.patch("/:id/template", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+  const ok = await updateRecurring(c.env.DB, id, body);
+  return c.json({ ok });
+});
+app7.patch("/:id/future", async (c) => {
+  const id = c.req.param("id");
+  const { transaction_id, from_date, fee: feeRaw, ...templateData } = await c.req.json();
+  const fee = feeRaw ?? 0;
+  if (Object.keys(templateData).length) await updateRecurring(c.env.DB, id, { ...templateData, fee });
+  if (from_date) {
+    const txnData = {};
+    for (const f of ["name", "category", "card"]) {
+      if (templateData[f] !== void 0) txnData[f] = templateData[f];
+    }
+    if (templateData.amount !== void 0) txnData.amount = templateData.amount + fee;
+    txnData.note = fee > 0 ? `\u542B\u624B\u7E8C\u8CBB NT$${fee.toLocaleString()}` : templateData.note ?? null;
+    const fields = Object.keys(txnData);
+    if (fields.length) {
+      const sets = fields.map((f) => `${f} = ?`).join(", ");
+      const vals = fields.map((f) => txnData[f]);
+      await c.env.DB.prepare(
+        `UPDATE transactions SET ${sets} WHERE recurring_id = ? AND date >= ?`
+      ).bind(...vals, id, from_date).run();
+    }
+  }
+  return c.json({ ok: true });
+});
+app7.post("/:id/generate", async (c) => {
+  const id = c.req.param("id");
+  const { results } = await c.env.DB.prepare("SELECT * FROM recurring_transactions WHERE id = ?").bind(id).all();
+  const item = results[0];
+  if (!item) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u5B9A\u671F\u9805\u76EE" }, 404);
+  function calcNext(dateStr, frequency, dayOfMonth = 1) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    if (frequency === "weekly") {
+      const dt = new Date(y, m - 1, d + 7);
+      return dt.toISOString().slice(0, 10);
+    }
+    if (frequency === "yearly") {
+      const maxD2 = new Date(y + 1, m, 0).getDate();
+      return `${y + 1}-${String(m).padStart(2, "0")}-${String(Math.min(d, maxD2)).padStart(2, "0")}`;
+    }
+    let ny = y, nm = m + 1;
+    if (nm > 12) {
+      nm = 1;
+      ny++;
+    }
+    const maxD = new Date(ny, nm, 0).getDate();
+    return `${ny}-${String(nm).padStart(2, "0")}-${String(Math.min(dayOfMonth, maxD)).padStart(2, "0")}`;
+  }
+  __name(calcNext, "calcNext");
+  const fee = item.fee ?? 0;
+  const cardName = item.card ?? "";
+  const assetRow = cardName ? await c.env.DB.prepare("SELECT id FROM assets WHERE name = ? LIMIT 1").bind(cardName).first() : null;
+  const accountId = assetRow?.id ?? null;
+  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const body = await c.req.json().catch(() => ({}));
+  const until = body.until_date ?? today;
+  let nd = item.next_date;
+  let count3 = 0;
+  while (nd <= until && count3 < 120) {
+    const exists = await c.env.DB.prepare(
+      "SELECT id FROM transactions WHERE recurring_id = ? AND date = ? LIMIT 1"
+    ).bind(id, nd).first();
+    if (!exists) {
+      await createTransaction(c.env.DB, {
+        name: item.name,
+        amount: item.amount + fee,
+        date: nd,
+        category: item.category,
+        card: cardName,
+        account_id: accountId,
+        type: item.type,
+        status: "\u5F85\u78BA\u8A8D",
+        source: "\u5B9A\u671F",
+        note: fee > 0 ? `\u542B\u624B\u7E8C\u8CBB NT$${fee.toLocaleString()}` : item.note ?? null,
+        transfer_id: null,
+        recurring_id: item.id
+      });
+      count3++;
+    }
+    nd = calcNext(nd, item.frequency, item.day_of_month);
+  }
+  await updateRecurring(c.env.DB, id, { next_date: nd, last_generated: today });
+  return c.json({ ok: true, count: count3 });
+});
+app7.delete("/:id/terminate", async (c) => {
+  const id = c.req.param("id");
+  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  await c.env.DB.prepare(
+    "DELETE FROM transactions WHERE recurring_id = ? AND date > ? AND status = '\u5F85\u78BA\u8A8D'"
+  ).bind(id, today).run();
+  const ok = await updateRecurring(c.env.DB, id, { is_active: 0, end_date: today });
+  return c.json({ ok });
+});
 app7.post("/process", async (c) => {
   const count3 = await processRecurring(c.env.DB);
   return c.json({ ok: true, count: count3 });
@@ -5131,11 +5488,22 @@ app9.use("/api/*", cors({
   allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization"]
 }));
-app9.get("/api/app-config", (c) => {
-  return c.json({ app_name: c.env.APP_NAME || "\u6211\u7684\u8CA1\u52D9" });
+app9.get("/api/app-config", async (c) => {
+  try {
+    const row = await c.env.DB.prepare("SELECT value FROM settings WHERE key = ?").bind("app_name").first();
+    const app_name = row?.value || c.env.APP_NAME || "\u6211\u7684\u8CA1\u52D9";
+    return c.json({ app_name });
+  } catch {
+    return c.json({ app_name: c.env.APP_NAME || "\u6211\u7684\u8CA1\u52D9" });
+  }
 });
-app9.get("/manifest.json", (c) => {
-  const appName = c.env.APP_NAME || "\u6211\u7684\u8CA1\u52D9";
+app9.get("/manifest.json", async (c) => {
+  let appName = c.env.APP_NAME || "\u6211\u7684\u8CA1\u52D9";
+  try {
+    const row = await c.env.DB.prepare("SELECT value FROM settings WHERE key = ?").bind("app_name").first();
+    if (row?.value) appName = row.value;
+  } catch {
+  }
   return c.json({
     name: appName,
     short_name: appName,
@@ -5158,6 +5526,37 @@ app9.use("/api/*", async (c, next) => {
     return c.json({ ok: false, error: "\u672A\u6388\u6B0A" }, 401);
   }
   return next();
+});
+app9.patch("/api/app-config", async (c) => {
+  const body = await c.req.json();
+  const name = (body.app_name ?? "").trim();
+  if (!name) return c.json({ ok: false, error: "\u540D\u7A31\u4E0D\u80FD\u70BA\u7A7A" }, 400);
+  await c.env.DB.prepare(
+    "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+  ).bind("app_name", name).run();
+  return c.json({ ok: true, app_name: name });
+});
+app9.post("/api/self-update", async (c) => {
+  const token = c.env.CF_API_TOKEN;
+  const workerName = c.env.WORKER_NAME;
+  if (!token || !workerName) {
+    return c.json({ ok: false, error: "\u6B64\u7248\u672C\u4E0D\u652F\u63F4\u4E00\u9375\u66F4\u65B0\uFF0C\u8ACB\u91CD\u65B0\u5B89\u88DD" }, 400);
+  }
+  const bundleRes = await fetch((c.env.STATIC_ORIGIN || "https://ricky-finance.ke877857.workers.dev") + "/installer-worker.js");
+  if (!bundleRes.ok) {
+    return c.json({ ok: false, error: "\u7121\u6CD5\u53D6\u5F97\u6700\u65B0\u7248\u672C" }, 502);
+  }
+  const bundle = await bundleRes.text();
+  const upstream = (c.env.STATIC_ORIGIN || "https://ricky-finance.ke877857.workers.dev") + "/api/installer/update";
+  const res = await fetch(upstream, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ api_token: token, worker_name: workerName, bundle })
+  });
+  return new Response(res.body, {
+    status: res.status,
+    headers: { "Content-Type": res.headers.get("Content-Type") || "text/event-stream" }
+  });
 });
 app9.route("/api/transactions", transactions_default);
 app9.route("/api/investments", investments_default);
@@ -5190,16 +5589,14 @@ app9.all("*", async (c) => {
   const origin = c.env.STATIC_ORIGIN || "https://ricky-finance.ke877857.workers.dev";
   const url = new URL(c.req.url);
   try {
-    const res = await fetch(origin + url.pathname + url.search, {
-      headers: { "User-Agent": "installer-proxy/1.0" }
-    });
+    const res = await fetch(origin + url.pathname + url.search);
     const contentType = res.headers.get("Content-Type") || "text/html; charset=utf-8";
     return new Response(res.body, {
       status: res.status,
       headers: { "Content-Type": contentType }
     });
   } catch {
-    return c.text("\u975C\u614B\u8CC7\u6E90\u8F09\u5165\u5931\u6557\uFF0C\u8ACB\u78BA\u8A8D\u539F\u59CB\u670D\u52D9\u6B63\u5E38\u904B\u4F5C", 502);
+    return c.text("\u8F09\u5165\u5931\u6557\uFF0C\u8ACB\u7A0D\u5F8C\u518D\u8A66", 502);
   }
 });
 var installer_entry_default = {

@@ -1,5 +1,14 @@
 # Finance App — 專案說明
 
+## 專案位置與備份
+
+- **唯一開發路徑**：`D:\Projects\finance-app`，絕不放在 iCloud 或任何同步資料夾（同步軟體會損壞 node_modules 和 git 物件，曾造成程式碼遺失）
+- **備份**：GitHub `Rickyeeee/finance-app`，重要改動後 commit + push
+- **還原**：`git clone` 後 `npm install` + `npm run deploy`（資料在 Cloudflare D1，不受本地影響）
+- `.env`、`.dev.vars` 不在 git 裡，需另外保管
+
+---
+
 ## 技術架構
 
 - **後端**：Cloudflare Workers + D1（SQLite）、Hono framework（TypeScript）
@@ -47,6 +56,9 @@ finance-app/
 ├── src/
 │   ├── index.ts                  # Hono app 入口（Ricky 的版本）
 │   ├── installer-entry.ts        # 朋友的 Worker 模板（proxy 靜態檔案）
+│   ├── shortcut-generator.ts     # iOS 捷徑產生器（嵌入 token）
+│   ├── bplist.ts                 # Binary plist encoder（純 TS，無外部依賴）
+│   ├── types.ts
 │   └── routes/
 │       ├── transactions.ts       # 收支 + 轉帳 CRUD
 │       ├── investments.ts        # 投資 CRUD
@@ -60,14 +72,17 @@ finance-app/
 │   ├── transactions.html         # 消費紀錄
 │   ├── investments.html          # 投資
 │   ├── reconcile.html            # 對帳
-│   ├── recurring.html            # 定期項目
-│   ├── add.html                  # 快速新增（手機主畫面）
+│   ├── add.html                  # 快速新增（手機主畫面 PWA，內建登入）
 │   ├── install.html              # 安裝頁面（給朋友用）
+│   ├── shortcut-install.html     # iOS 捷徑安裝 + Token 複製
 │   ├── installer-worker.js       # 編譯好的 Worker bundle（自動生成）
+│   ├── add-manifest.json         # add.html 的 PWA manifest
 │   ├── css/style.css
 │   └── js/api.js                 # API 呼叫 + 共用 helpers
 ├── scripts/
-│   └── build-installer.js        # build installer bundle 腳本
+│   ├── build-installer.js        # build installer bundle 腳本
+│   ├── generate-shortcut.js      # 產生靜態 .shortcut 檔
+│   └── inject-version.js         # 注入版本號
 ├── wrangler.toml                 # Ricky 的部署設定
 └── wrangler.installer.toml       # build installer bundle 用的設定
 ```
@@ -112,10 +127,10 @@ finance-app/
 - 關聯欄位：`investment_trades.transfer_id`
 - 邏輯位置：`src/routes/transactions.ts` DELETE handler
 
-### iCloud Drive 衝突
-- iCloud 同步有時會把 `transactions.html`、`investments.html` 改名成 `*2.html`，造成 404
-- 修法：`Rename-Item "...filename 2.html" "filename.html"` 後重新 deploy
-- **每次 deploy 前先確認檔名沒有被改掉**
+### 同步軟體衝突（歷史教訓）
+- 專案曾放在 iCloud Drive，同步造成：檔案被改名成 `* 2.html`、程式碼被回退、git 物件損壞
+- 2026-07 已把專案移到 `D:\Projects\finance-app` 並重建 git，改用 GitHub 備份
+- 若發現 `* 2.*` 命名的檔案，那是同步衝突產物，比對後刪除
 
 ### 日曆
 - 週六、週日的日期數字顯示紅色（`#f85149`）

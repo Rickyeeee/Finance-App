@@ -8,7 +8,9 @@ export type Bindings = {
   AUTH_PIN: string
   AUTH_TOKEN: string
   APP_NAME?: string
-  STATIC_ORIGIN?: string  // installer worker 用：proxy 靜態檔案的來源
+  STATIC_ORIGIN?: string
+  CF_API_TOKEN?: string
+  WORKER_NAME?: string
 }
 
 export type Transaction = {
@@ -18,12 +20,14 @@ export type Transaction = {
   date: string
   category: string
   card: string
+  account_id: string | null
   type: string
   status: string
   source: string
   note: string | null
   transfer_id: string | null
   deferred_to: string | null
+  recurring_id: string | null
   created_at: string
 }
 

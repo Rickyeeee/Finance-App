@@ -9,9 +9,11 @@ CREATE TABLE IF NOT EXISTS transactions (
   type TEXT NOT NULL DEFAULT '支出',
   status TEXT NOT NULL DEFAULT '待確認',
   source TEXT NOT NULL DEFAULT '手動輸入',
+  account_id TEXT DEFAULT NULL,
   note TEXT,
   transfer_id TEXT,
   deferred_to TEXT DEFAULT NULL,
+  recurring_id TEXT DEFAULT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -132,8 +134,16 @@ CREATE TABLE IF NOT EXISTS asset_history (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 系統設定
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- 索引
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
+CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id);
 CREATE INDEX IF NOT EXISTS idx_reconciliation_bill_month ON reconciliation(bill_month);
 CREATE INDEX IF NOT EXISTS idx_asset_history_date ON asset_history(snapshot_date);

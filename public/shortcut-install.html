@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>安裝捷徑 — 瑞奇財務</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#161b22">
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface2: #21262d;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #58a6ff;
+  --success: #3fb950;
+  --danger: #f85149;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans TC', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  min-height: 100vh;
+  padding: max(env(safe-area-inset-top), 20px) 20px max(env(safe-area-inset-bottom), 20px);
+}
+.page {
+  max-width: 420px;
+  margin: 0 auto;
+}
+.header {
+  text-align: center;
+  padding: 32px 0 28px;
+}
+.header-icon { font-size: 56px; margin-bottom: 12px; }
+.header h1 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+.header p { font-size: 14px; color: var(--muted); line-height: 1.5; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 14px;
+}
+.card-label {
+  font-size: 11px; font-weight: 600;
+  color: var(--muted); letter-spacing: .06em;
+  text-transform: uppercase; margin-bottom: 10px;
+}
+.token-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.token-text {
+  flex: 1; min-width: 0;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 13px;
+  white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--accent);
+}
+.copy-btn {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .1s;
+}
+.copy-btn:active { background: var(--border); }
+.copy-btn.copied { color: var(--success); border-color: var(--success); }
+
+.btn-main {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%;
+  background: var(--accent);
+  color: #0d1117;
+  font-weight: 700; font-size: 16px;
+  border: none; border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity .1s;
+  margin-bottom: 10px;
+}
+.btn-main:active { opacity: .8; }
+.btn-main .icon { font-size: 20px; }
+
+.btn-secondary {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity .1s;
+}
+.btn-secondary:active { opacity: .7; }
+
+.steps {
+  display: flex; flex-direction: column; gap: 12px;
+}
+.step {
+  display: flex; align-items: flex-start; gap: 12px;
+}
+.step-num {
+  width: 26px; height: 26px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: var(--accent);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.step-text { line-height: 1.5; font-size: 14px; }
+.step-text b { color: var(--text); }
+.step-text span { color: var(--muted); font-size: 13px; display: block; margin-top: 2px; }
+
+.tip {
+  background: rgba(88,166,255,.08);
+  border: 1px solid rgba(88,166,255,.2);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-top: 4px;
+}
+.tip b { color: var(--accent); }
+
+.divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 6px 0 14px;
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div class="header-icon">⚡</div>
+    <h1>安裝記帳捷徑</h1>
+    <p>雙擊手機背面即可快速記帳</p>
+  </div>
+
+  <!-- 未登入時顯示 PIN 登入 -->
+  <div class="card" id="login-card" style="display:none">
+    <div class="card-label">請先登入</div>
+    <input class="big-input" type="password" inputmode="numeric" id="pin-input" placeholder="輸入密碼" maxlength="20">
+    <button class="btn-main" style="margin-top:10px" onclick="doLogin()">登入</button>
+    <div id="login-error" style="color:var(--danger);font-size:13px;margin-top:8px;display:none">密碼錯誤</div>
+  </div>
+
+  <!-- 已登入時顯示安裝流程 -->
+  <div id="install-section" style="display:none">
+    <!-- Token 複製 -->
+    <div class="card">
+      <div class="card-label">你的 API Token（手動建捷徑時用）</div>
+      <div class="token-box">
+        <div class="token-text" id="token-display"></div>
+        <button class="copy-btn" id="copy-btn" onclick="copyToken()">複製</button>
+      </div>
+    </div>
+
+  <!-- Back Tap -->
+  <div class="card">
+    <div class="card-label">設定雙擊背面觸發</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text"><b>設定 → 輔助使用 → 觸控</b><span>滑到最下方找「輕點背面」</span></div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text"><b>雙擊 → 捷徑 → 記帳</b></div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text"><b>完成！雙擊背面即可記帳</b></div>
+      </div>
+    </div>
+  </div>
+
+  <a href="/" class="btn-secondary" style="margin-top:4px">← 回首頁</a>
+  </div><!-- /install-section -->
+</div>
+
+<style>
+.big-input {
+  display: block; width: 100%;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text);
+  padding: 13px 14px; font-size: 18px; outline: none;
+  letter-spacing: 4px; text-align: center;
+}
+.big-input:focus { border-color: var(--accent); }
+</style>
+
+<script>
+const AUTH_KEY = 'finance_token_' + location.hostname.replace(/[^a-z0-9]/gi, '').slice(-12)
+let _token = localStorage.getItem(AUTH_KEY) || ''
+
+function showInstall() {
+  document.getElementById('login-card').style.display = 'none'
+  document.getElementById('install-section').style.display = 'block'
+  document.getElementById('token-display').textContent = _token
+}
+
+window.copyToken = function () {
+  navigator.clipboard.writeText(_token).then(() => {
+    const btn = document.getElementById('copy-btn')
+    btn.textContent = '已複製！'
+    btn.classList.add('copied')
+    setTimeout(() => { btn.textContent = '複製'; btn.classList.remove('copied') }, 2000)
+  })
+}
+
+if (_token) {
+  showInstall()
+} else {
+  document.getElementById('login-card').style.display = 'block'
+}
+
+window.doLogin = async function () {
+  const pin = document.getElementById('pin-input').value.trim()
+  if (!pin) return
+  const err = document.getElementById('login-error')
+  err.style.display = 'none'
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin })
+    })
+    const data = await r.json()
+    if (data.ok && data.token) {
+      _token = data.token
+      localStorage.setItem(AUTH_KEY, _token)
+      showInstall()
+    } else {
+      err.style.display = 'block'
+    }
+  } catch {
+    err.style.display = 'block'
+  }
+}
+
+document.getElementById('pin-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin()
+})
+
+window.installShortcut = function (e) {
+  e.preventDefault()
+  // 直接讓 Safari 下載 → iOS 自動開 Shortcuts App
+  location.href = 'https://ricky-finance.ke877857.workers.dev/api/shortcut/download?t=' + encodeURIComponent(_token)
+}
+</script>
+</body>
+</html>

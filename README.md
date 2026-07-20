@@ -35,7 +35,7 @@
 
 ### 消費紀錄
 - 月曆、日列表、月統計三種檢視模式
-- 支出 / 收入 / 轉帳（轉帳同時建立兩筆關聯記錄）
+- 支出 / 收入 / 轉帳（轉帳同時建立兩筆關聯記錄，支援刪除）
 - 自訂分類（名稱、排序、icon）
 - 定期項目（每月 / 每週 / 每年自動產生）
 - 手機版：點擊紀錄開啟編輯，刪除在 modal 內
@@ -52,8 +52,15 @@
 - 上傳信用卡帳單文字，自動比對消費記錄
 - 狀態：吻合 / 金額不符 / 無記錄
 
-### 快速新增
-- 手機主畫面捷徑，直接新增支出
+### 快速新增（手機）
+- `add.html` 獨立 PWA，可加到手機主畫面，全螢幕無瀏覽器 UI
+- 內建 PIN 登入，自動從 API 載入個人分類與帳戶
+- 步驟式介面：金額 → 類型/分類 → 名稱/日期 → 帳戶
+- 支援支出、收入、轉帳
+
+### iOS 捷徑
+- `shortcut-install.html`：登入後顯示 API Token，可複製後手動建捷徑
+- `/api/shortcut/download`：動態產生嵌入 token 的 `.shortcut` 檔
 
 ---
 
@@ -108,7 +115,7 @@ wrangler secret put CRON_SECRET   # Cron 保護
 
 ```bash
 npm run deploy
-# 自動執行：build installer bundle → deploy
+# 自動執行：build installer bundle → build shortcut → inject version → deploy
 ```
 
 每次 deploy 會自動重新 build `public/installer-worker.js`，確保新用戶安裝的是最新版本。
@@ -119,6 +126,22 @@ npm run deploy
 npm run dev   # → http://localhost:8787
 ```
 
+### 災難還原
+
+本地檔案損壞或遺失時（例如同步軟體衝突），從 GitHub 還原：
+
+```bash
+git clone https://github.com/Rickyeeee/finance-app.git
+cd finance-app
+npm install
+npm run deploy   # 資料都在 Cloudflare D1，程式碼重新部署即可
+```
+
+注意：`.env`、`.dev.vars`（PIN / Token / API 金鑰）不在 git 裡，需另外備份。
+資料庫（D1）在 Cloudflare 雲端，不受本地檔案影響。
+
+**開發規則：專案只放在 `D:\Projects\finance-app`，絕不放在 iCloud 或其他同步資料夾內**（同步軟體會損壞 node_modules 和 git 物件）。
+
 ---
 
 ## 檔案結構
@@ -128,6 +151,8 @@ finance-app/
 ├── src/
 │   ├── index.ts                  # Hono app 入口（維護者版本）
 │   ├── installer-entry.ts        # 用戶 Worker 模板（proxy 靜態檔案）
+│   ├── shortcut-generator.ts     # iOS 捷徑產生器（嵌入 token）
+│   ├── bplist.ts                 # Binary plist encoder（純 TS，無外部依賴）
 │   ├── types.ts
 │   └── routes/
 │       ├── auth.ts               # PIN 登入
@@ -141,18 +166,27 @@ finance-app/
 │       ├── installer.ts          # 安裝 API（呼叫 Cloudflare API）
 │       └── gmail.ts              # Gmail OAuth（備用）
 ├── public/
-│   ├── index.html
-│   ├── transactions.html
-│   ├── investments.html
-│   ├── reconcile.html
-│   ├── recurring.html
-│   ├── add.html
-│   ├── install.html              # 安裝頁面
+│   ├── index.html                # 總攬
+│   ├── transactions.html         # 消費紀錄（含定期項目分頁）
+│   ├── investments.html          # 投資
+│   ├── reconcile.html            # 帳戶對帳
+│   ├── report.html               # 報表
+│   ├── add.html                  # 快速新增（手機主畫面 PWA）
+│   ├── install.html              # 安裝頁面（給朋友）
+│   ├── shortcut-install.html     # iOS 捷徑安裝 + Token 複製
 │   ├── installer-worker.js       # 編譯好的 Worker bundle（自動生成）
+│   ├── add-manifest.json         # add.html 的 PWA manifest
+│   ├── manifest.json             # 主 App PWA manifest
+│   ├── sw.js                     # Service worker（離線快取）
 │   ├── css/style.css
-│   └── js/api.js
+│   └── js/
+│       ├── api.js                # API 呼叫 + 共用 helpers
+│       ├── txn-modal.js          # 共用新增/編輯交易 modal（wizard）
+│       └── calc-keyboard.js      # 計算機鍵盤
 ├── scripts/
-│   └── build-installer.js
+│   ├── build-installer.js        # build installer bundle
+│   ├── generate-shortcut.js      # 產生靜態 .shortcut 檔
+│   └── inject-version.js         # 注入版本號
 ├── schema.sql
 ├── wrangler.toml                 # 維護者部署設定
 ├── wrangler.installer.toml       # build installer bundle 用
@@ -222,6 +256,12 @@ finance-app/
 | POST | `/api/categories` | 新增 |
 | PATCH | `/api/categories/:id` | 修改 |
 | DELETE | `/api/categories/:id` | 刪除 |
+
+### 捷徑 / 快速新增
+| Method | Path | 說明 |
+|--------|------|------|
+| GET | `/api/shortcut/data` | 取得分類與帳戶清單（供捷徑 / add.html 使用） |
+| GET | `/api/shortcut/download?t=TOKEN` | 動態產生嵌入 token 的 iOS 捷徑檔 |
 
 ### 安裝
 | Method | Path | 說明 |

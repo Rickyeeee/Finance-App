@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="瑞奇財務">
 <meta name="theme-color" content="#161b22">
 <link rel="apple-touch-icon" href="/icons/icon.svg">
-<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/style.css?v=1784541104574">
 <style>
 /* ── 月曆 ── */
 .cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
@@ -24,19 +24,23 @@
 .cal-dow.sat { color:#f85149; }
 .cal-dow.sun { color:#f85149; }
 
+.cal-wrap { overflow:hidden; position:relative; }
+.cal-strip { display:flex; width:300%; transform:translateX(-33.333%); will-change:transform; }
 .cal-grid {
-  display:grid; grid-template-columns:repeat(7,1fr);
+  flex:1; min-width:0;
+  display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,1fr);
   border-top:1px solid #252c36; border-left:1px solid #252c36;
+  height:456px;
 }
 .cal-cell {
   border-right:1px solid #252c36; border-bottom:1px solid #252c36;
-  min-height:76px; padding:7px 5px 4px 7px; position:relative; cursor:default;
+  padding:7px 5px 4px 7px; position:relative; cursor:default; overflow:visible;
 }
 .cal-cell.clickable { cursor:pointer; }
 .cal-cell.net-neg { background:rgba(248,81,73,0.07); }
 .cal-cell.net-pos { background:rgba(63,185,80,0.08); }
-.cal-cell.today { outline:2px solid var(--accent); outline-offset:-1px; position:relative; z-index:1; }
-.cal-cell.selected { outline:2px solid var(--accent); background:rgba(88,166,255,0.09); position:relative; z-index:1; }
+.cal-cell.today { box-shadow:inset 0 0 0 2px var(--accent); position:relative; z-index:1; }
+.cal-cell.selected { box-shadow:inset 0 0 0 2px var(--accent); background:rgba(88,166,255,0.09); position:relative; z-index:1; }
 .cal-cell.other-month { opacity:0.3; cursor:default; }
 
 .cal-d { font-size:17px; font-weight:700; line-height:1; color:var(--text); font-variant-numeric:tabular-nums; }
@@ -89,7 +93,8 @@
 .cat-item:last-child { border-bottom:none; }
 
 @media (max-width: 640px) {
-  .cal-cell { min-height:58px; padding:5px 3px 3px 5px; }
+  .cal-cell { padding:5px 3px 3px 5px; }
+  .cal-grid { height:282px; }
   .cal-d { font-size:14px; }
   .cal-inc, .cal-exp { font-size:9px; }
   .cal-dow { font-size:10px; padding-left:4px; }
@@ -103,9 +108,11 @@
   <nav class="sidebar-nav">
     <a href="/" class="nav-item"><span class="icon">🏠</span><span>資產總覽</span></a>
     <a href="/transactions.html" class="nav-item active"><span class="icon">📋</span><span>消費記錄</span></a>
-    <a href="/reconcile.html" class="nav-item"><span class="icon">🔍</span><span>信用卡對帳</span></a>
+    <a href="/reconcile.html" class="nav-item"><span class="icon">🔍</span><span>帳戶對帳</span></a>
     <a href="/investments.html" class="nav-item"><span class="icon">📈</span><span>投資損益</span></a>
+    <a href="/report.html" class="nav-item"><span class="icon">📊</span><span>報表</span></a>
   </nav>
+  <button class="sidebar-update-btn" onclick="import('/js/api.js?v=1784541104574').then(m=>m.openUpdateModal())">↑ 更新系統</button>
 </aside>
 
 <div class="main">
@@ -128,7 +135,7 @@
     <div id="panel-records">
       <div class="card" style="margin-bottom:16px">
         <div class="cal-header">
-          <div class="cal-title" id="cal-title">–</div>
+          <div class="cal-title" id="cal-title" onclick="jumpToToday()" style="cursor:pointer">–</div>
           <div class="cal-nav">
             <button onclick="changeMonth(-1)">‹</button>
             <button onclick="changeMonth(1)">›</button>
@@ -140,7 +147,13 @@
           <div class="cal-dow">週五</div>
           <div class="cal-dow sat">週六</div><div class="cal-dow sun">週日</div>
         </div>
-        <div id="cal-grid" class="cal-grid"></div>
+        <div class="cal-wrap">
+          <div class="cal-strip" id="cal-strip">
+            <div id="cal-grid-prev" class="cal-grid"></div>
+            <div id="cal-grid" class="cal-grid"></div>
+            <div id="cal-grid-next" class="cal-grid"></div>
+          </div>
+        </div>
         <div class="cal-footer" id="cal-footer"></div>
       </div>
 
@@ -163,7 +176,6 @@
       <div class="monthly-bar" id="rec-monthly-bar"></div>
       <div class="card">
         <div style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:16px">
-          <button class="btn btn-secondary btn-sm" onclick="triggerRecurring()">⚡ 立即生成</button>
           <button class="btn btn-primary btn-sm" onclick="openRecModal()">+ 新增</button>
         </div>
         <div id="rec-list"></div>
@@ -180,6 +192,7 @@
       <button class="modal-close" onclick="closeTxnModal()">×</button>
     </div>
     <input type="hidden" id="edit-id">
+    <input type="hidden" id="edit-recurring-id">
     <div class="type-toggle">
       <button id="btn-expense" class="active-expense" onclick="setType('支出')">支出</button>
       <button id="btn-income" onclick="setType('收入')">收入</button>
@@ -268,6 +281,69 @@
   </div>
 </div>
 
+<!-- 定期紀錄詳細 Modal -->
+<div class="modal-overlay" id="rec-detail-modal">
+  <div class="modal" style="max-width:480px;max-height:82vh;display:flex;flex-direction:column">
+    <div class="modal-header" style="flex-shrink:0;align-items:flex-start">
+      <div style="flex:1;min-width:0">
+        <div class="modal-title" id="rcd-name"></div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:2px" id="rcd-meta"></div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;margin-left:12px">
+        <div id="rcd-total" style="font-size:18px;font-weight:700"></div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:1px" id="rcd-total-label"></div>
+      </div>
+      <button class="modal-close" onclick="document.getElementById('rec-detail-modal').classList.remove('open')" style="margin-left:12px">×</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:0 20px 8px" id="rcd-list"></div>
+    <div style="flex-shrink:0;padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <button class="btn btn-secondary btn-sm" id="rcd-terminate-btn" style="color:var(--danger);border-color:var(--danger);display:none" onclick="terminateRecDetail()">終止定期</button>
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('rec-detail-modal').classList.remove('open')">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- 定期刪除範圍 Modal -->
+<div class="modal-overlay" id="rec-delete-scope-modal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <div class="modal-title">刪除定期項目</div>
+      <button class="modal-close" onclick="document.getElementById('rec-delete-scope-modal').classList.remove('open')">×</button>
+    </div>
+    <div style="padding:4px 0 8px">
+      <button onclick="doDeleteRec('this')" style="display:block;width:100%;text-align:left;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;cursor:pointer;color:var(--text)">
+        <div style="font-weight:600;font-size:14px;margin-bottom:4px">刪除此紀錄</div>
+        <div style="font-size:12px;color:var(--text-muted)">只刪除此定期設定，歷史交易紀錄完整保留</div>
+      </button>
+      <button onclick="doDeleteRec('terminate')" style="display:block;width:100%;text-align:left;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;cursor:pointer;color:var(--text)">
+        <div style="font-weight:600;font-size:14px;margin-bottom:4px;color:var(--danger)">終止未來週期</div>
+        <div style="font-size:12px;color:var(--text-muted)">刪除此設定及所有尚未確認的待確認交易，歷史已對帳紀錄保留</div>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 定期修改範圍 Modal -->
+<div class="modal-overlay" id="scope-modal">
+  <div class="modal" style="max-width:340px">
+    <div class="modal-header">
+      <div class="modal-title">修改定期紀錄</div>
+      <button class="modal-close" onclick="document.getElementById('scope-modal').classList.remove('open')">×</button>
+    </div>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px" id="scope-txn-name"></div>
+    <div style="display:flex;flex-direction:column;gap:10px;padding-bottom:4px">
+      <button class="btn btn-secondary" style="width:100%;text-align:left;padding:12px 14px" onclick="pickScope('this')">
+        <div style="font-weight:600;margin-bottom:2px">修改此記錄</div>
+        <div style="font-size:12px;color:var(--text-muted)">只更動這一筆，不影響其他</div>
+      </button>
+      <button class="btn btn-secondary" style="width:100%;text-align:left;padding:12px 14px" onclick="pickScope('future')">
+        <div style="font-weight:600;margin-bottom:2px">修改連同未來週期</div>
+        <div style="font-size:12px;color:var(--text-muted)">這筆及之後同週期的紀錄一起更新</div>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- 轉帳 Modal -->
 <div class="modal-overlay" id="transfer-modal">
   <div class="modal" style="max-width:420px">
@@ -303,7 +379,9 @@
       <input type="text" id="xfr-note" placeholder="選填">
     </div>
     <input type="hidden" id="edit-transfer-id">
+    <input type="hidden" id="edit-transfer-txn-id">
     <div class="modal-footer">
+      <button class="btn btn-danger" id="xfr-delete-btn" style="display:none;margin-right:auto" onclick="deleteTransfer()">刪除</button>
       <button class="btn btn-secondary" onclick="closeTransferModal()">取消</button>
       <button class="btn btn-primary" id="xfr-save-btn" onclick="saveTransfer()">建立轉帳</button>
     </div>
@@ -326,11 +404,11 @@
         <button class="btn btn-secondary btn-sm" onclick="addCategory('支出')">新增</button>
       </div>
     </div>
-    <div style="background:rgba(63,185,80,0.07);border-radius:8px;padding:10px;border:1px solid rgba(63,185,80,0.2)">
-      <div style="font-size:11px;color:var(--success);font-weight:600;margin-bottom:6px">新增收入分類</div>
+    <div style="background:var(--surface2);border-radius:8px;padding:10px">
+      <div style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px">新增收入分類</div>
       <div style="display:flex;gap:8px">
         <input type="text" id="new-income-cat" placeholder="分類名稱" style="flex:1">
-        <button class="btn btn-primary btn-sm" onclick="addCategory('收入')">新增</button>
+        <button class="btn btn-secondary btn-sm" onclick="addCategory('收入')">新增</button>
       </div>
     </div>
   </div>
@@ -401,9 +479,10 @@
   </div>
 </div>
 
-<script src="/js/calc-keyboard.js"></script>
+<script src="/js/calc-keyboard.js?v=1784541104574"></script>
 <script type="module">
-import { api, toast, formatMoney, fmtSigned, amtColor, badgeHtml, catIconHtml, catIcon, freqLabel, initAppName } from '/js/api.js'
+import { api, toast, formatMoney, fmtSigned, amtColor, badgeHtml, catIconHtml, catIcon, freqLabel, initAppName, swr } from '/js/api.js?v=1784541104574'
+import { openAddTxnModal, preloadTxnModalData } from '/js/txn-modal.js?v=1784541104574'
 
 // 用已存的 icon 欄位 fallback 到 CAT_ICON_MAP
 function resolvedCatIcon(categoryName) {
@@ -429,8 +508,14 @@ let currentTab = 'records'
 const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
 
 async function init() {
-  await loadMeta()
-  await Promise.all([loadMonth(), loadRecurring()])
+  // 先套用 meta 快取，讓 select 立刻有內容
+  const cachedCats = swr.get('categories')
+  const cachedAccts = swr.get('accounts')
+  if (cachedCats) { allCategories = cachedCats; renderCategorySelects() }
+  if (cachedAccts) { allAccounts = cachedAccts; renderAccountSelects(); renderXfrSelects() }
+
+  // 全部並行跑，不等 meta
+  await Promise.all([loadMeta(), loadMonth(), loadRecurring()])
   // 自動選今天
   selectedDate = today
   renderCalendar(currentMonth, rebuildByDate())
@@ -442,8 +527,9 @@ async function init() {
 
 async function loadMeta() {
   const [cr, ar] = await Promise.all([api.getCategories(), api.getAssets()])
-  if (cr.ok) { allCategories = cr.data; renderCategorySelects() }
-  if (ar.ok) { allAccounts = ar.data.accounts ?? []; renderAccountSelects(); renderXfrSelects() }
+  if (cr.ok) { allCategories = cr.data; swr.set('categories', cr.data); renderCategorySelects() }
+  if (ar.ok) { allAccounts = ar.data.accounts ?? []; swr.set('accounts', ar.data.accounts ?? []); renderAccountSelects(); renderXfrSelects() }
+  preloadTxnModalData(allAccounts, allCategories)
 }
 
 // ── Tab 切換 ──
@@ -456,16 +542,11 @@ window.switchTab = function(tab) {
 }
 
 // ── 月曆 ──
-async function loadMonth() {
-  const res = await api.getTransactions({ month: currentMonth, limit: 500 })
-  if (!res.ok) return
-  cachedTxns = res.data
-
-  // 排除轉帳，避免 A→B 的轉帳同時計入支出和收入
+function applyMonthData() {
   const realTxns = cachedTxns.filter(t => !t.transfer_id)
   const expTotal = realTxns.filter(t => t.type !== '收入').reduce((s,t) => s+t.amount, 0)
   const incTotal = realTxns.filter(t => t.type === '收入').reduce((s,t) => s+t.amount, 0)
-  const net = incTotal - expTotal
+  const netSigned = incTotal - expTotal
 
   const byDate = {}
   for (const t of realTxns) {
@@ -476,18 +557,32 @@ async function loadMonth() {
 
   renderCalendar(currentMonth, byDate)
 
-  const netSigned = incTotal - expTotal
   document.getElementById('cal-footer').innerHTML = `
     <div class="cf-item"><span class="cf-dot" style="background:#f85149"></span>支出
       <b style="color:#f85149">$${expTotal.toLocaleString()}</b></div>
     <div class="cf-item"><span class="cf-dot" style="background:#3fb950"></span>收入
       <b style="color:#3fb950">$${incTotal.toLocaleString()}</b></div>
-    <div class="cf-item"><span class="cf-dot" style="background:#bc8cff"></span>總計
-      <b style="color:#bc8cff">$${Math.abs(netSigned).toLocaleString()}</b></div>
+    <div class="cf-item"><span class="cf-dot" style="background:${netSigned>=0?'#3fb950':'#f85149'}"></span>總計
+      <b style="color:${netSigned>=0?'#3fb950':'#f85149'}">$${Math.abs(netSigned).toLocaleString()}</b></div>
   `
 
   if (showMonthly) renderMonthlyTable()
-  if (selectedDate) renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
+  else if (selectedDate) renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
+}
+
+async function loadMonth() {
+  const cacheKey = `txns-${currentMonth}`
+  const cached = swr.get(cacheKey)
+  if (cached) {
+    cachedTxns = cached
+    applyMonthData()
+  }
+
+  const res = await api.getTransactions({ month: currentMonth, limit: 500 })
+  if (!res.ok) return
+  swr.set(cacheKey, res.data)
+  cachedTxns = res.data
+  applyMonthData()
 }
 
 function fmtAmt(n) {
@@ -519,18 +614,48 @@ function renderCalendar(month, byDate) {
       if (net > 0) cls.push('net-pos')
       else if (net < 0) cls.push('net-neg')
     }
-    if (dateStr === today) cls.push('today')
+    if (dateStr === today && selectedDate === today) cls.push('today')
     if (dateStr === selectedDate) cls.push('selected')
     if (data) cls.push('clickable')
     html += cellHtml(String(d).padStart(2,'0'), dateStr, cls.join(' '), colIdx, data)
   }
-  const tail = (offset + daysInMonth) % 7
-  if (tail !== 0) {
-    for (let i = 1; i <= 7-tail; i++) {
-      html += cellHtml(String(i).padStart(2,'0'), null, 'other-month', (offset+daysInMonth-1+i)%7, null)
-    }
+  const total = offset + daysInMonth
+  const tail = total % 7 === 0 ? 0 : 7 - (total % 7)
+  const rows = Math.ceil((total + tail) / 7)
+  const extraRows = 6 - rows
+  const fillEnd = tail + extraRows * 7
+  for (let i = 1; i <= fillEnd; i++) {
+    html += cellHtml(String(i).padStart(2,'0'), null, 'other-month', (offset+daysInMonth-1+i)%7, null)
   }
   document.getElementById('cal-grid').innerHTML = html
+  updateAdjacentGrids()
+}
+
+function renderCalendarShell(month, el) {
+  const [year, mon] = month.split('-').map(Number)
+  const firstDow = new Date(year, mon-1, 1).getDay()
+  const offset = firstDow === 0 ? 6 : firstDow - 1
+  const daysInMonth = new Date(year, mon, 0).getDate()
+  const prevDays = new Date(year, mon-1, 0).getDate()
+  let html = ''
+  for (let i = offset-1; i >= 0; i--) {
+    const c = (offset-1-i)%7; html += `<div class="cal-cell other-month${c===5?' sat-col':c===6?' sun-col':''}"><div class="cal-d">${String(prevDays-i).padStart(2,'0')}</div></div>`
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const c = (offset+d-1)%7; html += `<div class="cal-cell${c===5?' sat-col':c===6?' sun-col':''}"><div class="cal-d">${String(d).padStart(2,'0')}</div></div>`
+  }
+  const tail = (offset+daysInMonth)%7
+  for (let i = 1; i < (tail===0?0:8-tail); i++) {
+    const c = (offset+daysInMonth-1+i)%7; html += `<div class="cal-cell other-month${c===5?' sat-col':c===6?' sun-col':''}"><div class="cal-d">${String(i).padStart(2,'0')}</div></div>`
+  }
+  el.innerHTML = html
+}
+
+function updateAdjacentGrids() {
+  const [y, m] = currentMonth.split('-').map(Number)
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+  renderCalendarShell(fmt(new Date(y, m-2, 1)), document.getElementById('cal-grid-prev'))
+  renderCalendarShell(fmt(new Date(y, m, 1)),   document.getElementById('cal-grid-next'))
 }
 
 function cellHtml(label, dateStr, extraCls, colIdx, data) {
@@ -548,14 +673,118 @@ function cellHtml(label, dateStr, extraCls, colIdx, data) {
   return `<div class="cal-cell ${extraCls} ${colCls}" ${clickAttr} ${dblClickAttr}><div class="cal-d">${label}</div>${amtsHtml}</div>`
 }
 
+window.jumpToToday = async function() {
+  const thisMonth = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' }).slice(0, 7)
+  if (currentMonth === thisMonth && selectedDate === today && !showMonthly) return
+  currentMonth = thisMonth
+  showMonthly = false
+  syncToggleBtn()
+  await loadMonth()
+  selectedDate = today
+  renderCalendar(currentMonth, rebuildByDate())
+  const txns = cachedTxns.filter(t => t.date === today)
+  if (txns.length) renderDailyView(txns)
+  else resetDetailView()
+  const [,mm,dd] = today.split('-')
+  document.getElementById('detail-title').textContent = `${parseInt(mm)} 月 ${parseInt(dd)} 日`
+}
+
 window.changeMonth = async function(dir) {
-  selectedDate = ''
   const [y, m] = currentMonth.split('-').map(Number)
   const d = new Date(y, m-1+dir, 1)
   currentMonth = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
-  resetDetailView()
-  await loadMonth()
+  if (!showMonthly) {
+    const thisMonth = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' }).slice(0, 7)
+    selectedDate = currentMonth === thisMonth ? today : `${currentMonth}-01`
+  }
+  // 先用 cache 立刻渲染（cachedTxns 先清空避免顯示舊月資料）
+  const cacheKey = `txns-${currentMonth}`
+  const cached = swr.get(cacheKey)
+  cachedTxns = cached || []
+  if (showMonthly) {
+    renderCalendar(currentMonth, rebuildByDate())
+    const [y,m] = currentMonth.split('-').map(Number)
+    document.getElementById('detail-title').textContent = `${y} 年 ${m} 月`
+    renderMonthlyTable()
+  } else {
+    renderCalendar(currentMonth, rebuildByDate())
+    const txns = cachedTxns.filter(t => t.date === selectedDate)
+    resetDetailView()
+    if (txns.length) renderDailyView(txns)
+    const [,mm,dd] = selectedDate.split('-')
+    document.getElementById('detail-title').textContent = `${parseInt(mm)} 月 ${parseInt(dd)} 日`
+  }
+  // 背景更新資料
+  loadMonth()
 }
+
+// 月曆 strip 拖曳（3 格橫排，跟手指即時移動）
+;(function () {
+  const EDGE = 30, COMMIT = 70
+  let sx = 0, sy = 0, dx = 0, intent = null, active = false, animating = false
+
+  const wrap = document.querySelector('.cal-wrap')
+  const strip = document.getElementById('cal-strip')
+  if (!wrap || !strip) return
+
+  function setStrip(dxPx, animate) {
+    strip.style.transition = animate ? 'transform 0.25s cubic-bezier(0.4,0,0.2,1)' : 'none'
+    strip.style.transform = dxPx === 0
+      ? 'translateX(-33.333%)'
+      : `translateX(calc(-33.333% + ${dxPx}px))`
+  }
+
+  function onStart(clientX, clientY) {
+    if (animating) return
+    sx = clientX; sy = clientY
+    dx = 0; intent = null; active = true
+  }
+  function onMove(clientX, clientY, preventDefault) {
+    if (!active || animating) return
+    const cdx = clientX - sx
+    const cdy = clientY - sy
+    if (!intent && (Math.abs(cdx) > 5 || Math.abs(cdy) > 5)) {
+      intent = Math.abs(cdx) > Math.abs(cdy) ? 'h' : 'v'
+    }
+    if (intent !== 'h') return
+    if (preventDefault) preventDefault()
+    dx = cdx
+    setStrip(dx, false)
+  }
+  function onEnd() {
+    if (!active) return
+    active = false
+    if (intent !== 'h') return
+    if (Math.abs(dx) >= COMMIT) {
+      animating = true
+      const dir = dx < 0 ? 1 : -1
+      strip.style.transition = 'transform 0.22s cubic-bezier(0.4,0,0.2,1)'
+      strip.style.transform = dir > 0 ? 'translateX(-66.666%)' : 'translateX(0%)'
+      const [y, m] = currentMonth.split('-').map(Number)
+      const nd = new Date(y, m - 1 + dir, 1)
+      const newMonth = `${nd.getFullYear()}-${String(nd.getMonth()+1).padStart(2,'0')}`
+      setTimeout(async () => {
+        strip.style.transition = 'none'
+        renderCalendarShell(newMonth, document.getElementById('cal-grid'))
+        strip.style.transform = 'translateX(-33.333%)'
+        await changeMonth(dir)
+        animating = false
+      }, 230)
+    } else {
+      setStrip(0, true)
+    }
+  }
+
+  // touch
+  wrap.addEventListener('touchstart', e => onStart(e.touches[0].clientX, e.touches[0].clientY), { passive: true })
+  wrap.addEventListener('touchmove', e => onMove(e.touches[0].clientX, e.touches[0].clientY, () => e.preventDefault()), { passive: false })
+  wrap.addEventListener('touchend', onEnd, { passive: true })
+
+  // mouse
+  wrap.addEventListener('mousedown', e => { onStart(e.clientX, e.clientY); wrap.style.userSelect = 'none' })
+  window.addEventListener('mousemove', e => { if (active) onMove(e.clientX, e.clientY, null) })
+  window.addEventListener('mouseup', () => { wrap.style.userSelect = ''; onEnd() })
+})()
 
 window.selectDay = async function(date) {
   if (selectedDate === date) {
@@ -625,7 +854,7 @@ function renderDailyView(txns) {
         </div>
       </div>`
     }
-    const editAttrs = `'${t.id}','${escJs(t.name)}',${t.amount},'${t.date}','${escJs(t.category)}','${escJs(t.card||'')}','${escJs(t.note||'')}','${escJs(t.type||'支出')}'`
+    const editAttrs = `'${t.id}','${escJs(t.name)}',${t.amount},'${t.date}','${escJs(t.category)}','${escJs(t.card||'')}','${escJs(t.note||'')}','${escJs(t.type||'支出')}','${escJs(t.recurring_id||'')}'`
     const recBadge = t.source === '定期' ? ' <span title="定期項目" style="font-size:13px">🔁</span>' : ''
     return `<div class="txn-row" onclick="if(window.innerWidth<=768)editTxn(${editAttrs})">
       ${resolvedCatIconHtml(t.category, 38)}
@@ -641,7 +870,8 @@ function renderDailyView(txns) {
     </div>`
   }).join('')
 
-  if (txns.length > 1) {
+  const realCount = txns.filter(t => !t.transfer_id).length
+  if (realCount >= 1) {
     const parts = []
     if (incTotal > 0) parts.push(`<span style="color:#3fb950">收入 $${incTotal.toLocaleString()}</span>`)
     if (expTotal > 0) parts.push(`<span style="color:#f85149">支出 $${expTotal.toLocaleString()}</span>`)
@@ -662,17 +892,22 @@ window.toggleMonthly = function() {
   if (showMonthly) {
     document.getElementById('daily-view').style.display = 'none'
     document.getElementById('monthly-view').style.display = 'block'
+    selectedDate = ''
+    document.querySelectorAll('#cal-grid .cal-cell.selected, #cal-grid .cal-cell.today').forEach(el => el.classList.remove('selected', 'today'))
     const [y,m] = currentMonth.split('-').map(Number)
     document.getElementById('detail-title').textContent = `${y} 年 ${m} 月`
     renderMonthlyTable()
   } else {
     document.getElementById('monthly-view').style.display = 'none'
     document.getElementById('daily-view').style.display = 'block'
-    if (selectedDate) {
-      renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
-      const [,mm,dd] = selectedDate.split('-')
-      document.getElementById('detail-title').textContent = `${parseInt(mm)} 月 ${parseInt(dd)} 日`
-    } else { resetDetailView() }
+    const thisMonth = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' }).slice(0, 7)
+    selectedDate = currentMonth === thisMonth ? today : `${currentMonth}-01`
+    renderCalendar(currentMonth, rebuildByDate())
+    const txns = cachedTxns.filter(t => t.date === selectedDate)
+    if (txns.length) renderDailyView(txns)
+    else resetDetailView()
+    const [,mm,dd] = selectedDate.split('-')
+    document.getElementById('detail-title').textContent = `${parseInt(mm)} 月 ${parseInt(dd)} 日`
   }
 }
 
@@ -721,7 +956,7 @@ function renderMonthlyTable() {
           </div>
         </div>`
       }
-      const editAttrs = `'${t.id}','${escJs(t.name)}',${t.amount},'${t.date}','${escJs(t.category)}','${escJs(t.card||'')}','${escJs(t.note||'')}','${escJs(t.type||'支出')}'`
+      const editAttrs = `'${t.id}','${escJs(t.name)}',${t.amount},'${t.date}','${escJs(t.category)}','${escJs(t.card||'')}','${escJs(t.note||'')}','${escJs(t.type||'支出')}','${escJs(t.recurring_id||'')}'`
       const recBadge = t.source === '定期' ? ' <span title="定期項目" style="font-size:13px">🔁</span>' : ''
       return `<div class="txn-row" onclick="if(window.innerWidth<=768)editTxn(${editAttrs})">
         ${resolvedCatIconHtml(t.category, 38)}
@@ -737,11 +972,13 @@ function renderMonthlyTable() {
       </div>`
     }).join('')
 
-    // 每日總結：收入在左、支出在右，靠右對齊
-    const parts = []
-    if (incTotal > 0) parts.push(`<span style="color:#3fb950">收入 $${incTotal.toLocaleString()}</span>`)
-    if (expTotal > 0) parts.push(`<span style="color:#f85149">支出 $${expTotal.toLocaleString()}</span>`)
-    if (parts.length) html += `<div class="daily-summary" style="display:flex;justify-content:flex-end;gap:14px;padding:6px 0 2px;padding-right:92px;font-size:13px;font-weight:600">${parts.join('')}</div>`
+    const dayRealCount = txns.filter(t => !t.transfer_id).length
+    if (dayRealCount >= 1) {
+      const parts = []
+      if (incTotal > 0) parts.push(`<span style="color:#3fb950">收入 $${incTotal.toLocaleString()}</span>`)
+      if (expTotal > 0) parts.push(`<span style="color:#f85149">支出 $${expTotal.toLocaleString()}</span>`)
+      if (parts.length) html += `<div class="daily-summary" style="display:flex;justify-content:flex-end;gap:14px;padding:6px 0 2px;padding-right:92px;font-size:13px;font-weight:600">${parts.join('')}</div>`
+    }
   }
   container.innerHTML = html
 }
@@ -749,7 +986,10 @@ function renderMonthlyTable() {
 // ── Selects ──
 function renderCategorySelects() {
   document.getElementById('f-category').innerHTML = allCategories.filter(c => c.type === currentType)
-    .map(c => `<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('')
+    .map(c => {
+      const icon = (c.icon && c.icon.trim()) ? c.icon : catIcon(c.name)
+      return `<option value="${escHtml(c.name)}">${icon} ${escHtml(c.name)}</option>`
+    }).join('')
 }
 const ACCT_TYPE_ORDER = ['銀行', '銀行存款', '證券戶', '投資帳戶', '信用卡', '現金']
 const ACCT_TYPE_LABEL = { '銀行': '銀行', '銀行存款': '銀行', '證券戶': '證券戶', '投資帳戶': '證券戶', '信用卡': '信用卡', '現金': '現金' }
@@ -815,25 +1055,13 @@ window.setType = function(type) {
 
 window.openAddModal = function(dateOverride) {
   const fillDate = dateOverride || selectedDate || today
-  document.getElementById('edit-id').value = ''
-  document.getElementById('f-name').value = ''
-  document.getElementById('f-amount').value = ''
-  document.getElementById('f-date').value = fillDate
-  document.getElementById('f-note').value = ''
-  document.getElementById('f-xfr-amount').value = ''
-  document.getElementById('f-xfr-date').value = fillDate
-  document.getElementById('f-xfr-note').value = ''
-  document.getElementById('f-fee').value = ''
-  document.getElementById('f-xfr-fee').value = ''
-  document.getElementById('fee-section-normal').style.display = 'none'
-  document.getElementById('fee-section-transfer').style.display = 'none'
-  document.getElementById('fee-toggle-normal').textContent = '＋ 加入手續費'
-  document.getElementById('fee-toggle-transfer').textContent = '＋ 加入手續費'
-  document.getElementById('fee-total-normal').textContent = ''
-  setType('支出')
-  document.getElementById('modal-delete-btn').style.display = 'none'
-  document.getElementById('txn-modal').classList.add('open')
-  setTimeout(() => document.getElementById('f-amount').focus(), 50)
+  openAddTxnModal({
+    prefillDate: fillDate,
+    onSave: async () => {
+      await Promise.all([loadMonth(), loadRecurring()])
+      if (selectedDate) renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
+    }
+  })
 }
 
 window.toggleFeeSection = function(type) {
@@ -862,13 +1090,44 @@ window.updateNormalTotal = function() {
   }
 }
 
-window.editTxn = function(id, name, amount, date, category, card, note, type) {
+let _pendingEditTxn = null
+let _editScopeRec = 'this'
+
+window.editTxn = function(id, name, amount, date, category, card, note, type, recurringId) {
+  if (recurringId) {
+    _pendingEditTxn = { id, name, amount, date, category, card, note, type, recurringId }
+    _editScopeRec = 'this'
+    document.getElementById('scope-txn-name').textContent = name || category
+    document.getElementById('scope-modal').classList.add('open')
+    return
+  }
+  _openTxnEditForm({ id, name, amount, date, category, card, note, type })
+}
+
+window.pickScope = function(scope) {
+  _editScopeRec = scope
+  document.getElementById('scope-modal').classList.remove('open')
+  _openTxnEditForm(_pendingEditTxn)
+}
+
+function _openTxnEditForm({ id, name, amount, date, category, card, note, type, recurringId } = {}) {
+  // 從 note 反解手續費
+  const feeMatch = note ? note.match(/含手續費\s*NT\$([0-9,]+)/) : null
+  const fee = feeMatch ? parseInt(feeMatch[1].replace(/,/g, '')) : 0
+  const baseAmount = fee > 0 ? amount - fee : amount
+
   document.getElementById('edit-id').value = id
+  document.getElementById('edit-recurring-id').value = recurringId || ''
   document.getElementById('f-name').value = name
-  document.getElementById('f-amount').value = amount
+  document.getElementById('f-amount').value = baseAmount
+  document.getElementById('f-fee').value = fee || ''
+  const feeSection = document.getElementById('fee-section-normal')
+  feeSection.style.display = fee > 0 ? 'block' : 'none'
+  document.getElementById('fee-toggle-normal').textContent = fee > 0 ? '－ 移除手續費' : '＋ 加入手續費'
   document.getElementById('f-date').value = date
-  document.getElementById('f-note').value = note
+  document.getElementById('f-note').value = note || ''
   setType(type || '支出')
+  updateNormalTotal()
   const cs = document.getElementById('f-category')
   for (let i=0;i<cs.options.length;i++) if(cs.options[i].value===category){cs.selectedIndex=i;break}
   const as = document.getElementById('f-card')
@@ -918,10 +1177,27 @@ window.saveTxn = async function() {
     note: fee > 0 ? `含手續費 NT$${fee.toLocaleString()}` : null,
   }
   if (!data.amount || !data.date) { toast('請填寫金額和日期', 'error'); return }
+  const recurringId = document.getElementById('edit-recurring-id').value
+  if (recurringId && _editScopeRec === 'future') {
+    // templateData：amount 用本金（base），fee 分開傳；後端自己算總額給 transactions
+    const templateData = { name: data.name, amount: baseAmount, fee, category: data.category, card: data.card, note: data.note }
+    const [r1, r2] = await Promise.all([
+      id ? api.updateTransaction(id, data) : Promise.resolve({ ok: true }),
+      api.updateRecurringFuture(recurringId, { ...templateData, transaction_id: id, from_date: data.date }),
+    ])
+    if (r1.ok && r2.ok) {
+      closeTxnModal(); toast('已更新此筆及未來紀錄')
+      await Promise.all([loadMonth(), loadRecurring()])
+      if (selectedDate) renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
+      if (showMonthly) renderMonthlyTable()
+    } else toast('部分更新失敗', 'error')
+    return
+  }
+
   const res = id ? await api.updateTransaction(id, data) : await api.addTransaction(data)
   if (res.ok) {
     closeTxnModal(); toast(id ? '已更新' : '已新增')
-    await loadMonth()
+    await Promise.all([loadMonth(), loadRecurring()])
     if (selectedDate) renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
     if (showMonthly) renderMonthlyTable()
   } else toast(res.error ?? '操作失敗', 'error')
@@ -940,7 +1216,8 @@ window.deleteTxn = async function(id, isTransfer) {
   if (!confirm(msg)) return
   const res = await api.deleteTransaction(id)
   if (res.ok) {
-    toast('已刪除'); await loadMonth()
+    toast('已刪除')
+    await Promise.all([loadMonth(), loadRecurring()])
     if (selectedDate) renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
     if (showMonthly) renderMonthlyTable()
   } else toast(res.error ?? '刪除失敗', 'error')
@@ -952,12 +1229,26 @@ window.openTransferModal = function() {
   document.getElementById('xfr-amount').value = ''
   document.getElementById('xfr-date').value = today
   document.getElementById('xfr-note').value = ''
+  document.getElementById('xfr-delete-btn').style.display = 'none'
   document.querySelector('#transfer-modal .modal-title').textContent = '↔ 帳戶轉帳'
   document.getElementById('xfr-save-btn').textContent = '建立轉帳'
   renderXfrSelects()
   document.getElementById('transfer-modal').classList.add('open')
 }
 window.closeTransferModal = function() { document.getElementById('transfer-modal').classList.remove('open') }
+window.deleteTransfer = async function() {
+  const transferId = document.getElementById('edit-transfer-id').value
+  if (!transferId) return
+  if (!confirm('確定要刪除這筆轉帳記錄（兩筆關聯記錄都會刪除）？')) return
+  const txnId = document.getElementById('edit-transfer-txn-id').value
+  const res = await api.deleteTransaction(txnId)
+  if (res.ok) {
+    closeTransferModal(); toast('轉帳已刪除')
+    await loadMonth()
+    if (selectedDate) renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
+    if (showMonthly) renderMonthlyTable()
+  } else toast(res.error ?? '刪除失敗', 'error')
+}
 window.editTransfer = function(transferId) {
   const txns = cachedTxns.filter(t => t.transfer_id === transferId)
   const out = txns.find(t => t.type === '支出')
@@ -965,6 +1256,7 @@ window.editTransfer = function(transferId) {
   if (!out || !inc) { toast('找不到轉帳記錄', 'error'); return }
   renderXfrSelects()
   document.getElementById('edit-transfer-id').value = transferId
+  document.getElementById('edit-transfer-txn-id').value = out.id
   document.getElementById('xfr-from').value = out.card
   document.getElementById('xfr-to').value = inc.card
   document.getElementById('xfr-amount').value = String(out.amount)
@@ -972,6 +1264,7 @@ window.editTransfer = function(transferId) {
   document.getElementById('xfr-note').value = out.note ?? ''
   document.querySelector('#transfer-modal .modal-title').textContent = '↔ 編輯轉帳'
   document.getElementById('xfr-save-btn').textContent = '更新轉帳'
+  document.getElementById('xfr-delete-btn').style.display = 'inline-flex'
   document.getElementById('transfer-modal').classList.add('open')
 }
 window.saveTransfer = async function() {
@@ -1030,7 +1323,7 @@ window.renderCatList = function() {
   }
   let h = `<div style="font-size:11px;color:var(--text-muted);font-weight:600;padding:4px 0;border-bottom:1px solid var(--border);margin-bottom:4px">支出分類</div>`
   h += exp.length ? exp.map((c,i)=>row(exp,c,i)).join('') : '<div class="text-muted text-small" style="padding:6px 0">尚無支出分類</div>'
-  h += `<div style="font-size:11px;color:var(--success);font-weight:600;padding:12px 0 4px;border-bottom:1px solid var(--border);margin-bottom:4px">收入分類</div>`
+  h += `<div style="font-size:11px;color:var(--text-muted);font-weight:600;padding:12px 0 4px;border-bottom:1px solid var(--border);margin-bottom:4px">收入分類</div>`
   h += inc.length ? inc.map((c,i)=>row(inc,c,i)).join('') : '<div class="text-muted text-small" style="padding:6px 0">尚無收入分類</div>'
   document.getElementById('cat-list').innerHTML = h
 }
@@ -1135,7 +1428,7 @@ function renderRecurring() {
   }
 
   let html = ''
-  const groups = [{ label:'啟用中', items:active }, { label:'已停用', items:inactive }]
+  const groups = [{ label:'啟用中', items:active }, { label:'已結束', items:inactive }]
   for (const g of groups) {
     if (!g.items.length) continue
     const gTotal = g.items.filter(i=>i.type!=='收入').reduce((s,i)=>s+calcMonthlyEquiv([i]),0)
@@ -1152,8 +1445,8 @@ function renderRecurring() {
         : hasEnded
         ? `<span style="font-size:10px;color:var(--text-muted);background:var(--surface2);border-radius:4px;padding:1px 5px">已結束</span>`
         : ''
-      const feeTag = item.fee > 0 ? `<span style="font-size:11px;color:var(--text-muted)">+ 手續費 NT$${item.fee.toLocaleString()}</span>` : ''
-      html += `<div class="rec-item" style="${dimStyle}">
+      const feeTag = item.fee > 0 ? `<span style="font-size:11px;color:var(--text-muted)">內含手續費 NT$${item.fee.toLocaleString()}</span>` : ''
+      html += `<div class="rec-item" style="${dimStyle};cursor:pointer" onclick="openRecDetail('${item.id}')">
         ${resolvedCatIconHtml(item.category,40)}
         <div class="rec-item-info">
           <div class="rec-item-name" style="display:flex;align-items:center;gap:6px">${escHtml(item.name)}${statusTag}</div>
@@ -1162,26 +1455,120 @@ function renderRecurring() {
           </div>
         </div>
         <div class="rec-item-right">
-          <div class="rec-item-amt" style="color:${isInc?'var(--success)':'var(--danger)'}">NT$${item.amount.toLocaleString()}</div>
+          <div class="rec-item-amt" style="color:${isInc?'var(--success)':'var(--danger)'}">NT$${(item.amount+(item.fee||0)).toLocaleString()}</div>
           ${feeTag}
           <div class="rec-item-next" style="${dueSoon&&!notStarted?'color:var(--warning)':''}">${dueSoon&&!notStarted?'⚠️ ':''}${notStarted?'起始 '+item.start_date:'下次 '+item.next_date}</div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;align-items:center">
-          <label class="switch"><input type="checkbox" ${item.is_active?'checked':''} onchange="toggleRec('${item.id}',this.checked)"><span class="slider"></span></label>
-          <button class="btn btn-secondary btn-sm" onclick="openEditRecModal('${item.id}')">編輯</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteRec('${item.id}','${escJs(item.name)}')">刪</button>
-        </div>
+        <div style="color:var(--text-muted);font-size:18px;padding:0 4px">›</div>
       </div>`
     }
   }
   list.innerHTML = html
 }
 
+function calcNextDateRec(dateStr, frequency, dayOfMonth = 1) {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  if (frequency === 'weekly') {
+    const dt = new Date(y, m - 1, d + 7)
+    return dt.toISOString().slice(0, 10)
+  }
+  if (frequency === 'yearly') {
+    const maxD = new Date(y + 1, m, 0).getDate()
+    return `${y + 1}-${String(m).padStart(2,'0')}-${String(Math.min(d, maxD)).padStart(2,'0')}`
+  }
+  let ny = y, nm = m + 1
+  if (nm > 12) { nm = 1; ny++ }
+  const maxD = new Date(ny, nm, 0).getDate()
+  return `${ny}-${String(nm).padStart(2,'0')}-${String(Math.min(dayOfMonth, maxD)).padStart(2,'0')}`
+}
+
+window.openRecDetail = async function(id) {
+  const item = recItems.find(i => i.id === id)
+  if (!item) return
+  _recDetailCurrentId = id
+
+  const isInc = item.type === '收入'
+  const color = isInc ? 'var(--success)' : 'var(--danger)'
+
+  document.getElementById('rcd-name').textContent = item.name
+  document.getElementById('rcd-meta').textContent =
+    `${item.category} · ${freqLabel(item.frequency, item.day_of_month)}${item.card ? ' · ' + item.card : ''}`
+  document.getElementById('rcd-total').textContent = ''
+  document.getElementById('rcd-total-label').textContent = ''
+  document.getElementById('rcd-list').innerHTML =
+    '<div style="padding:20px 0;text-align:center;color:var(--text-muted)">載入中…</div>'
+  document.getElementById('rec-detail-modal').classList.add('open')
+  document.getElementById('rcd-terminate-btn').style.display = item.is_active ? 'block' : 'none'
+
+  const res = await api.getRecurringTransactions(id)
+  const txns = (res.ok ? res.data ?? [] : []).sort((a, b) => a.date.localeCompare(b.date))
+
+  const totalAmt = txns.reduce((s, t) => s + t.amount, 0)
+  if (totalAmt) {
+    document.getElementById('rcd-total').textContent = `NT$${totalAmt.toLocaleString()}`
+    document.getElementById('rcd-total').style.color = color
+    document.getElementById('rcd-total-label').textContent = '已累積'
+  }
+
+  let html = ''
+  if (txns.length) {
+    html += `<div style="font-size:11px;font-weight:600;color:var(--text-muted);padding:12px 0 6px;letter-spacing:.4px">歷史紀錄</div>`
+  }
+  txns.forEach((t, i) => {
+    const [y, m, day] = t.date.split('-')
+    const statusColor = t.status === '已對帳' ? 'var(--success)' : t.status === '待確認' ? 'var(--warning,#d29922)' : 'var(--text-muted)'
+    html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(48,54,61,.4);cursor:pointer" onclick="openRecTxnEdit('${t.id}')">
+      <div style="width:30px;height:30px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">${i + 1}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:500">${y}/${m}/${day}</div>
+        <div style="font-size:11px;color:${statusColor};margin-top:2px">${t.status}</div>
+      </div>
+      <div style="font-size:14px;font-weight:700;color:${color}">NT$${t.amount.toLocaleString()}</div>
+    </div>`
+  })
+  if (item.is_active) {
+    const futureDates = []
+    let nd = item.next_date
+    for (let i = 0; i < 6; i++) {
+      futureDates.push(nd)
+      nd = calcNextDateRec(nd, item.frequency, item.day_of_month)
+    }
+    if (futureDates.length) {
+      html += `<div style="font-size:11px;font-weight:600;color:var(--text-muted);padding:12px 0 6px;letter-spacing:.4px">即將到來</div>`
+    }
+    futureDates.forEach((d, i) => {
+      const [y, m, day] = d.split('-')
+      html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(48,54,61,.2);opacity:0.6;cursor:pointer" onclick="generateAndEditFuture('${item.id}')">
+        <div style="width:30px;height:30px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--text-muted);flex-shrink:0">${i === 0 ? '次' : ''}</div>
+        <div style="flex:1;font-size:14px;color:var(--text-muted)">${y}/${m}/${day}</div>
+        <div style="font-size:14px;font-weight:600;color:${color}">NT$${(item.amount + (item.fee || 0)).toLocaleString()}</div>
+      </div>`
+    })
+  }
+  if (!txns.length && !item.is_active) html = '<div style="padding:24px 0;text-align:center;color:var(--text-muted)">尚無紀錄</div>'
+  document.getElementById('rcd-list').innerHTML = html
+}
+
+window.generateAndEditFuture = function(recurringId) {
+  document.getElementById('rec-detail-modal').classList.remove('open')
+  openEditRecModal(recurringId)
+}
+
+window.openRecTxnEdit = async function(txnId) {
+  document.getElementById('rec-detail-modal').classList.remove('open')
+  const r = await api.getTransaction(txnId)
+  if (r?.ok && r.data) {
+    const t = r.data
+    editTxn(t.id, t.name || '', t.amount, t.date, t.category, t.card || '', t.note || '', t.type || '支出', t.recurring_id || '')
+  } else toast('無法載入紀錄', 'error')
+}
+
 function calcMonthlyEquiv(items) {
   return Math.round(items.reduce((s,i) => {
-    if(i.frequency==='weekly') return s+i.amount*4.33
-    if(i.frequency==='yearly') return s+i.amount/12
-    return s+i.amount
+    const total = i.amount + (i.fee || 0)
+    if(i.frequency==='weekly') return s+total*4.33
+    if(i.frequency==='yearly') return s+total/12
+    return s+total
   }, 0))
 }
 
@@ -1204,6 +1591,8 @@ window.setRecType = function(type) {
   document.getElementById('rec-btn-inc').className = type==='收入'?'active-income':''
   const cats = document.getElementById('r-category')
   cats.innerHTML = allCategories.filter(c=>c.type===type).map(c=>`<option value="${escHtml(c.name)}">${escHtml(c.name)}</option>`).join('')
+  const isEdit = !!document.getElementById('rec-edit-id').value
+  if (!isEdit) document.getElementById('rec-modal-title').textContent = type==='收入'?'新增定期收入':'新增定期支出'
 }
 
 window.onFreqChange = function() {
@@ -1228,7 +1617,7 @@ window.openRecModal = function() {
   document.getElementById('r-fee').value = ''
   document.getElementById('r-frequency').value = 'monthly'
   document.getElementById('r-day').value = '1'
-  document.getElementById('r-start-date').value = nextDateForDay(1)
+  document.getElementById('r-start-date').value = new Date().toISOString().slice(0, 10)
   document.getElementById('r-end-date').value = ''
   document.getElementById('r-day-group').style.display = 'block'
   setRecType('支出')
@@ -1296,17 +1685,50 @@ window.saveRecurring = async function() {
   }
   const res = id ? await api.updateRecurring(id,data) : await api.addRecurring(data)
   if(res.ok){
+    if(!id && res.id) await api.generateRecurring(res.id)
     closeRecModal(); toast(id?'已更新':'已新增')
     const rr=await api.getRecurring()
     if(rr.ok){recItems=rr.data;renderRecurring()}
   } else toast(res.error??'操作失敗','error')
 }
 
-window.deleteRec = async function(id,name) {
-  if(!confirm(`確定要刪除「${name}」？`)) return
-  const res=await api.deleteRecurring(id)
-  if(res.ok){toast(`已刪除「${name}」`);recItems=recItems.filter(i=>i.id!==id);renderRecurring()}
-  else toast(res.error??'刪除失敗','error')
+let _recDeleteId = null, _recDeleteName = ''
+let _recDetailCurrentId = null
+
+window.terminateRecDetail = async function() {
+  const id = _recDetailCurrentId
+  if (!id) return
+  const item = recItems.find(i => i.id === id)
+  if (!confirm(`確定要終止「${item?.name ?? ''}」？未到的待確認紀錄將刪除，歷史保留。`)) return
+  const res = await api.terminateRecurring(id)
+  if (res.ok) {
+    document.getElementById('rec-detail-modal').classList.remove('open')
+    toast(`「${item?.name ?? ''}」已終止，歷史紀錄保留`)
+    await loadRecurring()
+  } else toast(res.error ?? '操作失敗', 'error')
+}
+
+window.deleteRec = function(id, name) {
+  _recDeleteId = id
+  _recDeleteName = name
+  document.getElementById('rec-delete-scope-modal').classList.add('open')
+}
+
+window.doDeleteRec = async function(scope) {
+  const id = _recDeleteId
+  const name = _recDeleteName
+  document.getElementById('rec-delete-scope-modal').classList.remove('open')
+  document.getElementById('rec-detail-modal').classList.remove('open')
+  if (!id) return
+  if (scope === 'terminate') {
+    const res = await api.terminateRecurring(id)
+    if (res.ok) { toast(`「${name}」已終止，歷史紀錄保留`); recItems = recItems.filter(i => i.id !== id); renderRecurring() }
+    else toast(res.error ?? '操作失敗', 'error')
+  } else {
+    const res = await api.deleteRecurring(id)
+    if (res.ok) { toast(`已刪除「${name}」，歷史交易紀錄保留`); recItems = recItems.filter(i => i.id !== id); renderRecurring() }
+    else toast(res.error ?? '刪除失敗', 'error')
+  }
 }
 
 window.triggerRecurring = async function() {
@@ -1334,14 +1756,60 @@ document.getElementById('nav-add-btn').addEventListener('click', e => {
   const date = selectedDate || today
   location.href = '/add.html' + (date ? '?date=' + date : '')
 })
+
+// ── 手機滑動：月曆左右滑動切換月份 ──
+if (window.innerWidth <= 768) {
+  let _sx = 0, _sy = 0
+  const calCard = document.querySelector('#panel-records .card')
+  if (calCard) {
+    calCard.addEventListener('touchstart', e => {
+      _sx = e.touches[0].clientX
+      _sy = e.touches[0].clientY
+    }, { passive: true })
+    calCard.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - _sx
+      const dy = e.changedTouches[0].clientY - _sy
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        dx < 0 ? changeMonth(1) : changeMonth(-1)
+      }
+    }, { passive: true })
+  }
+
+  // Modal 向下滑動關閉
+  document.querySelectorAll('.modal').forEach(modal => {
+    let sy = 0
+    modal.addEventListener('touchstart', e => { sy = e.touches[0].clientY }, { passive: true })
+    modal.addEventListener('touchend', e => {
+      const dy = e.changedTouches[0].clientY - sy
+      if (dy > 80 && modal.scrollTop === 0) {
+        const overlay = modal.closest('.modal-overlay')
+        if (overlay) overlay.classList.remove('open')
+      }
+    }, { passive: true })
+  })
+}
+
+window.openMobileAdd = function(date) {
+  location.href = '/add.html' + (date ? '?date=' + date : '')
+}
+
+// 從 add.html 返回時重新整理資料
+window.addEventListener('pageshow', function(e) {
+  if (e.persisted) {
+    swr.delete('txns-' + currentMonth)
+    loadMonth()
+  }
+})
 </script>
 
 <nav class="bottom-nav">
   <a href="/" class="bottom-nav-item"><span class="nav-icon">🏠</span><span>總覽</span></a>
-  <a href="/transactions.html" class="bottom-nav-item active"><span class="nav-icon">📋</span><span>記錄</span></a>
-  <a href="/add.html" class="bottom-nav-item add-center" id="nav-add-btn"><span class="nav-icon">+</span></a>
+  <a href="/report.html" class="bottom-nav-item"><span class="nav-icon">📊</span><span>報表</span></a>
+  <a href="/add.html" class="bottom-nav-item add-center"><span class="nav-icon">+</span></a>
   <a href="/reconcile.html" class="bottom-nav-item"><span class="nav-icon">🔍</span><span>對帳</span></a>
   <a href="/investments.html" class="bottom-nav-item"><span class="nav-icon">📈</span><span>投資</span></a>
 </nav>
+
+
 </body>
 </html>

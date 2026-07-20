@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>報表 — 瑞奇財務</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="瑞奇財務">
+<meta name="theme-color" content="#161b22">
+<link rel="apple-touch-icon" href="/icons/icon.svg">
+<link rel="stylesheet" href="/css/style.css?v=1784541104574">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+/* ── 日期導航 ── */
+.report-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px 0 4px;
+}
+.report-nav-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 6px;
+  line-height: 1;
+}
+.report-nav-btn:hover { background: var(--surface2); color: var(--text); }
+.report-nav-label {
+  font-size: 16px;
+  font-weight: 600;
+  min-width: 160px;
+  text-align: center;
+}
+.report-mode-toggle {
+  display: flex;
+  gap: 4px;
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 3px;
+}
+.report-mode-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.report-mode-btn.active {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* ── Tab 列 ── */
+.report-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin: 12px 0 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.report-tabs::-webkit-scrollbar { display: none; }
+.report-tab {
+  flex-shrink: 0;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+}
+.report-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── 總覽 ── */
+.summary-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(48,54,61,0.5);
+}
+.summary-row:last-child { border-bottom: none; }
+.summary-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+.summary-label { font-size: 14px; min-width: 52px; flex-shrink: 0; }
+.summary-bar-wrap { flex: 1; min-width: 0; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+.summary-bar { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
+.summary-amount { font-size: 14px; font-weight: 600; flex-shrink: 0; min-width: 80px; text-align: right; }
+
+/* ── 類別圓圈 ── */
+.cat-circles {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 4px 0 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.cat-circles::-webkit-scrollbar { display: none; }
+.cat-circle-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.cat-circle-label { font-size: 12px; color: var(--text-muted); }
+.cat-circle-amt { font-size: 13px; font-weight: 600; color: var(--danger); }
+.cat-donut-wrap { position: relative; width: 72px; height: 72px; }
+.cat-donut-wrap canvas { width: 72px !important; height: 72px !important; }
+.cat-donut-pct {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ── 明細 chart ── */
+.detail-chart-wrap { height: 160px; position: relative; margin-bottom: 4px; }
+
+/* ── 類別/帳戶 list ── */
+.breakdown-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(48,54,61,0.5);
+}
+.breakdown-row:last-child { border-bottom: none; }
+.breakdown-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--surface2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.breakdown-info { flex: 1; min-width: 0; }
+.breakdown-name { font-size: 14px; font-weight: 500; }
+.breakdown-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.breakdown-right { text-align: right; flex-shrink: 0; }
+.breakdown-amt { font-size: 14px; font-weight: 600; color: var(--danger); }
+.breakdown-pct { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+/* ── 大 donut 圖 ── */
+.main-donut-wrap { position: relative; width: 200px; height: 200px; margin: 12px auto; }
+.main-donut-wrap canvas { width: 200px !important; height: 200px !important; }
+.main-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.main-donut-total { font-size: 22px; font-weight: 700; }
+.main-donut-label { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* ── 明細 list ── */
+.detail-date-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 14px 0 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(48,54,61,0.3);
+}
+.detail-txn-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(48,54,61,0.35);
+}
+.detail-txn-row:last-child { border-bottom: none; }
+.detail-txn-icon {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--surface2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; flex-shrink: 0;
+}
+.detail-txn-info { flex: 1; min-width: 0; }
+.detail-txn-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.detail-txn-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.detail-txn-amt { font-size: 13px; font-weight: 600; text-align: right; flex-shrink: 0; }
+
+/* ── 淨額 highlight ── */
+.net-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 0 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+.net-label { font-size: 14px; font-weight: 600; }
+.net-amt { font-size: 18px; font-weight: 700; }
+
+/* year bar chart */
+.year-bars { display: flex; align-items: flex-end; gap: 4px; height: 100px; margin: 8px 0 4px; }
+.year-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.year-bar { width: 100%; border-radius: 3px 3px 0 0; min-height: 2px; transition: height .3s; }
+.year-bar-label { font-size: 9px; color: var(--text-muted); }
+.year-bar-val { font-size: 8px; color: var(--text-muted); white-space: nowrap; }
+
+@media (max-width: 768px) {
+  .report-nav-label { min-width: 130px; font-size: 15px; }
+}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo"><span>💰</span><span>瑞奇財務</span></div>
+  <nav class="sidebar-nav">
+    <a href="/" class="nav-item"><span class="icon">🏠</span><span>資產總覽</span></a>
+    <a href="/transactions.html" class="nav-item"><span class="icon">📋</span><span>消費記錄</span></a>
+    <a href="/reconcile.html" class="nav-item"><span class="icon">🔍</span><span>帳戶對帳</span></a>
+    <a href="/investments.html" class="nav-item"><span class="icon">📈</span><span>投資損益</span></a>
+    <a href="/report.html" class="nav-item active"><span class="icon">📊</span><span>報表</span></a>
+  </nav>
+  <button class="sidebar-update-btn" onclick="import('/js/api.js?v=1784541104574').then(m=>m.openUpdateModal())">↑ 更新系統</button>
+</aside>
+
+<div class="main">
+  <div class="header">
+    <h1>報表</h1>
+  </div>
+
+  <div class="content">
+
+    <!-- 日期導航 -->
+    <div class="card" style="margin-bottom:16px;padding-bottom:0">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <div class="report-mode-toggle" style="flex-shrink:0">
+          <button class="report-mode-btn active" id="mode-month" onclick="setMode('month')">月</button>
+          <button class="report-mode-btn" id="mode-year" onclick="setMode('year')">年</button>
+        </div>
+        <div class="report-nav" style="flex:1;justify-content:center;padding:0">
+          <button class="report-nav-btn" onclick="prevPeriod()">‹</button>
+          <div class="report-nav-label" id="period-label">–</div>
+          <button class="report-nav-btn" onclick="nextPeriod()">›</button>
+        </div>
+      </div>
+
+      <!-- Tab 列 -->
+      <div class="report-tabs" id="report-tabs">
+        <button class="report-tab active" onclick="setTab('overview')">總覽</button>
+        <button class="report-tab" onclick="setTab('detail')">明細</button>
+        <button class="report-tab" onclick="setTab('category')">類別</button>
+        <button class="report-tab" onclick="setTab('account')">帳戶</button>
+      </div>
+    </div>
+
+    <!-- Tab 內容（4 個固定 panel，切換時 show/hide） -->
+    <div id="tab-content">
+      <div id="panel-overview"></div>
+      <div id="panel-detail"   style="display:none"></div>
+      <div id="panel-category" style="display:none"></div>
+      <div id="panel-account"  style="display:none"></div>
+      <div id="panel-drill"    style="display:none"></div>
+    </div>
+
+  </div>
+</div>
+
+<nav class="bottom-nav">
+  <a href="/" class="bottom-nav-item"><span class="nav-icon">🏠</span><span>總覽</span></a>
+  <a href="/report.html" class="bottom-nav-item active"><span class="nav-icon">📊</span><span>報表</span></a>
+  <a href="/transactions.html" class="bottom-nav-item add-center"><span class="nav-icon">+</span></a>
+  <a href="/reconcile.html" class="bottom-nav-item"><span class="nav-icon">🔍</span><span>對帳</span></a>
+  <a href="/investments.html" class="bottom-nav-item"><span class="nav-icon">📈</span><span>投資</span></a>
+</nav>
+
+<script type="module">
+import { api, toast, formatMoney, catIcon, initAppName, swr } from '/js/api.js?v=1784541104574'
+
+initAppName()
+
+// ── 狀態 ──
+let mode = 'month'   // 'month' | 'year'
+let currentYear = new Date().getFullYear()
+let currentMonth = new Date().getMonth() + 1
+let activeTab = 'overview'
+let allTxns = []
+let chartByTab = { overview: [], detail: [], category: [], account: [], drill: [] }
+let renderedTabs = new Set()
+let drillFilter = null  // null | { type: 'category'|'account', key: string }
+let breakdownDir = 'expense'  // 'expense' | 'income'
+let acctIconMap = {}   // name → emoji
+
+const ASSET_ICON = { '銀行':'🏦','銀行存款':'🏦','現金':'💵','證券戶':'📈','投資帳戶':'📈','信用卡':'💳' }
+const NAME_ICON = { '現金':'💵', '儲值':'🎫' }
+function acctIcon(name) { return acctIconMap[name] || NAME_ICON[name] || '💳' }
+
+// ── 工具 ──
+function escHtml(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+function pad(n) { return String(n).padStart(2,'0') }
+
+function periodRange() {
+  if (mode === 'month') {
+    const lastDay = new Date(currentYear, currentMonth, 0).getDate()
+    return {
+      from: `${currentYear}-${pad(currentMonth)}-01`,
+      to:   `${currentYear}-${pad(currentMonth)}-${pad(lastDay)}`,
+      label: `${currentYear} / ${pad(currentMonth)}`,
+    }
+  } else {
+    return {
+      from: `${currentYear}-01-01`,
+      to:   `${currentYear}-12-31`,
+      label: `${currentYear} 年`,
+    }
+  }
+}
+
+function updatePeriodLabel() {
+  document.getElementById('period-label').textContent = periodRange().label
+}
+
+// ── 導航 ──
+window.setMode = function(m) {
+  mode = m
+  document.getElementById('mode-month').className = 'report-mode-btn' + (m === 'month' ? ' active' : '')
+  document.getElementById('mode-year').className  = 'report-mode-btn' + (m === 'year'  ? ' active' : '')
+  updatePeriodLabel()
+  load()
+}
+
+window.prevPeriod = function() {
+  if (mode === 'month') {
+    currentMonth--
+    if (currentMonth < 1) { currentMonth = 12; currentYear-- }
+  } else {
+    currentYear--
+  }
+  updatePeriodLabel()
+  load()
+}
+
+window.nextPeriod = function() {
+  const now = new Date()
+  if (mode === 'month') {
+    if (currentYear === now.getFullYear() && currentMonth === now.getMonth() + 1) return
+    currentMonth++
+    if (currentMonth > 12) { currentMonth = 1; currentYear++ }
+  } else {
+    if (currentYear >= now.getFullYear()) return
+    currentYear++
+  }
+  updatePeriodLabel()
+  load()
+}
+
+// ── Tab ──
+const ALL_PANELS = ['overview','detail','category','account','drill']
+
+window.setTab = function(tab) {
+  drillFilter = null
+  breakdownDir = 'expense'
+  activeTab = tab
+  document.querySelectorAll('.report-tab').forEach((btn, i) => {
+    const tabs = ['overview','detail','category','account']
+    btn.className = 'report-tab' + (tabs[i] === tab ? ' active' : '')
+  })
+  ALL_PANELS.forEach(p => {
+    document.getElementById(`panel-${p}`).style.display = p === tab ? 'block' : 'none'
+  })
+  if (!renderedTabs.has(tab)) {
+    renderedTabs.add(tab)
+    renderByTab(tab)
+  }
+}
+
+window.openDrill = function(type, key) {
+  drillFilter = { type, key, dir: breakdownDir }
+  document.getElementById(`panel-${activeTab}`).style.display = 'none'
+  document.getElementById('panel-drill').style.display = 'block'
+  renderDrill()
+}
+
+window.closeDrill = function() {
+  drillFilter = null
+  document.getElementById('panel-drill').style.display = 'none'
+  document.getElementById(`panel-${activeTab}`).style.display = 'block'
+}
+
+window.setBreakdownDir = function(dir) {
+  breakdownDir = dir
+  destroyTabCharts(activeTab)
+  renderedTabs.delete(activeTab)
+  renderedTabs.add(activeTab)
+  renderByTab(activeTab)
+}
+
+function renderByTab(tab) {
+  if (tab === 'overview')  renderOverview()
+  else if (tab === 'detail')   renderDetail()
+  else if (tab === 'category') renderCategory()
+  else if (tab === 'account')  renderAccount()
+}
+
+// ── 載入資料 ──
+function applyReportData(txns, accountsData) {
+  acctIconMap = {}
+  for (const a of (accountsData ?? [])) {
+    acctIconMap[a.name] = ASSET_ICON[a.type] || '💳'
+  }
+  allTxns = txns
+  destroyCharts()
+  renderedTabs.clear()
+  drillFilter = null
+  ALL_PANELS.forEach(p => {
+    const el = document.getElementById(`panel-${p}`)
+    el.style.display = 'none'
+    el.innerHTML = ''
+  })
+  const activePanel = document.getElementById(`panel-${activeTab}`)
+  activePanel.style.display = 'block'
+  renderedTabs.add(activeTab)
+  renderByTab(activeTab)
+  const otherTabs = ['overview','detail','category','account'].filter(t => t !== activeTab)
+  const prerender = () => {
+    for (const tab of otherTabs) {
+      if (renderedTabs.has(tab)) continue
+      const panel = document.getElementById(`panel-${tab}`)
+      panel.style.cssText = 'display:block;position:absolute;visibility:hidden;pointer-events:none;width:100%;top:0;left:0;z-index:-1'
+      renderedTabs.add(tab)
+      renderByTab(tab)
+      panel.style.cssText = 'display:none'
+    }
+  }
+  'requestIdleCallback' in window ? requestIdleCallback(prerender) : setTimeout(prerender, 200)
+}
+
+async function load() {
+  const { from, to, label } = periodRange()
+  const cacheKey = `report-${from}-${to}`
+  const cached = swr.get(cacheKey)
+  if (cached) {
+    applyReportData(cached.txns, cached.accounts)
+  } else {
+    ALL_PANELS.forEach(p => {
+      const el = document.getElementById(`panel-${p}`)
+      el.style.display = 'none'
+      el.innerHTML = ''
+    })
+    document.getElementById(`panel-${activeTab}`).style.display = 'block'
+    document.getElementById(`panel-${activeTab}`).innerHTML = '<div class="card" style="text-align:center;padding:40px;color:var(--text-muted)">載入中…</div>'
+  }
+
+  const [res, assetsRes] = await Promise.all([
+    api.getTransactions({ date_from: from, date_to: to, limit: 2000 }),
+    api.getAssets()
+  ])
+  if (!res.ok) return
+  const accounts = assetsRes.ok ? (assetsRes.data?.accounts ?? []) : []
+  swr.set(cacheKey, { txns: res.data ?? [], accounts })
+  applyReportData(res.data ?? [], accounts)
+}
+
+function destroyCharts() {
+  Object.values(chartByTab).forEach(arr => { arr.forEach(c => c.destroy()); arr.length = 0 })
+}
+
+function destroyTabCharts(tab) {
+  chartByTab[tab].forEach(c => c.destroy())
+  chartByTab[tab] = []
+}
+
+// ── 資料解析 ──
+function isTransfer(t) { return !!t.transfer_id }
+
+function expenses()  { return allTxns.filter(t => t.type === '支出' && !isTransfer(t)) }
+function incomes()   { return allTxns.filter(t => t.type === '收入' && !isTransfer(t)) }
+function xferOut()   { return allTxns.filter(t => t.type === '支出' && isTransfer(t)) }
+function xferIn()    { return allTxns.filter(t => t.type === '收入' && isTransfer(t)) }
+
+function sum(arr) { return arr.reduce((s, t) => s + t.amount, 0) }
+
+
+// ═══════════════════════════════
+// 鑽取明細（類別 or 帳戶）
+// ═══════════════════════════════
+function renderDrill() {
+  const { type, key, dir } = drillFilter
+  const pool = dir === 'income' ? incomes() : expenses()
+  const filtered = pool.filter(t => type === 'category' ? t.category === key : (t.card || '未分類') === key)
+  const total = sum(filtered)
+
+  // 按日期分組
+  const byDate = {}
+  filtered.forEach(t => {
+    if (!byDate[t.date]) byDate[t.date] = []
+    byDate[t.date].push(t)
+  })
+  const dates = Object.keys(byDate).sort().reverse()
+
+  let listHtml = ''
+  dates.forEach(date => {
+    const txns = byDate[date]
+    const [y,m,d] = date.split('-')
+    const dow = ['日','一','二','三','四','五','六'][new Date(date+'T00:00:00').getDay()]
+    const dayTotal = sum(txns)
+    listHtml += `<div class="detail-date-header">
+      <span>${y}/${m}/${d} 週${dow}</span>
+    </div>`
+    txns.sort((a,b) => b.amount - a.amount).forEach(t => {
+      listHtml += `<div class="detail-txn-row">
+        <div class="detail-txn-icon">${catIcon(t.category)}</div>
+        <div class="detail-txn-info">
+          <div class="detail-txn-name">${escHtml(t.name || t.category)}</div>
+          <div class="detail-txn-sub">${escHtml(t.category)}${t.card ? ` · ${escHtml(t.card)}` : ''}</div>
+        </div>
+        <div class="detail-txn-amt" style="color:${dir==='income'?'var(--success)':'var(--danger)'}">$${t.amount.toLocaleString()}</div>
+      </div>`
+    })
+  })
+
+  const dirColor = dir === 'income' ? 'var(--success)' : 'var(--danger)'
+  const dirLabel = dir === 'income' ? '收入' : '支出'
+  document.getElementById('panel-drill').innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <button onclick="closeDrill()" style="background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;padding:0 4px;line-height:1">‹</button>
+        <div>
+          <div style="font-size:15px;font-weight:600">${escHtml(key)}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${filtered.length} 筆${dirLabel}</div>
+        </div>
+        <div style="margin-left:auto;font-size:16px;font-weight:700;color:${dirColor}">$${total.toLocaleString()}</div>
+      </div>
+    </div>
+    <div class="card">
+      ${listHtml || '<div style="padding:24px 0;text-align:center;color:var(--text-muted)">無紀錄</div>'}
+    </div>`
+}
+
+// ═══════════════════════════════
+// 總覽
+// ═══════════════════════════════
+function renderOverview() {
+  const exp = sum(expenses())
+  const inc = sum(incomes())
+  const out = sum(xferOut())
+  const inn = sum(xferIn())
+  const net = inc - exp
+
+  const rows = [
+    { label:'支出', count: expenses().length, amt: exp, color:'#f85149', sign: -1 },
+    { label:'收入', count: incomes().length,  amt: inc, color:'#3fb950', sign: 1 },
+    { label:'轉出', count: xferOut().length,  amt: out, color:'#e3a246', sign: -1 },
+    { label:'轉入', count: xferIn().length,   amt: inn, color:'#a5d6ff', sign: 1 },
+  ].filter(r => r.count > 0)
+
+  const maxAmt = Math.max(...rows.map(r => r.amt), 1)
+
+  // 支出分類圓圈
+  const expCatTotals = {}
+  expenses().forEach(t => { expCatTotals[t.category] = (expCatTotals[t.category] || 0) + t.amount })
+  const expSorted = Object.entries(expCatTotals).sort((a,b) => b[1]-a[1]).slice(0, 5)
+  const totalExp = exp || 1
+  const expCirclesHtml = expSorted.length ? `
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin:16px 0 8px">支出分類</div>
+    <div class="cat-circles" id="mini-donut-exp">
+      ${expSorted.map(([cat, amt], i) => `
+        <div class="cat-circle-item">
+          <div class="cat-donut-wrap">
+            <canvas id="mini-exp-${i}"></canvas>
+            <div class="cat-donut-pct">${Math.round(amt/totalExp*100)}%</div>
+          </div>
+          <div class="cat-circle-label">${escHtml(cat)}</div>
+          <div class="cat-circle-amt" style="color:var(--danger)">$${amt.toLocaleString()}</div>
+        </div>`).join('')}
+    </div>` : ''
+
+  // 收入分類圓圈
+  const incCatTotals = {}
+  incomes().forEach(t => { incCatTotals[t.category] = (incCatTotals[t.category] || 0) + t.amount })
+  const incSorted = Object.entries(incCatTotals).sort((a,b) => b[1]-a[1]).slice(0, 5)
+  const totalInc = inc || 1
+  const incCirclesHtml = incSorted.length ? `
+    <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin:16px 0 8px">收入分類</div>
+    <div class="cat-circles" id="mini-donut-inc">
+      ${incSorted.map(([cat, amt], i) => `
+        <div class="cat-circle-item">
+          <div class="cat-donut-wrap">
+            <canvas id="mini-inc-${i}"></canvas>
+            <div class="cat-donut-pct">${Math.round(amt/totalInc*100)}%</div>
+          </div>
+          <div class="cat-circle-label">${escHtml(cat)}</div>
+          <div class="cat-circle-amt" style="color:var(--success)">$${amt.toLocaleString()}</div>
+        </div>`).join('')}
+    </div>` : ''
+
+  let circlesHtml = expCirclesHtml + incCirclesHtml
+
+  // 年份模式：每月支出柱狀圖
+  let yearBarsHtml = ''
+  if (mode === 'year') {
+    const monthlyExp = Array(12).fill(0)
+    expenses().forEach(t => {
+      const m = parseInt(t.date.slice(5,7)) - 1
+      monthlyExp[m] += t.amount
+    })
+    const maxM = Math.max(...monthlyExp, 1)
+    yearBarsHtml = `
+      <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin:16px 0 6px">每月支出</div>
+      <div class="year-bars">
+        ${monthlyExp.map((v,i) => {
+          const valStr = v >= 10000 ? (v/10000).toFixed(1)+'W' : v > 0 ? '$'+v.toLocaleString() : ''
+          return `
+          <div class="year-bar-col">
+            <div class="year-bar-val">${valStr}</div>
+            <div class="year-bar" style="height:${Math.round(v/maxM*70)+2}px;background:#f85149;opacity:${v?1:0.2}"></div>
+            <div class="year-bar-label">${i+1}月</div>
+          </div>`
+        }).join('')}
+      </div>`
+  }
+
+  document.getElementById('panel-overview').innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      ${rows.map(r => `
+        <div class="summary-row">
+          <div class="summary-badge" style="background:${r.color}">${r.count}</div>
+          <div class="summary-label">${r.label}</div>
+          <div class="summary-bar-wrap">
+            <div class="summary-bar" style="width:${Math.round(r.amt/maxAmt*100)}%;background:${r.color}"></div>
+          </div>
+          <div class="summary-amount" style="color:${r.color}">$${r.amt.toLocaleString()}</div>
+        </div>
+      `).join('')}
+      <div class="net-row">
+        <div class="net-label">${net>=0?'淨收入':'淨支出'}</div>
+        <div class="net-amt" style="color:${net>=0?'var(--success)':'var(--danger)'}">
+          $${Math.abs(net).toLocaleString()}
+        </div>
+      </div>
+      ${yearBarsHtml}
+      ${circlesHtml}
+    </div>`
+
+  // 畫 mini donut（支出）
+  const EXP_COLORS = ['#bc8cff','#ffa657','#e3b341','#ff7eb6','#39d0d8']
+  expSorted.forEach(([, amt], i) => {
+    const canvas = document.getElementById(`mini-exp-${i}`)
+    if (!canvas) return
+    const pct = amt / totalExp
+    chartByTab.overview.push(new Chart(canvas.getContext('2d'), {
+      type: 'doughnut',
+      data: { datasets: [{ data: [pct, 1-pct], backgroundColor: [EXP_COLORS[i], 'rgba(48,54,61,0.4)'], borderWidth: 0 }] },
+      options: { responsive: false, cutout: '70%', plugins: { legend: { display: false }, tooltip: { enabled: false } }, animation: false }
+    }))
+  })
+
+  // 畫 mini donut（收入）
+  const INC_COLORS = ['#3fb950','#58a6ff','#79c0ff','#56d364','#26a641']
+  incSorted.forEach(([, amt], i) => {
+    const canvas = document.getElementById(`mini-inc-${i}`)
+    if (!canvas) return
+    const pct = amt / totalInc
+    chartByTab.overview.push(new Chart(canvas.getContext('2d'), {
+      type: 'doughnut',
+      data: { datasets: [{ data: [pct, 1-pct], backgroundColor: [INC_COLORS[i], 'rgba(48,54,61,0.4)'], borderWidth: 0 }] },
+      options: { responsive: false, cutout: '70%', plugins: { legend: { display: false }, tooltip: { enabled: false } }, animation: false }
+    }))
+  })
+}
+
+// ═══════════════════════════════
+// 明細
+// ═══════════════════════════════
+function renderDetail() {
+  // 依日期分組（只看支出）
+  const byDate = {}
+  const chartByDate = {}
+
+  allTxns.filter(t => !isTransfer(t)).forEach(t => {
+    if (!byDate[t.date]) byDate[t.date] = []
+    byDate[t.date].push(t)
+    if (t.type === '支出') chartByDate[t.date] = (chartByDate[t.date] || 0) + t.amount
+  })
+
+  const dates = Object.keys(byDate).sort()
+
+  // 產生日期軸（填補空白）
+  let chartLabels = [], chartValues = []
+  if (mode === 'month') {
+    const lastDay = new Date(currentYear, currentMonth, 0).getDate()
+    for (let d = 1; d <= lastDay; d++) {
+      const key = `${currentYear}-${pad(currentMonth)}-${pad(d)}`
+      chartLabels.push(`${currentMonth}/${d}`)
+      chartValues.push(chartByDate[key] || 0)
+    }
+  } else {
+    for (let m = 1; m <= 12; m++) {
+      const prefix = `${currentYear}-${pad(m)}`
+      const val = Object.entries(chartByDate).filter(([k]) => k.startsWith(prefix)).reduce((s,[,v]) => s+v, 0)
+      chartLabels.push(`${m}月`)
+      chartValues.push(val)
+    }
+  }
+
+  const totalExp = chartValues.reduce((s,v)=>s+v,0)
+  const avgLabel = mode === 'month'
+    ? (() => { const days = new Date(currentYear, currentMonth, 0).getDate(); return `日均支出 $${Math.round(totalExp/days).toLocaleString()}` })()
+    : (() => { const months = chartValues.filter(v=>v>0).length || 1; return `月均支出 $${Math.round(totalExp/months).toLocaleString()}` })()
+
+  // 列表 HTML
+  let listHtml = ''
+  dates.reverse().forEach(date => {
+    const txns = byDate[date]
+    const dailyExp = txns.filter(t=>t.type==='支出'&&!isTransfer(t)).reduce((s,t)=>s+t.amount,0)
+    const dailyInc = txns.filter(t=>t.type==='收入'&&!isTransfer(t)).reduce((s,t)=>s+t.amount,0)
+    const net = dailyInc - dailyExp
+    const [y,m,d] = date.split('-')
+    const dow = ['日','一','二','三','四','五','六'][new Date(date+'T00:00:00').getDay()]
+    listHtml += `<div class="detail-date-header">
+      <span>${y}/${m}/${d} 週${dow}</span>
+    </div>`
+
+    txns.sort((a,b) => b.amount - a.amount).forEach(t => {
+      const isXfer = isTransfer(t)
+      const color = t.type==='收入'?'var(--success)':isXfer?'var(--text-muted)':'var(--danger)'
+      listHtml += `<div class="detail-txn-row">
+        <div class="detail-txn-icon">${catIcon(t.category)}</div>
+        <div class="detail-txn-info">
+          <div class="detail-txn-name">${escHtml(t.name || t.category)}</div>
+          <div class="detail-txn-sub">${escHtml(t.category)}${t.card?` · ${escHtml(t.card)}`:''}</div>
+        </div>
+        <div class="detail-txn-amt" style="color:${color}">$${t.amount.toLocaleString()}</div>
+      </div>`
+    })
+  })
+
+  document.getElementById('panel-detail').innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div class="detail-chart-wrap"><canvas id="detail-chart"></canvas></div>
+      <div style="font-size:11px;color:var(--text-muted);text-align:right;margin-bottom:4px">
+        ${avgLabel}
+      </div>
+    </div>
+    <div class="card">
+      ${listHtml || '<div style="padding:24px 0;text-align:center;color:var(--text-muted)">此期間無紀錄</div>'}
+    </div>`
+
+  // Chart
+  const ctx = document.getElementById('detail-chart').getContext('2d')
+  chartByTab.detail.push(new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: chartLabels,
+      datasets: [{
+        data: chartValues,
+        backgroundColor: 'rgba(248,81,73,0.7)',
+        borderColor: '#f85149',
+        borderWidth: 1,
+        borderRadius: 3,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `$${ctx.raw.toLocaleString()}` } }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 10 }, maxTicksLimit: mode==='month'?10:12 } },
+        y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 10 }, callback: v => v>=10000?(v/10000)+'W':'$'+v } },
+      },
+    }
+  }))
+}
+
+// ═══════════════════════════════
+// 類別
+// ═══════════════════════════════
+const CAT_COLORS = ['#bc8cff','#ffa657','#e3b341','#ff7eb6','#39d0d8','#58a6ff','#d2a8ff','#f0883e','#a5d6ff','#7ee787']
+
+function renderCategory() {
+  const pool = breakdownDir === 'income' ? incomes() : expenses()
+  const dirColor = breakdownDir === 'income' ? 'var(--success)' : 'var(--danger)'
+  const dirLabel = breakdownDir === 'income' ? '收入' : '支出'
+
+  const catTotals = {}
+  pool.forEach(t => { catTotals[t.category] = (catTotals[t.category] || 0) + t.amount })
+  const sorted = Object.entries(catTotals).sort((a,b)=>b[1]-a[1])
+  const total = sum(pool) || 1
+
+  const donutData = sorted.slice(0,9)
+  const otherAmt = sorted.slice(9).reduce((s,[,v])=>s+v,0)
+  if (otherAmt > 0) donutData.push(['其他', otherAmt])
+
+  const toggleHtml = `
+    <div style="display:flex;gap:4px;background:var(--surface2);border-radius:8px;padding:3px;margin-bottom:12px;width:fit-content">
+      <button onclick="setBreakdownDir('expense')" style="background:${breakdownDir==='expense'?'var(--surface)':'none'};border:none;color:${breakdownDir==='expense'?'var(--text)':'var(--text-muted)'};font-size:12px;font-weight:600;padding:4px 14px;border-radius:6px;cursor:pointer">支出</button>
+      <button onclick="setBreakdownDir('income')"  style="background:${breakdownDir==='income' ?'var(--surface)':'none'};border:none;color:${breakdownDir==='income' ?'var(--text)':'var(--text-muted)'};font-size:12px;font-weight:600;padding:4px 14px;border-radius:6px;cursor:pointer">收入</button>
+    </div>`
+
+  document.getElementById('panel-category').innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      ${toggleHtml}
+      <div class="main-donut-wrap"><canvas id="cat-donut"></canvas>
+        <div class="main-donut-center">
+          <div class="main-donut-total" style="color:${dirColor}">$${sum(pool).toLocaleString()}</div>
+          <div class="main-donut-label">${dirLabel}總計</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      ${sorted.map(([cat, amt], i) => `
+        <div class="breakdown-row" style="cursor:pointer" data-drill-type="category" data-drill-key="${escHtml(cat)}" onclick="openDrill(this.dataset.drillType,this.dataset.drillKey)">
+          <div class="breakdown-icon" style="background:${CAT_COLORS[i]||'var(--surface2)'}22;border:2px solid ${CAT_COLORS[i]||'var(--border)'}">
+            <span>${catIcon(cat)}</span>
+          </div>
+          <div class="breakdown-info">
+            <div class="breakdown-name">${escHtml(cat)}</div>
+            <div class="breakdown-sub">${pool.filter(t=>t.category===cat).length} 筆</div>
+          </div>
+          <div class="breakdown-right">
+            <div class="breakdown-amt" style="color:${dirColor}">$${amt.toLocaleString()}</div>
+            <div class="breakdown-pct">${(amt/total*100).toFixed(1)}%</div>
+          </div>
+        </div>
+      `).join('')}
+      ${sorted.length===0?`<div style="padding:24px 0;text-align:center;color:var(--text-muted)">此期間無${dirLabel}</div>`:''}
+      ${sorted.length>0?`<div class="breakdown-row" style="border-top:1px solid var(--border);margin-top:4px;padding-top:12px">
+        <div class="breakdown-info"><div class="breakdown-name" style="font-weight:700">總計</div></div>
+        <div class="breakdown-right"><div class="breakdown-amt" style="font-size:16px;color:${dirColor}">$${sum(pool).toLocaleString()}</div></div>
+      </div>`:''}
+    </div>`
+
+  if (donutData.length) {
+    const ctx = document.getElementById('cat-donut').getContext('2d')
+    chartByTab.category.push(new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: donutData.map(([c])=>c),
+        datasets: [{ data: donutData.map(([,v])=>v), backgroundColor: donutData.map((_,i)=>CAT_COLORS[i]||'#888'), borderWidth: 2, borderColor: '#161b22' }]
+      },
+      options: {
+        responsive: false,
+        cutout: '62%',
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => `${ctx.label}: $${ctx.raw.toLocaleString()} (${(ctx.raw/total*100).toFixed(1)}%)` } }
+        }
+      }
+    }))
+  }
+}
+
+// ═══════════════════════════════
+// 帳戶
+// ═══════════════════════════════
+function renderAccount() {
+  const pool = breakdownDir === 'income' ? incomes() : expenses()
+  const dirColor = breakdownDir === 'income' ? 'var(--success)' : 'var(--danger)'
+  const dirLabel = breakdownDir === 'income' ? '收入' : '支出'
+
+  const acctTotals = {}
+  pool.forEach(t => {
+    const key = t.card || '未分類'
+    acctTotals[key] = (acctTotals[key] || 0) + t.amount
+  })
+  const sorted = Object.entries(acctTotals).sort((a,b)=>b[1]-a[1])
+  const total = sum(pool) || 1
+
+  const donutData = sorted.slice(0,9)
+  const otherAmt = sorted.slice(9).reduce((s,[,v])=>s+v,0)
+  if (otherAmt > 0) donutData.push(['其他', otherAmt])
+
+  const ACCT_COLORS = ['#f85149','#ff7eb6','#ffa657','#e3b341','#bc8cff','#58a6ff','#39d0d8','#7ee787','#d2a8ff','#f0883e']
+
+  const toggleHtml = `
+    <div style="display:flex;gap:4px;background:var(--surface2);border-radius:8px;padding:3px;margin-bottom:12px;width:fit-content">
+      <button onclick="setBreakdownDir('expense')" style="background:${breakdownDir==='expense'?'var(--surface)':'none'};border:none;color:${breakdownDir==='expense'?'var(--text)':'var(--text-muted)'};font-size:12px;font-weight:600;padding:4px 14px;border-radius:6px;cursor:pointer">支出</button>
+      <button onclick="setBreakdownDir('income')"  style="background:${breakdownDir==='income' ?'var(--surface)':'none'};border:none;color:${breakdownDir==='income' ?'var(--text)':'var(--text-muted)'};font-size:12px;font-weight:600;padding:4px 14px;border-radius:6px;cursor:pointer">收入</button>
+    </div>`
+
+  document.getElementById('panel-account').innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      ${toggleHtml}
+      <div class="main-donut-wrap"><canvas id="acct-donut"></canvas>
+        <div class="main-donut-center">
+          <div class="main-donut-total" style="color:${dirColor}">$${sum(pool).toLocaleString()}</div>
+          <div class="main-donut-label">${dirLabel}總計</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      ${sorted.map(([acct, amt], i) => `
+        <div class="breakdown-row" style="cursor:pointer" data-drill-type="account" data-drill-key="${escHtml(acct)}" onclick="openDrill(this.dataset.drillType,this.dataset.drillKey)">
+          <div class="breakdown-icon" style="background:${ACCT_COLORS[i]||'var(--surface2)'}22;border:2px solid ${ACCT_COLORS[i]||'var(--border)'}">
+            <span>${acctIcon(acct)}</span>
+          </div>
+          <div class="breakdown-info">
+            <div class="breakdown-name">${escHtml(acct)}</div>
+            <div class="breakdown-sub">${pool.filter(t=>(t.card||'未分類')===acct).length} 筆</div>
+          </div>
+          <div class="breakdown-right">
+            <div class="breakdown-amt" style="color:${dirColor}">$${amt.toLocaleString()}</div>
+            <div class="breakdown-pct">${(amt/total*100).toFixed(1)}%</div>
+          </div>
+        </div>
+      `).join('')}
+      ${sorted.length===0?`<div style="padding:24px 0;text-align:center;color:var(--text-muted)">此期間無${dirLabel}</div>`:''}
+      ${sorted.length>0?`<div class="breakdown-row" style="border-top:1px solid var(--border);margin-top:4px;padding-top:12px">
+        <div class="breakdown-info"><div class="breakdown-name" style="font-weight:700">總計</div></div>
+        <div class="breakdown-right"><div class="breakdown-amt" style="font-size:16px;color:${dirColor}">$${sum(pool).toLocaleString()}</div></div>
+      </div>`:''}
+    </div>`
+
+  if (donutData.length) {
+    const ctx = document.getElementById('acct-donut').getContext('2d')
+    chartByTab.account.push(new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: donutData.map(([c])=>c),
+        datasets: [{ data: donutData.map(([,v])=>v), backgroundColor: donutData.map((_,i)=>ACCT_COLORS[i]||'#888'), borderWidth: 2, borderColor: '#161b22' }]
+      },
+      options: {
+        responsive: false,
+        cutout: '62%',
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => `${ctx.label}: $${ctx.raw.toLocaleString()} (${(ctx.raw/total*100).toFixed(1)}%)` } }
+        }
+      }
+    }))
+  }
+}
+
+// ── 初始化 ──
+updatePeriodLabel()
+load()
+
+// ── 手機滑動：左右滑動切換期間 ──
+if (window.innerWidth <= 768) {
+  let _sx = 0, _sy = 0
+  const container = document.querySelector('.report-container') || document.querySelector('main') || document.body
+  container.addEventListener('touchstart', e => {
+    _sx = e.touches[0].clientX
+    _sy = e.touches[0].clientY
+  }, { passive: true })
+  container.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - _sx
+    const dy = e.changedTouches[0].clientY - _sy
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      dx < 0 ? nextPeriod() : prevPeriod()
+    }
+  }, { passive: true })
+}
+</script>
+</body>
+</html>

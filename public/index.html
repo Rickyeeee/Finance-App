@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="瑞奇財務">
 <meta name="theme-color" content="#161b22">
 <link rel="apple-touch-icon" href="/icons/icon.svg">
-<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/style.css?v=1784541104574">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 .account-group { margin-bottom: 16px; }
@@ -45,8 +45,43 @@
 .bill-sub-row { display: flex; align-items: center; gap: 8px; padding: 2px 0 2px 6px; font-size: 13px; }
 .bill-sub-label { color: var(--text-muted); min-width: 40px; flex-shrink: 0; }
 </style>
+<style>
+#splash {
+  position: fixed; inset: 0; z-index: 99999;
+  background: #0d1117;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px;
+  transition: opacity 0.4s ease;
+}
+#splash.hide { opacity: 0; pointer-events: none; }
+#splash-icon { font-size: 52px; animation: splashPop 0.5s cubic-bezier(0.34,1.56,0.64,1) both; }
+#splash-name { font-size: 20px; font-weight: 700; color: #e6edf3; letter-spacing: 0.5px;
+  animation: splashFade 0.4s 0.15s ease both; }
+#splash-bar { width: 48px; height: 3px; background: #30363d; border-radius: 2px; margin-top: 8px;
+  animation: splashFade 0.4s 0.2s ease both; overflow: hidden; }
+#splash-bar::after { content: ''; display: block; height: 100%; width: 0;
+  background: #58a6ff; border-radius: 2px;
+  animation: splashProgress 0.8s 0.3s ease forwards; }
+@keyframes splashPop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes splashFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes splashProgress { to { width: 100%; } }
+</style>
 </head>
 <body>
+
+<div id="splash" class="hide" style="transition:none">
+  <div id="splash-icon">💰</div>
+  <div id="splash-name">瑞奇財務</div>
+  <div id="splash-bar"></div>
+</div>
+<script>
+if (!sessionStorage.getItem('splashShown')) {
+  const s = document.getElementById('splash')
+  s.classList.remove('hide')
+  s.style.transition = ''
+  sessionStorage.setItem('splashShown', '1')
+}
+</script>
 
 <aside class="sidebar">
   <div class="sidebar-logo">
@@ -55,15 +90,17 @@
   <nav class="sidebar-nav">
     <a href="/" class="nav-item active"><span class="icon">🏠</span><span>資產總覽</span></a>
     <a href="/transactions.html" class="nav-item"><span class="icon">📋</span><span>消費記錄</span></a>
-    <a href="/reconcile.html" class="nav-item"><span class="icon">🔍</span><span>信用卡對帳</span></a>
+    <a href="/reconcile.html" class="nav-item"><span class="icon">🔍</span><span>帳戶對帳</span></a>
     <a href="/investments.html" class="nav-item"><span class="icon">📈</span><span>投資損益</span></a>
+    <a href="/report.html" class="nav-item"><span class="icon">📊</span><span>報表</span></a>
   </nav>
+  <button class="sidebar-update-btn" onclick="import('/js/api.js?v=1784541104574').then(m=>m.openUpdateModal())">↑ 更新系統</button>
   <div class="sidebar-footer" id="last-sync">–</div>
 </aside>
 
 <div class="main">
   <div class="header">
-    <h1>資產總覽</h1>
+    <h1 onclick="import('/js/api.js?v=1784541104574').then(m=>m.openUpdateModal())" style="cursor:pointer">資產總覽</h1>
     <div class="header-actions">
       <button class="btn btn-secondary btn-sm" onclick="load()">↻ 重新整理</button>
     </div>
@@ -96,7 +133,7 @@
 
     <div class="grid-2" style="margin-bottom:20px">
       <!-- 資產趨勢 -->
-      <div class="card">
+      <div class="card" id="card-trend">
         <div class="section-header">
           <div class="section-title">資產趨勢（近 12 個月）</div>
         </div>
@@ -111,9 +148,7 @@
         </div>
         <div id="accounts-list"><div class="loading">載入中…</div></div>
       </div>
-    </div>
 
-    <div class="grid-2" style="margin-bottom:20px">
       <!-- 即將扣款提醒 -->
       <div class="card">
         <div class="section-header">
@@ -123,9 +158,9 @@
       </div>
 
       <!-- 今日摘要 -->
-      <div class="card">
+      <div class="card" id="card-daily">
         <div class="section-header">
-          <div class="section-title">今日消費摘要</div>
+          <div class="section-title">今日摘要</div>
         </div>
         <div id="daily-summary">載入中…</div>
       </div>
@@ -281,7 +316,7 @@
 </div>
 
 <script type="module">
-import { api, toast, formatMoney, fmtSigned, amtColor, formatDate, badgeHtml, catIcon, initAppName } from '/js/api.js'
+import { api, toast, formatMoney, fmtSigned, amtColor, formatDate, badgeHtml, catIcon, initAppName, swr } from '/js/api.js?v=1784541104574'
 
 const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
 let trendChart = null
@@ -303,35 +338,21 @@ const TYPE_ICON = { '銀行': '🏦', '銀行存款': '🏦', '證券戶': '📈
 const TYPE_LABEL = { '銀行': '銀行', '銀行存款': '銀行', '證券戶': '證券戶', '投資帳戶': '證券戶', '信用卡': '信用卡', '現金': '現金' }
 const TYPE_ORDER = ['銀行', '銀行存款', '證券戶', '投資帳戶', '信用卡', '現金']
 
-async function load() {
-  const [assetsRes, historyRes, catsRes] = await Promise.all([
-    api.getAssets(),
-    api.getAssetHistory(12),
-    api.getCategories(),
-  ])
-  if (catsRes.ok) allCategories = catsRes.data
-
-  if (!assetsRes.ok) return
-
-  const d = assetsRes.data
+function applyAssetsData(d, historyData) {
   allAccounts = d.accounts ?? []
   allInvestments = d.investments ?? []
 
-  // 數字卡
   document.getElementById('total-net-worth').textContent = formatMoney(d.total_net_worth)
   document.getElementById('total-investments').textContent = formatMoney(d.total_investments)
 
-  // 本月總收入
   const mInc = document.getElementById('monthly-income')
   mInc.textContent = d.monthly_income > 0 ? 'NT$' + d.monthly_income.toLocaleString() : 'NT$0'
   mInc.style.color = d.monthly_income > 0 ? 'var(--success)' : 'var(--text)'
 
-  // 本月總支出
   const mExp = document.getElementById('monthly-expense')
   mExp.textContent = d.monthly_expense > 0 ? 'NT$' + d.monthly_expense.toLocaleString() : 'NT$0'
   mExp.style.color = d.monthly_expense > 0 ? 'var(--danger)' : 'var(--text)'
 
-  // 盈餘 / 虧損
   const net = (d.monthly_income ?? 0) - (d.monthly_expense ?? 0)
   const incomeSub = document.getElementById('income-sub')
   const expenseSub = document.getElementById('expense-sub')
@@ -362,14 +383,37 @@ async function load() {
     document.getElementById('net-worth-sub').style.color = 'var(--danger)'
   }
 
-  // 帳戶列表
   renderAccounts()
+  if (historyData) renderTrendChart(historyData, d.total_net_worth ?? 0)
+}
 
-  // 趨勢圖（傳入即時資產作為今天的點）
-  renderTrendChart(historyRes.data ?? [], d.total_net_worth ?? 0)
+async function load() {
+  // 快取先渲染
+  const cachedAssets = swr.get('assets')
+  const cachedHistory = swr.get('asset-history')
+  if (cachedAssets) {
+    applyAssetsData(cachedAssets, cachedHistory ?? [])
+    renderCountdowns()
+    loadDailySummary()
+  }
 
-  renderCountdowns()  // async, runs in parallel with daily summary
-  loadDailySummary()
+  // 背景拉新資料
+  const [assetsRes, historyRes, catsRes] = await Promise.all([
+    api.getAssets(),
+    api.getAssetHistory(12),
+    api.getCategories(),
+  ])
+  if (catsRes.ok) allCategories = catsRes.data
+  if (!assetsRes.ok) return
+
+  swr.set('assets', assetsRes.data)
+  if (historyRes.ok) swr.set('asset-history', historyRes.data)
+
+  applyAssetsData(assetsRes.data, historyRes.data ?? [])
+  if (!cachedAssets) {
+    renderCountdowns()
+    loadDailySummary()
+  }
 }
 
 function renderAccounts() {
@@ -533,7 +577,7 @@ async function renderCountdowns() {
     const endStr = fmt(periodEnd)
     const prevStartStr = fmt(prevStart)
 
-    const res = await api.getTransactions({ date_from: prevStartStr, date_to: endStr, limit: 1000 })
+    const res = await api.getTransactions({ date_from: prevStartStr, date_to: endStr, limit: 5000 })
     if (!res.ok) return null
 
     const txns = (res.data ?? []).filter(t =>
@@ -615,26 +659,53 @@ async function renderCountdowns() {
     // 結算日列
     let billingRow = ''
     if (acc.billing_day) {
-      const b = nextDate(acc.billing_day)
-      billingRow = `<div class="bill-sub-row">
-        <span class="bill-sub-label">結算日</span>
-        <span>${b.month} 月 ${b.day} 日</span>
-        <span style="flex:1"></span>
-        <span style="color:var(--text-muted)">${b.daysUntil} 天後</span>
-      </div>`
+      if (status !== null && !backToIdle) {
+        // 當期結算日已過 → 顯示當期日期 + 已結算
+        const [ey, em, ed] = status.endStr.split('-').map(Number)
+        billingRow = `<div class="bill-sub-row">
+          <span class="bill-sub-label">結算日</span>
+          <span>${em} 月 ${ed} 日</span>
+          <span style="flex:1"></span>
+          <span style="color:var(--text-muted);font-size:11px">已結算</span>
+        </div>`
+      } else {
+        // 結算日還沒到（或空窗期等下期）→ 顯示即將到來的結算日
+        const b = nextDate(acc.billing_day)
+        billingRow = `<div class="bill-sub-row">
+          <span class="bill-sub-label">結算日</span>
+          <span>${b.month} 月 ${b.day} 日</span>
+          <span style="flex:1"></span>
+          <span style="color:var(--text-muted)">${b.daysUntil} 天後</span>
+        </div>`
+      }
     }
 
     // 扣款日列（有顏色）
     let paymentRow = ''
     if (acc.payment_day) {
-      const p = nextDate(acc.payment_day)
-      const col = paymentColor(p.daysUntil)
-      paymentRow = `<div class="bill-sub-row">
-        <span class="bill-sub-label">扣款日</span>
-        <span>${p.month} 月 ${p.day} 日</span>
-        <span style="flex:1"></span>
-        <span style="color:${col};font-weight:600">${p.daysUntil} 天後</span>
-      </div>`
+      let payDateStr = null
+      if (status !== null && !backToIdle) {
+        // 從當期結算日推算扣款日
+        payDateStr = calcPaymentDateStr(status.endStr, acc.billing_day, acc.payment_day)
+      } else {
+        // 結算日還沒到 → 從下一個結算日推算扣款日
+        const b = nextDate(acc.billing_day)
+        const fakeEnd = `${y + (b.month === 1 && m === 12 ? 1 : 0)}-${String(b.month).padStart(2,'0')}-${String(b.day).padStart(2,'0')}`
+        payDateStr = calcPaymentDateStr(fakeEnd, acc.billing_day, acc.payment_day)
+      }
+      if (payDateStr) {
+        const payD = new Date(payDateStr + 'T00:00:00')
+        const daysUntil = Math.ceil((payD - now) / 86400000)
+        const col = paymentColor(daysUntil)
+        const [, pm, pd] = payDateStr.split('-').map(Number)
+        const label = daysUntil > 0 ? `${daysUntil} 天後` : daysUntil === 0 ? '今天' : `${Math.abs(daysUntil)} 天前`
+        paymentRow = `<div class="bill-sub-row">
+          <span class="bill-sub-label">扣款日</span>
+          <span>${pm} 月 ${pd} 日</span>
+          <span style="flex:1"></span>
+          <span style="color:${daysUntil >= 0 ? col : 'var(--text-muted)'};font-weight:600">${label}</span>
+        </div>`
+      }
     }
 
     if (!acc.billing_day && !acc.payment_day) {
@@ -873,14 +944,25 @@ document.getElementById('last-sync').textContent =
   '今天 ' + new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
 
 initAppName()
-load()
+
+function hideSplash() {
+  const s = document.getElementById('splash')
+  if (!s || s.classList.contains('hide')) return
+  s.classList.add('hide')
+  setTimeout(() => s.remove(), 400)
+}
+
+// 有 cache 時最多等 600ms，沒 cache 等資料回來
+const hasCachedData = !!(swr.get('assets'))
+if (hasCachedData) setTimeout(hideSplash, 600)
+load().then(hideSplash)
 </script>
-<script src="/js/calc-keyboard.js"></script>
+<script src="/js/calc-keyboard.js?v=1784541104574"></script>
 
 <nav class="bottom-nav">
   <a href="/" class="bottom-nav-item active"><span class="nav-icon">🏠</span><span>總覽</span></a>
-  <a href="/transactions.html" class="bottom-nav-item"><span class="nav-icon">📋</span><span>記錄</span></a>
-  <a href="/add.html" class="bottom-nav-item add-center"><span class="nav-icon">+</span></a>
+  <a href="/report.html" class="bottom-nav-item"><span class="nav-icon">📊</span><span>報表</span></a>
+  <a href="/transactions.html" class="bottom-nav-item add-center"><span class="nav-icon">+</span></a>
   <a href="/reconcile.html" class="bottom-nav-item"><span class="nav-icon">🔍</span><span>對帳</span></a>
   <a href="/investments.html" class="bottom-nav-item"><span class="nav-icon">📈</span><span>投資</span></a>
 </nav>

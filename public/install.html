@@ -330,10 +330,15 @@
     document.getElementById('install-btn').disabled = true
 
     try {
+      // 先從瀏覽器抓 bundle（避免 Worker 無法 fetch 自身靜態資源的問題）
+      const bundleRes = await fetch('/installer-worker.js')
+      if (!bundleRes.ok) throw new Error('無法載入 Worker bundle，請重新整理頁面後再試')
+      const bundle = await bundleRes.text()
+
       const res = await fetch('/api/installer/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ api_token: token, app_name: appName, worker_name: workerName, pin }),
+        body: JSON.stringify({ api_token: token, app_name: appName, worker_name: workerName, pin, bundle }),
       })
 
       if (!res.ok) {

@@ -99,7 +99,16 @@
   .step-sub { font-size: 14px; color: var(--muted); margin-bottom: 20px; flex-shrink: 0; }
   .name-wrap { flex: 1; display: flex; flex-direction: column; justify-content: center;
     max-width: 100%; overflow: hidden; }
-  .big-input { background: var(--surface); border: 1.5px solid var(--border);
+  .xfr-section-label {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em;
+  padding: 10px 0 6px;
+}
+.xfr-arrow {
+  text-align: center; font-size: 18px; color: var(--muted);
+  padding: 4px 0 2px;
+}
+.big-input { background: var(--surface); border: 1.5px solid var(--border);
     border-radius: 14px; color: var(--text); font-size: 18px; padding: 16px 18px;
     width: 100%; font-family: inherit; transition: border-color 0.15s; }
   .big-input:focus { outline: none; border-color: var(--accent); }
@@ -151,11 +160,44 @@
   input[type="number"] { -moz-appearance: textfield; }
 </style>
 </head>
+<style>
+#pin-overlay {
+  position: fixed; inset: 0; z-index: 999;
+  background: var(--bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 32px 24px max(24px, env(safe-area-inset-bottom));
+  gap: 20px;
+}
+#pin-overlay h2 { font-size: 20px; font-weight: 700; }
+#pin-overlay p { font-size: 14px; color: var(--muted); }
+#pin-input-add {
+  width: 100%; max-width: 300px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; color: var(--text);
+  padding: 14px; font-size: 22px; outline: none;
+  letter-spacing: 6px; text-align: center;
+}
+#pin-input-add:focus { border-color: var(--accent); }
+#pin-submit {
+  width: 100%; max-width: 300px;
+  background: var(--accent); color: #0d1117;
+  border: none; border-radius: 12px;
+  padding: 14px; font-size: 16px; font-weight: 700; cursor: pointer;
+}
+#pin-err { color: var(--danger); font-size: 13px; min-height: 18px; }
+</style>
 <body>
+<div id="pin-overlay" style="display:none">
+  <h2>🔒 請先登入</h2>
+  <p>輸入密碼以使用記帳功能</p>
+  <input type="password" inputmode="numeric" id="pin-input-add" placeholder="密碼" maxlength="20" autocomplete="current-password">
+  <div id="pin-err"></div>
+  <button id="pin-submit" onclick="doAddLogin()">登入</button>
+</div>
 <div id="app">
   <div class="topbar">
     <div class="topbar-title" id="topbar-title">新增記錄</div>
-    <a href="/transactions.html" class="topbar-close">✕</a>
+    <a href="/transactions.html" class="topbar-close" onclick="if(window.parent!==window){window.parent.postMessage('add-close','*');return false}">✕</a>
   </div>
   <div class="step-dots" id="dots"></div>
 
@@ -271,8 +313,7 @@
     <!-- Step 5: 轉入帳戶（轉帳限定） -->
     <div class="slide" id="s5">
       <div class="step-label">轉入帳戶</div>
-      <div class="step-sub">點選後送出轉帳記錄</div>
-      <div class="summary-card" id="xfr-summary-preview"></div>
+      <div class="step-sub" id="xfr-from-label">轉入哪個帳戶？</div>
       <div class="choose-grid" id="to-grid" style="flex:1"></div>
       <div class="bottom-nav">
         <button class="btn-back" onclick="goTo(4)">‹</button>
@@ -288,7 +329,7 @@
       </div>
       <div class="success-actions">
         <button class="btn-again" onclick="reset()">再新增一筆</button>
-        <a href="/transactions.html" class="btn-app">開啟消費記錄</a>
+        <a href="/transactions.html" class="btn-app" onclick="if(window.parent!==window){window.parent.postMessage('add-done','*');return false}">開啟消費記錄</a>
       </div>
     </div>
 
@@ -297,10 +338,41 @@
 
 <script type="module">
 const BASE = ''
-const _token = localStorage.getItem('ricky_finance_token') ?? ''
+const _AUTH_KEY = 'finance_token_' + location.hostname.replace(/[^a-z0-9]/gi, '').slice(-12)
+let _token = localStorage.getItem(_AUTH_KEY) ?? localStorage.getItem('ricky_finance_token') ?? ''
+
+// 登入 overlay
+if (!_token) {
+  document.getElementById('pin-overlay').style.display = 'flex'
+  document.getElementById('app').style.visibility = 'hidden'
+  document.getElementById('pin-input-add').addEventListener('keydown', e => { if (e.key === 'Enter') doAddLogin() })
+}
+
+window.doAddLogin = async function () {
+  const pin = document.getElementById('pin-input-add').value.trim()
+  if (!pin) return
+  const err = document.getElementById('pin-err')
+  err.textContent = ''
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin })
+    })
+    const d = await r.json()
+    if (d.ok && d.token) {
+      _token = d.token
+      localStorage.setItem(_AUTH_KEY, _token)
+      document.getElementById('pin-overlay').style.display = 'none'
+      document.getElementById('app').style.visibility = ''
+      loadData()
+    } else {
+      err.textContent = '密碼錯誤'
+    }
+  } catch { err.textContent = '連線失敗' }
+}
 
 let cats = [], incomeCats = [], accs = []
-let form = { type: '', amount: 0, name: '', date: '', category: '', card: '', note: '', toCard: '' }
+let form = { type: '', amount: 0, name: '', date: '', category: '', card: '', account_id: '', note: '', toCard: '', toAccountId: '' }
 let amtExpr = ''
 
 const CAT_ICON_MAP = {
@@ -333,14 +405,22 @@ form.date = defaultDate
 
 renderDots(1)
 
-fetch(BASE + '/api/shortcut/data', { headers: { 'Authorization': 'Bearer ' + _token } })
-  .then(r => r.json()).then(d => {
-    cats       = d.expense_category_objects  ?? (d.expense_categories  ?? []).map(n => ({ name: n, icon: null }))
-    incomeCats = d.income_category_objects   ?? (d.income_categories   ?? []).map(n => ({ name: n, icon: null }))
-    accs = d.accounts ?? []
-    renderAccs()
-    renderXfrAccs()
-  })
+function loadData() {
+  fetch(BASE + '/api/app-config').then(r => r.json()).then(d => {
+    if (d.app_name) document.title = '新增記錄 — ' + d.app_name
+  }).catch(() => {})
+
+  fetch(BASE + '/api/shortcut/data', { headers: { 'Authorization': 'Bearer ' + _token } })
+    .then(r => r.json()).then(d => {
+      cats       = d.expense_category_objects  ?? (d.expense_categories  ?? []).map(n => ({ name: n, icon: null }))
+      incomeCats = d.income_category_objects   ?? (d.income_categories   ?? []).map(n => ({ name: n, icon: null }))
+      accs = d.account_objects ?? (d.accounts ?? []).map(n => ({ id: null, name: n, type: '' }))
+      renderAccs()
+      renderXfrAccs()
+    })
+}
+
+if (_token) loadData()
 
 // ── Dots ──
 function renderDots(n) {
@@ -380,7 +460,10 @@ window.goTo = function(n) {
     document.getElementById('s4-from').style.display = isXfr ? 'flex' : 'none'
   }
   if (n === 5 && form.type === '轉帳') {
-    renderXfrSummary()
+    document.getElementById('to-grid').innerHTML = groupedAccBtns(
+      accs.filter(a => a.name !== form.card), 'selectTo'
+    )
+    document.getElementById('xfr-from-label').textContent = `從 ${form.card} 轉出`
   }
 
   Object.entries(slideIds).forEach(([k, id]) => {
@@ -509,39 +592,56 @@ function renderXfrSummary() {
 }
 
 // ── Accounts ──
-function renderAccs() {
-  const grid = document.getElementById('acc-grid')
-  if (!accs.length) { grid.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:20px 0;grid-column:span 2">尚無帳戶資料</div>'; return }
-  grid.innerHTML = accs.map(a => `<button class="choose-btn" onclick="selectAcc('${esc(a)}')">${a}</button>`).join('')
+const TYPE_ORDER = ['銀行', '銀行存款', '信用卡', '現金', '證券戶', '投資帳戶']
+const TYPE_LABEL = { '銀行': '銀行', '銀行存款': '銀行', '信用卡': '信用卡', '現金': '現金', '證券戶': '證券戶', '投資帳戶': '證券戶' }
+
+function groupedAccBtns(list, onclickFn) {
+  if (!list.length) return '<div style="color:var(--muted);font-size:14px;padding:20px 0;grid-column:span 2">尚無帳戶資料</div>'
+  const groups = {}
+  for (const a of list) {
+    const label = TYPE_LABEL[a.type] ?? a.type ?? '其他'
+    ;(groups[label] = groups[label] ?? []).push(a)
+  }
+  const order = ['銀行', '信用卡', '現金', '證券戶']
+  const orderedKeys = [...order.filter(k => groups[k]), ...Object.keys(groups).filter(k => !order.includes(k))]
+  let html = ''
+  for (const label of orderedKeys) {
+    html += `<div style="grid-column:span 2;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:10px 0 4px">${label}</div>`
+    html += groups[label].map(a =>
+      `<button class="choose-btn" data-id="${esc(a.id ?? '')}" data-name="${esc(a.name)}" onclick="${onclickFn}('${esc(a.id ?? '')}','${esc(a.name)}')">${a.name}</button>`
+    ).join('')
+  }
+  return html
 }
 
-window.selectAcc = async function(acc) {
-  form.card = acc
-  document.querySelectorAll('#acc-grid .choose-btn').forEach(b => b.classList.toggle('selected', b.textContent === acc))
+function renderAccs() {
+  document.getElementById('acc-grid').innerHTML = groupedAccBtns(accs, 'selectAcc')
+}
+
+window.selectAcc = async function(id, name) {
+  form.card = name
+  form.account_id = id
+  document.querySelectorAll('#acc-grid .choose-btn').forEach(b => b.classList.toggle('selected', b.dataset.name === name && b.dataset.id === id))
   await submitNormal()
 }
 
 function renderXfrAccs() {
-  const html = accs.length
-    ? accs.map(a => `<button class="choose-btn">${a}</button>`).join('')
-    : '<div style="color:var(--muted);font-size:14px;padding:20px 0;grid-column:span 2">尚無帳戶資料</div>'
-  document.getElementById('from-grid').innerHTML = accs.map(a =>
-    `<button class="choose-btn" onclick="selectFrom('${esc(a)}')">${a}</button>`).join('') || html
-  document.getElementById('to-grid').innerHTML = accs.map(a =>
-    `<button class="choose-btn" onclick="selectTo('${esc(a)}')">${a}</button>`).join('') || html
+  document.getElementById('from-grid').innerHTML = groupedAccBtns(accs, 'selectFrom')
+  document.getElementById('to-grid').innerHTML   = groupedAccBtns(accs, 'selectTo')
 }
 
-window.selectFrom = function(acc) {
-  form.card = acc
-  document.querySelectorAll('#from-grid .choose-btn').forEach(b => b.classList.toggle('selected', b.textContent === acc))
-  renderXfrSummary()
+window.selectFrom = function(id, name) {
+  form.card = name
+  form.account_id = id
+  document.querySelectorAll('#from-grid .choose-btn').forEach(b => b.classList.toggle('selected', b.dataset.name === name && b.dataset.id === id))
   setTimeout(() => goTo(5), 160)
 }
 
-window.selectTo = async function(acc) {
-  if (acc === form.card) { alert('轉出與轉入帳戶不能相同'); return }
-  form.toCard = acc
-  document.querySelectorAll('#to-grid .choose-btn').forEach(b => b.classList.toggle('selected', b.textContent === acc))
+window.selectTo = async function(id, name) {
+  if (name === form.card) { alert('轉出與轉入帳戶不能相同'); return }
+  form.toCard = name
+  form.toAccountId = id
+  document.querySelectorAll('#to-grid .choose-btn').forEach(b => b.classList.toggle('selected', b.dataset.name === name && b.dataset.id === id))
   await submitTransfer()
 }
 
@@ -553,7 +653,7 @@ async function submitNormal() {
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _token },
       body: JSON.stringify({
         name: form.name, amount: form.amount, date: form.date,
-        category: form.category, card: form.card,
+        category: form.category, card: form.card, account_id: form.account_id || undefined,
         type: form.type, status: '待確認', source: '手動輸入',
       }),
     })
@@ -568,7 +668,7 @@ async function submitNormal() {
 
 async function submitTransfer() {
   try {
-    const res = await fetch(BASE + '/api/transfers', {
+    const res = await fetch(BASE + '/api/transactions/transfer', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _token },
       body: JSON.stringify({
@@ -588,7 +688,7 @@ async function submitTransfer() {
 // ── Reset ──
 window.reset = function() {
   const newTW = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
-  form = { type: '', amount: 0, name: '', date: newTW, category: '', card: '', note: '', toCard: '' }
+  form = { type: '', amount: 0, name: '', date: newTW, category: '', card: '', account_id: '', note: '', toCard: '', toAccountId: '' }
   amtExpr = ''
   document.getElementById('amt-text').textContent = '0'
   document.getElementById('amt-display').className = 'amount-value zero'

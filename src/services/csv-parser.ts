@@ -87,41 +87,90 @@ export type BillItem = {
   name: string
   amount: number
   date: string
+  card: string
 }
 
 export function parseSinopacBillText(text: string): BillItem[] {
   const items: BillItem[] = []
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
-
-  // 永豐帳單格式：日期 商店名稱 金額
-  // 例：06/01 全家便利商店 45
-  // 或：2025/06/01  FamilyMart  NT$45
-  const dateAmountPattern = /(\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)\s+(.+?)\s+([\d,]+)(?:\s|$)/
   const currentYear = new Date().getFullYear()
 
-  for (const line of lines) {
-    const match = line.match(dateAmountPattern)
-    if (!match) continue
+  // 把 PDF 抽出的文字正規化：壓縮空白、保留換行
+  const lines = text.split(/\n/).map(l => l.replace(/\s+/g, ' ').trim()).filter(Boolean)
 
-    const [, rawDate, name, rawAmount] = match
-    const amount = parseInt(rawAmount.replace(/,/g, ''), 10)
-    if (!amount || amount <= 0) continue
+  // 永豐帳單真實消費格式：
+  //   消費日(MM/DD)  入帳日(MM/DD)  卡號末4碼(4位數)  帳單說明  臺幣金額
+  // 關鍵：必須有卡號末4碼，否則不是消費明細（例如自扣入帳那行就沒有卡號）
+  //
+  // PDF.js 擷取的文字可能把同一列拆成多個 token，所以用 token 掃描而非逐行 regex
+  const dateRe = /^\d{2}\/\d{2}$/
+  const cardRe = /^\d{4}$/
+  const amountRe = /^[－—–‐\-]?[\d,]+[－—–‐\-]?$/
 
-    // 解析日期
-    const parts = rawDate.split(/[\/\-]/)
-    let date = ''
-    if (parts.length === 2) {
-      date = `${currentYear}-${parts[0].padStart(2, '0')}-${parts[1].padStart(2, '0')}`
-    } else if (parts.length === 3) {
-      const y = parts[0].length === 4 ? parts[0] : `${currentYear}`
-      const m = (parts[0].length === 4 ? parts[1] : parts[0]).padStart(2, '0')
-      const d = (parts[0].length === 4 ? parts[2] : parts[1]).padStart(2, '0')
-      date = `${y}-${m}-${d}`
+  // 將所有 token 合成一個陣列
+  const tokens = lines.flatMap(l => l.split(' ')).filter(Boolean)
+
+  let i = 0
+  while (i < tokens.length) {
+    // 找消費日 MM/DD
+    if (!dateRe.test(tokens[i])) { i++; continue }
+    const txnDate = tokens[i]
+
+    // 下一個 token 應為入帳日 MM/DD
+    if (i + 1 >= tokens.length || !dateRe.test(tokens[i + 1])) { i++; continue }
+
+    // 再下一個 token 應為卡號末4碼（4位純數字）
+    if (i + 2 >= tokens.length || !cardRe.test(tokens[i + 2])) { i++; continue }
+    const cardLast4 = tokens[i + 2]
+
+    // 從 i+3 開始收集帳單說明，直到遇到金額（純數字含逗號，可能有負號）
+    let j = i + 3
+    const nameParts: string[] = []
+    while (j < tokens.length && !amountRe.test(tokens[j])) {
+      nameParts.push(tokens[j])
+      j++
     }
-    if (!date) continue
+    if (j >= tokens.length || !nameParts.length) { i++; continue }
 
-    items.push({ name: name.trim().slice(0, 50), amount, date })
+    // 統一各種減號格式（含前置、尾端、獨立 token）
+    const normalizedRaw = tokens[j].replace(/[－—–‐]/g, '-')
+    const isTrailingMinus = /[\d,]-$/.test(normalizedRaw)
+    let amount = parseInt(normalizedRaw.replace(/,/g, '').replace(/-$/, ''), 10) * (isTrailingMinus ? -1 : 1)
+
+    // 負號是獨立的下一個 token（如 `100 -`）
+    let nextIdx = j + 1
+    if (nextIdx < tokens.length && /^[－—–‐\-]$/.test(tokens[nextIdx])) {
+      amount = -Math.abs(amount)
+      nextIdx++
+    }
+
+    // 負數金額（折抵、退款）也保留，讓上層決定怎麼處理
+    const name = nameParts.join(' ').slice(0, 60)
+
+    // 解析消費日為 YYYY-MM-DD
+    const [mm, dd] = txnDate.split('/')
+    const date = `${currentYear}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`
+
+    // nameParts 裡出現日期 token 代表 parser 跑偏，跳過這筆
+    const hasDateInName = nameParts.some(p => dateRe.test(p))
+    if (name && !isNaN(amount) && amount !== 0 && !hasDateInName) {
+      items.push({ name, amount, date, card: cardLast4 })
+    }
+
+    i = nextIdx
   }
 
-  return items
+  // 合併國外交易服務費／手續費到前一筆（同日期）
+  const merged: BillItem[] = []
+  for (const item of items) {
+    if (
+      merged.length > 0 &&
+      item.date === merged[merged.length - 1].date &&
+      (item.name.includes('國外交易服務費') || item.name.includes('國外交易手續費'))
+    ) {
+      merged[merged.length - 1].amount += item.amount
+    } else {
+      merged.push(item)
+    }
+  }
+  return merged
 }

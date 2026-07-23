@@ -156,12 +156,28 @@ app.all('*', async (c) => {
 export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
-    ctx.waitUntil(runNightlyJob(env))
+    // 沒有 .catch() 的話這裡拋錯只會變成無聲的 unhandled rejection，log 裡完全找不到線索
+    ctx.waitUntil(runNightlyJob(env).catch(e => console.error('[cron] runNightlyJob 失敗：', e)))
   },
 }
 
 async function runNightlyJob(env: Bindings) {
   const DB = env.DB
+  const today = new Date().toISOString().slice(0, 10)
+
+  // 資產快照最重要也最沒辦法事後補救（快照記的是當下市值，過了那天就永遠拿不回來），
+  // 放在最前面、獨立包一層 try/catch，不讓它被後面任何步驟的錯誤連累到沒執行
+  try {
+    const [allAssetsSnap, allInvestmentsSnap] = await Promise.all([getAssets(DB), getInvestments(DB)])
+    const monthKey = today.slice(0, 7)
+    const { total: monthlyExpense } = await getMonthlySummary(DB, monthKey)
+    const totalCash = allAssetsSnap.filter(a => a.type === '銀行' || a.type === '現金' || a.type === '銀行存款').reduce((s, a) => s + a.balance, 0)
+    const totalInvestmentsValue = allInvestmentsSnap.reduce((s, i) => s + i.market_value, 0)
+    await recordAssetSnapshot(DB, { snapshot_date: today, total_assets: totalCash + totalInvestmentsValue, total_investments: totalInvestmentsValue, total_cash: totalCash, monthly_expense: monthlyExpense })
+  } catch (e) {
+    console.error('[cron] 資產快照記錄失敗，' + today + ' 這天將永久缺資料：', e)
+  }
+
   const recurringCount = await processRecurring(DB)
 
   const taiwanNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Taipei' }))
@@ -182,7 +198,6 @@ async function runNightlyJob(env: Bindings) {
     }
   }
 
-  const today = new Date().toISOString().slice(0, 10)
   const { data: txns } = await getTransactions(DB, { date: today, limit: 100 })
   const totalAmount = txns.reduce((s, t) => s + t.amount, 0)
   const summaryText = txns.length
@@ -194,13 +209,6 @@ async function runNightlyJob(env: Bindings) {
     transaction_count: txns.length,
     summary_text: summaryText,
   })
-
-  const [allAssetsSnap, allInvestmentsSnap] = await Promise.all([getAssets(DB), getInvestments(DB)])
-  const monthKey = today.slice(0, 7)
-  const { total: monthlyExpense } = await getMonthlySummary(DB, monthKey)
-  const totalCash = allAssetsSnap.filter(a => a.type === '銀行' || a.type === '現金' || a.type === '銀行存款').reduce((s, a) => s + a.balance, 0)
-  const totalInvestmentsValue = allInvestmentsSnap.reduce((s, i) => s + i.market_value, 0)
-  await recordAssetSnapshot(DB, { snapshot_date: today, total_assets: totalCash + totalInvestmentsValue, total_investments: totalInvestmentsValue, total_cash: totalCash, monthly_expense: monthlyExpense })
 
   return { date: today, recurring_generated: recurringCount }
 }

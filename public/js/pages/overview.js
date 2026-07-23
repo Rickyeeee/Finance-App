@@ -203,16 +203,20 @@ function renderTrendChart(history, liveTotalAssets) {
   values[values.length - 1] = liveTotalAssets
 
   // 用前一個已知值填補空白（carry forward）
+  // isCarried：標記哪些點是「猜的」（當月沒有快照，借用前一筆），圖表用虛線畫這段
+  const isCarried = new Array(values.length).fill(false)
   let _last = null
   for (let i = 0; i < values.length; i++) {
     if (values[i] !== null) _last = values[i]
-    else if (_last !== null) values[i] = _last
+    else if (_last !== null) { values[i] = _last; isCarried[i] = true }
   }
 
   if (values.every(v => v === null)) {
     ctx.canvas.parentElement.innerHTML = '<div class="empty-state">尚無歷史資料<p>系統每日午夜自動記錄，或手動點「快照」</p></div>'
     return
   }
+
+  const carriedColor = 'rgba(139,148,158,0.55)'
 
   trendChart = new Chart(ctx, {
     type: 'line',
@@ -223,23 +227,39 @@ function renderTrendChart(history, liveTotalAssets) {
         data: values,
         borderColor: '#58a6ff',
         backgroundColor: 'rgba(88,166,255,0.1)',
-        fill: true, tension: 0.3, pointRadius: 3, pointHoverRadius: 5,
+        fill: true, tension: 0.3, pointRadius: (c) => c.raw !== null && !isCarried[c.dataIndex] ? 3 : 0, pointHoverRadius: 5,
         spanGaps: false,
+        segment: {
+          borderDash: sctx => (isCarried[sctx.p0DataIndex] || isCarried[sctx.p1DataIndex]) ? [5, 4] : undefined,
+          borderColor: sctx => (isCarried[sctx.p0DataIndex] || isCarried[sctx.p1DataIndex]) ? carriedColor : undefined,
+        },
       }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: {
-        callbacks: { label: ctx => ctx.raw != null ? 'NT$' + ctx.raw.toLocaleString() : '無資料' }
+        callbacks: { label: ctx => {
+          if (ctx.raw == null) return '無資料'
+          const val = 'NT$' + ctx.raw.toLocaleString()
+          return isCarried[ctx.dataIndex] ? val + '（無快照，沿用前一筆）' : val
+        } }
       }},
       scales: {
         x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 11 } } },
         y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 11 },
-          callback: v => 'NT$' + (Math.abs(v) >= 10000 ? (v/10000).toFixed(0)+'W' : v.toLocaleString()) } }
+          callback: (v, i, ticks) => wLabel(v, ticks) } }
       },
       interaction: { mode: 'index', intersect: false },
     }
   })
+}
+
+// Y 軸標籤：範圍小於 5 萬時用小數，避免整數萬四捨五入後格線標籤重複（如連續三個都顯示「25W」）
+function wLabel(v, ticks) {
+  const range = Math.abs((ticks.at(-1)?.value ?? v) - (ticks[0]?.value ?? v))
+  if (Math.abs(v) < 10000) return 'NT$' + v.toLocaleString()
+  const decimals = range < 50000 ? 1 : 0
+  return 'NT$' + (v / 10000).toFixed(decimals) + 'W'
 }
 
 async function renderCountdowns() {

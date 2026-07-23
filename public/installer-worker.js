@@ -5602,11 +5602,22 @@ app9.all("*", async (c) => {
 var installer_entry_default = {
   fetch: app9.fetch,
   async scheduled(_event, env2, ctx) {
-    ctx.waitUntil(runNightlyJob(env2));
+    ctx.waitUntil(runNightlyJob(env2).catch((e) => console.error("[cron] runNightlyJob \u5931\u6557\uFF1A", e)));
   }
 };
 async function runNightlyJob(env2) {
   const DB = env2.DB;
+  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  try {
+    const [allAssetsSnap, allInvestmentsSnap] = await Promise.all([getAssets(DB), getInvestments(DB)]);
+    const monthKey = today.slice(0, 7);
+    const { total: monthlyExpense } = await getMonthlySummary(DB, monthKey);
+    const totalCash = allAssetsSnap.filter((a) => a.type === "\u9280\u884C" || a.type === "\u73FE\u91D1" || a.type === "\u9280\u884C\u5B58\u6B3E").reduce((s, a) => s + a.balance, 0);
+    const totalInvestmentsValue = allInvestmentsSnap.reduce((s, i) => s + i.market_value, 0);
+    await recordAssetSnapshot(DB, { snapshot_date: today, total_assets: totalCash + totalInvestmentsValue, total_investments: totalInvestmentsValue, total_cash: totalCash, monthly_expense: monthlyExpense });
+  } catch (e) {
+    console.error("[cron] \u8CC7\u7522\u5FEB\u7167\u8A18\u9304\u5931\u6557\uFF0C" + today + " \u9019\u5929\u5C07\u6C38\u4E45\u7F3A\u8CC7\u6599\uFF1A", e);
+  }
   const recurringCount = await processRecurring(DB);
   const taiwanNow = new Date((/* @__PURE__ */ new Date()).toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
   const todayDay = taiwanNow.getDate();
@@ -5624,7 +5635,6 @@ async function runNightlyJob(env2) {
       await createTransfer(DB, { from_account: cc.payment_account, to_account: cc.name, amount: billAmount, date: todayStr, note: `${monthStr} \u81EA\u52D5\u6263\u7E73`, outName: "\u81EA\u52D5\u6263\u7E73", inName: "\u81EA\u52D5\u6263\u7E73" });
     }
   }
-  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
   const { data: txns } = await getTransactions(DB, { date: today, limit: 100 });
   const totalAmount = txns.reduce((s, t) => s + t.amount, 0);
   const summaryText = txns.length ? `\u{1F4CA} ${today} \u6D88\u8CBB\u6458\u8981
@@ -5635,12 +5645,6 @@ async function runNightlyJob(env2) {
     transaction_count: txns.length,
     summary_text: summaryText
   });
-  const [allAssetsSnap, allInvestmentsSnap] = await Promise.all([getAssets(DB), getInvestments(DB)]);
-  const monthKey = today.slice(0, 7);
-  const { total: monthlyExpense } = await getMonthlySummary(DB, monthKey);
-  const totalCash = allAssetsSnap.filter((a) => a.type === "\u9280\u884C" || a.type === "\u73FE\u91D1" || a.type === "\u9280\u884C\u5B58\u6B3E").reduce((s, a) => s + a.balance, 0);
-  const totalInvestmentsValue = allInvestmentsSnap.reduce((s, i) => s + i.market_value, 0);
-  await recordAssetSnapshot(DB, { snapshot_date: today, total_assets: totalCash + totalInvestmentsValue, total_investments: totalInvestmentsValue, total_cash: totalCash, monthly_expense: monthlyExpense });
   return { date: today, recurring_generated: recurringCount };
 }
 __name(runNightlyJob, "runNightlyJob");

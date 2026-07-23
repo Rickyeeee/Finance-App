@@ -140,13 +140,14 @@ app.get('/api/shortcut/data', async (c) => {
   })
 })
 
-// Cron 端點：保護用
+// Cron 端點：保護用（手動補跑快照/定期交易的備援入口，
+// cron trigger 若曾失敗，可用這個端點手動補一次）
 app.post('/api/cron/run', async (c) => {
   const secret = c.req.header('x-cron-secret')
   if (secret !== c.env.CRON_SECRET) {
     return c.json({ ok: false, error: 'Unauthorized' }, 401)
   }
-  return runNightlyJob(c.env)
+  return runDayStart(c.env)
     .then(result => c.json({ ok: true, ...result }))
     .catch(e => c.json({ ok: false, error: String(e) }, 500))
 })
@@ -185,7 +186,9 @@ export default {
   fetch: app.fetch,
 
   async scheduled(_event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
-    ctx.waitUntil(runDayStart(env))
+    // 沒有 .catch() 的話這裡拋錯只會變成無聲的 unhandled rejection，
+    // Cloudflare log 裡完全找不到線索——曾經因此漏了 5 天的資產快照都不知道原因
+    ctx.waitUntil(runDayStart(env).catch(e => console.error('[cron] runDayStart 失敗：', e)))
   },
 }
 
@@ -199,24 +202,31 @@ async function runDayStart(env: Bindings) {
   yesterday.setDate(yesterday.getDate() - 1)
   const yesterdayStr = fmt(yesterday)
 
-  // 記錄昨日資產快照
-  const [allAssetsSnap, allInvestmentsSnap] = await Promise.all([
-    getAssets(DB),
-    getInvestments(DB),
-  ])
-  const monthKey = yesterdayStr.slice(0, 7)
-  const { total: monthlyExpense } = await getMonthlySummary(DB, monthKey)
-  const totalCash = allAssetsSnap
-    .filter(a => a.type === '銀行' || a.type === '現金' || a.type === '銀行存款')
-    .reduce((s, a) => s + a.balance, 0)
-  const totalInvestmentsValue = allInvestmentsSnap.reduce((s, i) => s + i.market_value, 0)
-  await recordAssetSnapshot(DB, {
-    snapshot_date: yesterdayStr,
-    total_assets: totalCash + totalInvestmentsValue,
-    total_investments: totalInvestmentsValue,
-    total_cash: totalCash,
-    monthly_expense: monthlyExpense,
-  })
+  // 記錄昨日資產快照——這步最重要也最沒辦法事後補救（快照記的是當下市值，
+  // 過了那天就永遠拿不回來），獨立包一層 try/catch，不讓後面步驟的錯誤連累到它，
+  // 也不讓它自己的錯誤被吞掉沒有記錄
+  let totalCash = 0, totalInvestmentsValue = 0
+  try {
+    const [allAssetsSnap, allInvestmentsSnap] = await Promise.all([
+      getAssets(DB),
+      getInvestments(DB),
+    ])
+    const monthKey = yesterdayStr.slice(0, 7)
+    const { total: monthlyExpense } = await getMonthlySummary(DB, monthKey)
+    totalCash = allAssetsSnap
+      .filter(a => a.type === '銀行' || a.type === '現金' || a.type === '銀行存款')
+      .reduce((s, a) => s + a.balance, 0)
+    totalInvestmentsValue = allInvestmentsSnap.reduce((s, i) => s + i.market_value, 0)
+    await recordAssetSnapshot(DB, {
+      snapshot_date: yesterdayStr,
+      total_assets: totalCash + totalInvestmentsValue,
+      total_investments: totalInvestmentsValue,
+      total_cash: totalCash,
+      monthly_expense: monthlyExpense,
+    })
+  } catch (e) {
+    console.error('[cron] 資產快照記錄失敗，' + yesterdayStr + ' 這天將永久缺資料：', e)
+  }
 
   // 生成今日定期交易
   const recurringCount = await processRecurring(DB)

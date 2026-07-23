@@ -792,11 +792,14 @@ function drawGrowthChart(range, res) {
   }
 
   // 用前一個已知值填補空白（carry forward），第一筆之前保留 null
+  // isCarried：標記哪些點是「猜的」（當天沒有快照，借用前一天的數字），
+  // 讓圖表用虛線畫出這段，不要偽裝成真實資料的平線
   const values = []
+  const isCarried = []
   let carryVal = null
   for (const v of rawValues) {
-    if (v !== null) carryVal = v
-    values.push(carryVal)
+    if (v !== null) { carryVal = v; values.push(v); isCarried.push(false) }
+    else { values.push(carryVal); isCarried.push(carryVal !== null) }
   }
 
   if (values.every(v => v === null)) {
@@ -811,6 +814,9 @@ function drawGrowthChart(range, res) {
   const lineColor = isUp ? '#3fb950' : '#f85149'
   const fillColor = isUp ? 'rgba(63,185,80,0.08)' : 'rgba(248,81,73,0.08)'
 
+  // 猜的區段虛線淡灰、有真資料的區段用正常顏色
+  const carriedColor = 'rgba(139,148,158,0.55)'
+
   growthChart = new Chart(ctx, {
     type: 'line',
     data: {
@@ -820,29 +826,45 @@ function drawGrowthChart(range, res) {
         borderColor: lineColor,
         backgroundColor: fillColor,
         borderWidth: 2,
-        pointRadius: (ctx) => ctx.raw !== null ? (nonNull.length <= 14 ? 3 : 0) : 0,
+        pointRadius: (ctx) => ctx.raw !== null && !isCarried[ctx.dataIndex] ? (nonNull.length <= 14 ? 3 : 0) : 0,
         pointHoverRadius: 5,
         fill: true,
         tension: 0.3,
         spanGaps: true,
+        segment: {
+          borderDash: sctx => (isCarried[sctx.p0DataIndex] || isCarried[sctx.p1DataIndex]) ? [5, 4] : undefined,
+          borderColor: sctx => (isCarried[sctx.p0DataIndex] || isCarried[sctx.p1DataIndex]) ? carriedColor : undefined,
+        },
       }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: ctx => ctx.raw != null ? 'NT$' + ctx.raw.toLocaleString() : '無資料' } }
+        tooltip: { callbacks: { label: ctx => {
+          if (ctx.raw == null) return '無資料'
+          const val = 'NT$' + ctx.raw.toLocaleString()
+          return isCarried[ctx.dataIndex] ? val + '（無快照，沿用前一筆）' : val
+        } } }
       },
       scales: {
         x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 11 }, maxTicksLimit: 8 } },
         y: {
           grid: { color: '#30363d' },
-          ticks: { color: '#8b949e', font: { size: 11 }, callback: v => 'NT$' + (Math.abs(v) >= 10000 ? (v/10000).toFixed(0)+'W' : v.toLocaleString()) }
+          ticks: { color: '#8b949e', font: { size: 11 }, callback: (v, i, ticks) => wLabel(v, ticks) }
         }
       },
       interaction: { mode: 'index', intersect: false },
     }
   })
+}
+
+// Y 軸標籤：範圍小於 5 萬時用小數，避免整數萬四捨五入後格線標籤重複（如連續三個都顯示「25W」）
+function wLabel(v, ticks) {
+  const range = Math.abs((ticks.at(-1)?.value ?? v) - (ticks[0]?.value ?? v))
+  if (Math.abs(v) < 10000) return 'NT$' + v.toLocaleString()
+  const decimals = range < 50000 ? 1 : 0
+  return 'NT$' + (v / 10000).toFixed(decimals) + 'W'
 }
 
 window.setGrowthRange = async function(range) {

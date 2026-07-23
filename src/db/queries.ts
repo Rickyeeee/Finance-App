@@ -41,14 +41,26 @@ export async function getTransactions(
   return { data: results, total: countRow?.total ?? 0 }
 }
 
-async function adjustAssetBalance(db: D1Database, accountName: string | null | undefined, delta: number) {
-  if (!accountName) return
-  await db.prepare("UPDATE assets SET balance = balance + ?, updated_at = date('now') WHERE name = ?")
-    .bind(delta, accountName).run()
+// 帳戶參照：優先用 id 比對（唯一、不會撞名），沒有 id 時才退回用名稱比對
+// （僅供沒有 account_id 的舊資料相容——同名帳戶存在時名稱比對可能打中多筆）
+type AccountRef = { id?: string | null; name?: string | null }
+
+async function adjustAssetBalance(db: D1Database, account: AccountRef, delta: number) {
+  if (account.id) {
+    await db.prepare("UPDATE assets SET balance = balance + ?, updated_at = date('now') WHERE id = ?")
+      .bind(delta, account.id).run()
+  } else if (account.name) {
+    await db.prepare("UPDATE assets SET balance = balance + ?, updated_at = date('now') WHERE name = ?")
+      .bind(delta, account.name).run()
+  }
 }
 
-async function calcAssetDelta(db: D1Database, accountName: string, amount: number, type: string): Promise<number> {
-  const asset = await db.prepare('SELECT type FROM assets WHERE name = ?').bind(accountName).first<{ type: string }>()
+async function calcAssetDelta(db: D1Database, account: AccountRef, amount: number, type: string): Promise<number> {
+  const asset = account.id
+    ? await db.prepare('SELECT type FROM assets WHERE id = ?').bind(account.id).first<{ type: string }>()
+    : account.name
+      ? await db.prepare('SELECT type FROM assets WHERE name = ?').bind(account.name).first<{ type: string }>()
+      : null
   if (!asset) return 0
   const isIncome = type === '收入'
   // 所有帳戶統一邏輯：收入增加餘額，支出減少餘額
@@ -63,9 +75,10 @@ export async function createTransaction(db: D1Database, data: Omit<Transaction, 
     .bind(id, data.name, data.amount, data.date, data.category, data.card, data.account_id ?? null, data.type ?? '支出', data.status, data.source, data.note ?? null, data.transfer_id ?? null, data.recurring_id ?? null)
     .run()
 
-  if (data.source !== '餘額調整' && data.card) {
-    const delta = await calcAssetDelta(db, data.card, data.amount, data.type ?? '支出')
-    await adjustAssetBalance(db, data.card, delta)
+  if (data.source !== '餘額調整' && (data.account_id || data.card)) {
+    const account = { id: data.account_id, name: data.card }
+    const delta = await calcAssetDelta(db, account, data.amount, data.type ?? '支出')
+    await adjustAssetBalance(db, account, delta)
   }
 
   return id
@@ -73,6 +86,7 @@ export async function createTransaction(db: D1Database, data: Omit<Transaction, 
 
 export async function createTransfer(db: D1Database, data: {
   from_account: string; to_account: string; amount: number; date: string; note?: string | null; fee?: number; outName?: string; inName?: string
+  from_account_id?: string | null; to_account_id?: string | null
 }) {
   const transferId = generateId('xfr')
   await createTransaction(db, {
@@ -81,11 +95,14 @@ export async function createTransfer(db: D1Database, data: {
     date: data.date,
     category: '轉帳',
     card: data.from_account,
+    account_id: data.from_account_id ?? null,
     type: '支出',
     status: '已對帳',
     source: '手動輸入',
     note: data.note ?? null,
     transfer_id: transferId,
+    deferred_to: null,
+    recurring_id: null,
   })
   await createTransaction(db, {
     name: data.inName ?? `轉帳 ← ${data.from_account}`,
@@ -93,11 +110,14 @@ export async function createTransfer(db: D1Database, data: {
     date: data.date,
     category: '轉帳',
     card: data.to_account,
+    account_id: data.to_account_id ?? null,
     type: '收入',
     status: '已對帳',
     source: '手動輸入',
     note: data.note ?? null,
     transfer_id: transferId,
+    deferred_to: null,
+    recurring_id: null,
   })
   if (data.fee && data.fee > 0) {
     await createTransaction(db, {
@@ -106,32 +126,36 @@ export async function createTransfer(db: D1Database, data: {
       date: data.date,
       category: '手續費',
       card: data.from_account,
+      account_id: data.from_account_id ?? null,
       type: '支出',
       status: '已對帳',
       source: '手動輸入',
       note: null,
       transfer_id: transferId,
+      deferred_to: null,
+      recurring_id: null,
     })
   }
   return transferId
 }
 
 export async function deleteTransferPair(db: D1Database, transferId: string) {
-  const { results } = await db.prepare('SELECT card, amount, type FROM transactions WHERE transfer_id = ?')
-    .bind(transferId).all<{ card: string; amount: number; type: string }>()
+  const { results } = await db.prepare('SELECT card, account_id, amount, type FROM transactions WHERE transfer_id = ?')
+    .bind(transferId).all<{ card: string; account_id: string | null; amount: number; type: string }>()
   await db.prepare('DELETE FROM transactions WHERE transfer_id = ?').bind(transferId).run()
   for (const txn of results) {
-    if (txn.card) {
-      const delta = await calcAssetDelta(db, txn.card, txn.amount, txn.type)
-      await adjustAssetBalance(db, txn.card, -delta)  // 反轉
+    if (txn.card || txn.account_id) {
+      const account = { id: txn.account_id, name: txn.card }
+      const delta = await calcAssetDelta(db, account, txn.amount, txn.type)
+      await adjustAssetBalance(db, account, -delta)  // 反轉
     }
   }
 }
 
 export async function updateTransaction(db: D1Database, id: string, data: Partial<Omit<Transaction, 'id' | 'created_at'>>) {
   // 取得原始記錄，以便計算差額
-  const old = await db.prepare('SELECT card, amount, type, source FROM transactions WHERE id = ?')
-    .bind(id).first<{ card: string; amount: number; type: string; source: string }>()
+  const old = await db.prepare('SELECT card, account_id, amount, type, source FROM transactions WHERE id = ?')
+    .bind(id).first<{ card: string; account_id: string | null; amount: number; type: string; source: string }>()
 
   const fields = Object.keys(data).filter(k => data[k as keyof typeof data] !== undefined)
   if (!fields.length) return false
@@ -139,22 +163,25 @@ export async function updateTransaction(db: D1Database, id: string, data: Partia
   const values = fields.map(f => data[f as keyof typeof data])
   const result = await db.prepare(`UPDATE transactions SET ${sets} WHERE id = ?`).bind(...values, id).run()
 
-  const financialFields = new Set(['card', 'amount', 'type'])
+  const financialFields = new Set(['card', 'account_id', 'amount', 'type'])
   const hasFinancialChange = fields.some(f => financialFields.has(f))
   if (result.meta.changes > 0 && old && hasFinancialChange) {
-    const newCard   = (data.card   !== undefined ? data.card   : old.card)   || ''
-    const newAmount = data.amount  !== undefined ? data.amount  : old.amount
-    const newType   = data.type    !== undefined ? data.type    : old.type
+    const newCard      = (data.card       !== undefined ? data.card       : old.card)       || ''
+    const newAccountId = (data.account_id !== undefined ? data.account_id : old.account_id) || null
+    const newAmount    = data.amount  !== undefined ? data.amount  : old.amount
+    const newType      = data.type    !== undefined ? data.type    : old.type
 
     // 反轉舊影響
-    if (old.card) {
-      const oldDelta = await calcAssetDelta(db, old.card, old.amount, old.type)
-      await adjustAssetBalance(db, old.card, -oldDelta)
+    if (old.card || old.account_id) {
+      const oldAccount = { id: old.account_id, name: old.card }
+      const oldDelta = await calcAssetDelta(db, oldAccount, old.amount, old.type)
+      await adjustAssetBalance(db, oldAccount, -oldDelta)
     }
     // 套用新影響
-    if (newCard) {
-      const newDelta = await calcAssetDelta(db, newCard, newAmount, newType)
-      await adjustAssetBalance(db, newCard, newDelta)
+    if (newCard || newAccountId) {
+      const newAccount = { id: newAccountId, name: newCard }
+      const newDelta = await calcAssetDelta(db, newAccount, newAmount, newType)
+      await adjustAssetBalance(db, newAccount, newDelta)
     }
   }
 
@@ -162,12 +189,13 @@ export async function updateTransaction(db: D1Database, id: string, data: Partia
 }
 
 export async function deleteTransaction(db: D1Database, id: string) {
-  const txn = await db.prepare('SELECT card, amount, type, source FROM transactions WHERE id = ?')
-    .bind(id).first<{ card: string; amount: number; type: string; source: string }>()
+  const txn = await db.prepare('SELECT card, account_id, amount, type, source FROM transactions WHERE id = ?')
+    .bind(id).first<{ card: string; account_id: string | null; amount: number; type: string; source: string }>()
   const result = await db.prepare('DELETE FROM transactions WHERE id = ?').bind(id).run()
-  if (result.meta.changes > 0 && txn && txn.card) {
-    const delta = await calcAssetDelta(db, txn.card, txn.amount, txn.type)
-    await adjustAssetBalance(db, txn.card, -delta)  // 反轉
+  if (result.meta.changes > 0 && txn && (txn.card || txn.account_id)) {
+    const account = { id: txn.account_id, name: txn.card }
+    const delta = await calcAssetDelta(db, account, txn.amount, txn.type)
+    await adjustAssetBalance(db, account, -delta)  // 反轉
   }
   return result.meta.changes > 0
 }
@@ -256,10 +284,10 @@ export async function getAssets(db: D1Database) {
   return results
 }
 
-export async function createAsset(db: D1Database, data: { name: string; type: string; bank: string; balance: number; include_in_total?: number; billing_day?: number | null; payment_day?: number | null; credit_limit?: number | null; payment_method?: string | null; payment_account?: string | null }) {
+export async function createAsset(db: D1Database, data: { name: string; type: string; bank: string; balance: number; include_in_total?: number; billing_day?: number | null; payment_day?: number | null; credit_limit?: number | null; payment_method?: string | null; payment_account?: string | null; payment_account_id?: string | null }) {
   const id = generateId('acc')
-  await db.prepare("INSERT INTO assets (id, name, type, bank, balance, include_in_total, billing_day, payment_day, credit_limit, payment_method, payment_account, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, date('now'))")
-    .bind(id, data.name, data.type, data.bank, data.balance, data.include_in_total ?? 1, data.billing_day ?? null, data.payment_day ?? null, data.credit_limit ?? 0, data.payment_method ?? 'manual', data.payment_account ?? null)
+  await db.prepare("INSERT INTO assets (id, name, type, bank, balance, include_in_total, billing_day, payment_day, credit_limit, payment_method, payment_account, payment_account_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, date('now'))")
+    .bind(id, data.name, data.type, data.bank, data.balance, data.include_in_total ?? 1, data.billing_day ?? null, data.payment_day ?? null, data.credit_limit ?? 0, data.payment_method ?? 'manual', data.payment_account ?? null, data.payment_account_id ?? null)
     .run()
   return id
 }
@@ -275,7 +303,7 @@ export async function updateAsset(db: D1Database, id: string, balance: number) {
 export async function updateAssetFull(
   db: D1Database,
   id: string,
-  data: { name?: string; type?: string; balance?: number; include_in_total?: number; billing_day?: number | null; payment_day?: number | null; credit_limit?: number | null; payment_method?: string | null; payment_account?: string | null }
+  data: { name?: string; type?: string; balance?: number; include_in_total?: number; billing_day?: number | null; payment_day?: number | null; credit_limit?: number | null; payment_method?: string | null; payment_account?: string | null; payment_account_id?: string | null }
 ) {
   const fields: string[] = []
   const values: (string | number | null)[] = []
@@ -288,6 +316,7 @@ export async function updateAssetFull(
   if ('credit_limit' in data) { fields.push('credit_limit'); values.push(data.credit_limit ?? null) }
   if ('payment_method' in data) { fields.push('payment_method'); values.push(data.payment_method ?? 'manual') }
   if ('payment_account' in data) { fields.push('payment_account'); values.push(data.payment_account ?? null) }
+  if ('payment_account_id' in data) { fields.push('payment_account_id'); values.push(data.payment_account_id ?? null) }
   if (!fields.length) return null
 
   const sets = [...fields.map(f => `${f} = ?`), "updated_at = date('now')"].join(', ')

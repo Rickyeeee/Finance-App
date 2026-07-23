@@ -171,15 +171,16 @@ function groupedAccountOpts(accounts) {
     ;(groups[label] = groups[label] ?? []).push(a)
   }
   const order = ['銀行','信用卡','證券戶','現金']
+  // value 用 id：跨類別同名帳戶（如銀行「國泰」+證券戶「國泰」）才不會選錯
   let html = ''
   for (const t of order) {
     if (!groups[t]?.length) continue
-    html += `<optgroup label="${t}">${groups[t].map(a=>`<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('')}</optgroup>`
+    html += `<optgroup label="${t}">${groups[t].map(a=>`<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('')}</optgroup>`
   }
   const known = new Set(order)
   for (const [t, accs] of Object.entries(groups)) {
     if (known.has(t)) continue
-    html += `<optgroup label="${t}">${accs.map(a=>`<option value="${esc(a.name)}">${esc(a.name)}</option>`).join('')}</optgroup>`
+    html += `<optgroup label="${t}">${accs.map(a=>`<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('')}</optgroup>`
   }
   return html || '<option>無可用帳戶</option>'
 }
@@ -263,14 +264,19 @@ window.__stm_save = async function() {
   const id = document.getElementById('shared-edit-id').value
 
   if (_currentType === '轉帳') {
-    const from_account = document.getElementById('shared-f-xfr-from').value
-    const to_account   = document.getElementById('shared-f-xfr-to').value
+    const from_account_id = document.getElementById('shared-f-xfr-from').value
+    const to_account_id   = document.getElementById('shared-f-xfr-to').value
+    const fromObj = _allAccounts.find(a => a.id === from_account_id)
+    const toObj   = _allAccounts.find(a => a.id === to_account_id)
     const amount = parseInt(document.getElementById('shared-f-xfr-amount').value)
     const date   = document.getElementById('shared-f-xfr-date').value
     const note   = document.getElementById('shared-f-xfr-note').value.trim() || null
     if (!amount || !date) { toast('請填寫金額和日期', 'error'); return }
-    if (from_account === to_account) { toast('來源與目標帳戶不能相同', 'error'); return }
-    const res = await api.addTransfer({ from_account, to_account, amount, date, note })
+    if (from_account_id === to_account_id) { toast('來源與目標帳戶不能相同', 'error'); return }
+    const res = await api.addTransfer({
+      from_account: fromObj?.name ?? '', to_account: toObj?.name ?? '',
+      from_account_id, to_account_id, amount, date, note,
+    })
     if (res.ok) { window.__stm_close(); toast('轉帳記錄已建立'); _onSave?.() }
     else toast(res.error ?? '轉帳失敗', 'error')
     return
@@ -279,14 +285,14 @@ window.__stm_save = async function() {
   const category   = document.getElementById('shared-f-category').value
   const baseAmount = parseInt(document.getElementById('shared-f-amount').value)
   const fee        = parseInt(document.getElementById('shared-f-fee').value) || 0
-  const cardName   = document.getElementById('shared-f-card').value
-  const acctObj    = _allAccounts.find(a => a.name === cardName)
+  const cardId     = document.getElementById('shared-f-card').value
+  const acctObj    = _allAccounts.find(a => a.id === cardId)
   const data = {
     name:       document.getElementById('shared-f-name').value.trim() || category,
     amount:     baseAmount + fee,
     date:       document.getElementById('shared-f-date').value,
     category,
-    card:       cardName,
+    card:       acctObj?.name ?? '',
     account_id: acctObj?.id ?? null,
     type:       _currentType,
     note:       fee > 0 ? `含手續費 NT$${fee.toLocaleString()}` : null,
@@ -597,9 +603,10 @@ function _wRenderDots(n) {
   el.innerHTML = h
 }
 
-function _wRenderAccGrid(containerId, fnName, excludeName = null) {
+function _wRenderAccGrid(containerId, fnName, excludeId = null) {
   const TYPE_LABEL = { '銀行':'銀行','銀行存款':'銀行','信用卡':'信用卡','現金':'現金','證券戶':'證券戶','投資帳戶':'證券戶' }
-  const list = excludeName ? _allAccounts.filter(a => a.name !== excludeName) : _allAccounts
+  // 排除用 id，不用名稱——跨類別同名帳戶（如銀行「國泰」+證券戶「國泰」）不該互相排擠
+  const list = excludeId ? _allAccounts.filter(a => a.id !== excludeId) : _allAccounts
   const groups = {}
   for (const a of list) {
     const label = TYPE_LABEL[a.type] ?? a.type ?? '其他'
@@ -719,7 +726,7 @@ window.__stm_wgo = function(n) {
     }
   }
   if (n === 5) {
-    _wRenderAccGrid('stm-w-to-grid', '__stm_wSelTo', _wForm.card)
+    _wRenderAccGrid('stm-w-to-grid', '__stm_wSelTo', _wForm.account_id)
     document.getElementById('stm-w-xfr-from-label').textContent = `從 ${_wForm.card} 轉出`
   }
   Object.entries(_W_SLIDES).forEach(([k, id]) => {
@@ -760,10 +767,11 @@ window.__stm_wSelFrom = function(id, name) {
 }
 
 window.__stm_wSelTo = async function(id, name) {
-  if (name === _wForm.card) { toast('轉出與轉入帳戶不能相同', 'error'); return }
+  if (id === _wForm.account_id) { toast('轉出與轉入帳戶不能相同', 'error'); return }
   _wForm.toCard = name; _wForm.toAccountId = id
   const res = await api.addTransfer({
     from_account: _wForm.card, to_account: _wForm.toCard,
+    from_account_id: _wForm.account_id || undefined, to_account_id: _wForm.toAccountId || undefined,
     amount: _wForm.amount, date: _wForm.date, note: _wForm.note || null,
   })
   if (res.ok) {
@@ -845,9 +853,11 @@ function _openEditForm(txn, { asTemplate = false } = {}) {
 
   const cardSel = document.getElementById('shared-f-card')
   cardSel.innerHTML = groupedAccountOpts(_allAccounts)
-  if (txn.card) {
-    const opt = [...cardSel.options].find(o => o.value === txn.card)
-    if (opt) cardSel.value = txn.card
+  // 優先用 account_id 選取；舊資料沒有 account_id 時才退回用名稱找（可能因同名選錯，僅供相容）
+  const cardAcctId = txn.account_id || _allAccounts.find(a => a.name === txn.card)?.id
+  if (cardAcctId) {
+    const opt = [...cardSel.options].find(o => o.value === cardAcctId)
+    if (opt) cardSel.value = cardAcctId
   }
 
   const catSel = document.getElementById('shared-f-category')

@@ -244,7 +244,11 @@ async function runDayStart(env: Bindings) {
     ).bind(periodStart, todayStr, cc.name).all<any>()
     const billAmount = ccTxns.reduce((s: number, t: any) => s + t.amount, 0)
     if (billAmount > 0) {
-      await createTransfer(DB, { from_account: cc.payment_account, to_account: cc.name, amount: billAmount, date: todayStr, note: `${monthStr} 自動扣繳`, outName: '自動扣繳', inName: '自動扣繳' })
+      await createTransfer(DB, {
+        from_account: cc.payment_account, from_account_id: cc.payment_account_id,
+        to_account: cc.name, to_account_id: cc.id,
+        amount: billAmount, date: todayStr, note: `${monthStr} 自動扣繳`, outName: '自動扣繳', inName: '自動扣繳',
+      })
     }
   }
 

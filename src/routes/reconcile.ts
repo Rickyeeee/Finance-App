@@ -151,8 +151,9 @@ app.post('/:id/defer', async (c) => {
 
 // 新增信用卡付款（轉帳）
 app.post('/payment', async (c) => {
-  const { from_account, to_account, amount, date, bill_month } = await c.req.json<{
+  const { from_account, to_account, amount, date, bill_month, from_account_id, to_account_id } = await c.req.json<{
     from_account: string; to_account: string; amount: number; date: string; bill_month: string
+    from_account_id?: string; to_account_id?: string
   }>()
 
   if (!from_account || !to_account || !amount || !date) {
@@ -162,6 +163,8 @@ app.post('/payment', async (c) => {
   const transfer_id = await createTransfer(c.env.DB, {
     from_account,
     to_account,
+    from_account_id: from_account_id ?? null,
+    to_account_id: to_account_id ?? null,
     amount,
     date,
     note: `${bill_month ?? ''} 信用卡帳單付款`,

@@ -153,6 +153,8 @@ function escHtml(s) {
 }
 
 const ACCT_TYPE_LABEL = { '銀行': '銀行', '銀行存款': '銀行', '證券戶': '證券戶', '投資帳戶': '證券戶', '信用卡': '信用卡', '現金': '現金' }
+// value 用帳戶 id：跨類別同名帳戶（如銀行「國泰」+證券戶「國泰」）才不會選錯
+// （這次繳款誤扣兩個帳戶的 bug 根源就是這裡以前用名稱當 value）
 function groupedAccountOptions(accounts) {
   const groups = {}
   for (const a of accounts) {
@@ -165,14 +167,14 @@ function groupedAccountOptions(accounts) {
   for (const type of order) {
     if (!groups[type]?.length) continue
     html += `<optgroup label="${type}">`
-    html += groups[type].map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+    html += groups[type].map(a => `<option value="${escHtml(a.id)}">${escHtml(a.name)}</option>`).join('')
     html += '</optgroup>'
   }
   const knownTypes = new Set(order)
   const others = accounts.filter(a => !knownTypes.has(ACCT_TYPE_LABEL[a.type] ?? a.type))
   if (others.length) {
     html += `<optgroup label="其他">`
-    html += others.map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+    html += others.map(a => `<option value="${escHtml(a.id)}">${escHtml(a.name)}</option>`).join('')
     html += '</optgroup>'
   }
   return html || '<option>無可用帳戶</option>'
@@ -397,7 +399,7 @@ async function buildCCCardHtml(acc, useCache = false) {
           : (periodEnd && periodEnd > todayStr)
             ? `<button class="btn btn-secondary btn-sm" style="opacity:0.4" onclick="paymentNotReady()">手動繳款</button>`
             : billingStatus?.allDecided
-              ? `<button class="btn btn-primary btn-sm" onclick="openPaymentModal('${escHtml(acc.name)}',${billingStatus.amount})">手動繳款</button>`
+              ? `<button class="btn btn-primary btn-sm" onclick="openPaymentModal('${escHtml(acc.id)}',${billingStatus.amount})">手動繳款</button>`
               : `<button class="btn btn-secondary btn-sm" style="opacity:0.4" onclick="paymentNotReady()">手動繳款</button>`
       }
       ${(isPaid || !billingStatus)
@@ -852,19 +854,19 @@ window.paymentNotReady = function() {
 }
 
 // ── 付款 Modal ──
-window.openPaymentModal = async function(cardName, billedAmount) {
+window.openPaymentModal = async function(cardId, billedAmount) {
   const accs = allAccounts
   const nonCC = accs.filter(a => a.type !== '信用卡')
-  const cc = accs.find(a => a.name === cardName)
+  const cc = accs.find(a => a.id === cardId)
   const fromSel = document.getElementById('pay-from-account')
   fromSel.innerHTML = groupedAccountOptions(nonCC)
-  // 若信用卡有設定 payment_account，預選它
-  if (cc?.payment_account) {
-    const opt = [...fromSel.options].find(o => o.value === cc.payment_account)
-    if (opt) fromSel.value = cc.payment_account
+  // 若信用卡有設定 payment_account_id，預選它
+  if (cc?.payment_account_id) {
+    const opt = [...fromSel.options].find(o => o.value === cc.payment_account_id)
+    if (opt) fromSel.value = cc.payment_account_id
   }
-  document.getElementById('pay-to-account-display').value = cardName
-  document.getElementById('pay-to-account').value = cardName
+  document.getElementById('pay-to-account-display').value = cc?.name ?? ''
+  document.getElementById('pay-to-account').value = cardId
   const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
   document.getElementById('pay-amount').value = billedAmount ?? (cc ? Math.abs(cc.balance) : '')
   document.getElementById('pay-date').value = today
@@ -872,13 +874,17 @@ window.openPaymentModal = async function(cardName, billedAmount) {
 }
 window.closePaymentModal = function() { document.getElementById('payment-modal').classList.remove('open') }
 window.confirmPayment = async function() {
-  const from_account = document.getElementById('pay-from-account').value
-  const to_account = document.getElementById('pay-to-account').value
+  const from_account_id = document.getElementById('pay-from-account').value
+  const to_account_id = document.getElementById('pay-to-account').value
+  const fromObj = allAccounts.find(a => a.id === from_account_id)
+  const toObj = allAccounts.find(a => a.id === to_account_id)
+  const from_account = fromObj?.name ?? ''
+  const to_account = toObj?.name ?? ''
   const amount = parseInt(document.getElementById('pay-amount').value)
   const date = document.getElementById('pay-date').value
   if (!amount || !date) { toast('請填寫金額和日期', 'error'); return }
-  if (from_account === to_account) { toast('帳戶不能相同', 'error'); return }
-  const res = await api.addPayment({ from_account, to_account, amount, date })
+  if (from_account_id === to_account_id) { toast('帳戶不能相同', 'error'); return }
+  const res = await api.addPayment({ from_account, to_account, from_account_id, to_account_id, amount, date })
   if (res.ok) {
     closePaymentModal()
     toast(`付款轉帳已建立：${from_account} → ${to_account} NT$${amount.toLocaleString()}`)

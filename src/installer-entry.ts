@@ -194,7 +194,11 @@ async function runNightlyJob(env: Bindings) {
     const { data: txns } = await getTransactions(DB, { date_from: periodStart, date_to: todayStr, card: cc.name, limit: 1000 })
     const billAmount = txns.filter(t => t.type !== '收入' && !t.transfer_id).reduce((s, t) => s + t.amount, 0)
     if (billAmount > 0) {
-      await createTransfer(DB, { from_account: cc.payment_account, to_account: cc.name, amount: billAmount, date: todayStr, note: `${monthStr} 自動扣繳`, outName: '自動扣繳', inName: '自動扣繳' })
+      await createTransfer(DB, {
+        from_account: cc.payment_account, from_account_id: cc.payment_account_id,
+        to_account: cc.name, to_account_id: cc.id,
+        amount: billAmount, date: todayStr, note: `${monthStr} 自動扣繳`, outName: '自動扣繳', inName: '自動扣繳',
+      })
     }
   }
 

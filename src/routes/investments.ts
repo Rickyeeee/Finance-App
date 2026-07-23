@@ -408,7 +408,7 @@ app.post('/trades', async (c) => {
   const body = await c.req.json<{
     symbol: string; name: string; type: string;
     shares: number; price: number; date: string;
-    account?: string; to_account?: string; fee?: number; note?: string;
+    account?: string; to_account?: string; to_account_id?: string; fee?: number; note?: string;
   }>()
 
   if (!body.symbol || !body.type || !body.shares || !body.price || !body.date) {
@@ -439,6 +439,7 @@ app.post('/trades', async (c) => {
     tradeTransferId = await createTransfer(c.env.DB, {
       from_account: body.account,
       to_account: body.to_account,
+      to_account_id: body.to_account_id ?? null,
       amount: proceeds,
       date: body.date,
       note: `賣出 ${body.symbol} ${body.name} ×${body.shares}`,

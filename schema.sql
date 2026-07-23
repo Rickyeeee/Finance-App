@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS assets (
   credit_limit INTEGER DEFAULT 0,
   payment_method TEXT DEFAULT 'manual',
   payment_account TEXT,
+  payment_account_id TEXT,
   updated_at DATE DEFAULT CURRENT_DATE
 );
 

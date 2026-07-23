@@ -35,6 +35,32 @@ const TYPE_ICON = { '銀行': '🏦', '銀行存款': '🏦', '證券戶': '📈
 const TYPE_LABEL = { '銀行': '銀行', '銀行存款': '銀行', '證券戶': '證券戶', '投資帳戶': '證券戶', '信用卡': '信用卡', '現金': '現金' }
 const TYPE_ORDER = ['銀行', '銀行存款', '證券戶', '投資帳戶', '信用卡', '現金']
 
+// 扣款帳戶選單：依類別分組（跟對帳頁手動繳款選單一致），value 用 id
+// 跨類別同名帳戶（如銀行「國泰」+證券戶「國泰」）才不會選錯
+function groupedAccountOptions(accounts, selectedId = '') {
+  const groups = {}
+  for (const a of accounts) {
+    const label = TYPE_LABEL[a.type] ?? a.type
+    ;(groups[label] = groups[label] ?? []).push(a)
+  }
+  const order = ['銀行', '證券戶', '現金']
+  let html = `<option value="">－ 未設定 －</option>`
+  for (const type of order) {
+    if (!groups[type]?.length) continue
+    html += `<optgroup label="${type}">`
+    html += groups[type].map(a => `<option value="${escHtml(a.id)}"${a.id === selectedId ? ' selected' : ''}>${escHtml(a.name)}</option>`).join('')
+    html += '</optgroup>'
+  }
+  const known = new Set(order)
+  const others = accounts.filter(a => !known.has(TYPE_LABEL[a.type] ?? a.type))
+  if (others.length) {
+    html += `<optgroup label="其他">`
+    html += others.map(a => `<option value="${escHtml(a.id)}"${a.id === selectedId ? ' selected' : ''}>${escHtml(a.name)}</option>`).join('')
+    html += '</optgroup>'
+  }
+  return html
+}
+
 function applyAssetsData(d, historyData) {
   allAccounts = d.accounts ?? []
   allInvestments = d.investments ?? []
@@ -156,7 +182,7 @@ function renderAccounts() {
       const balanceColor = displayBalance < 0 ? 'var(--danger)' : 'var(--accent)'
       const balanceSign = displayBalance < 0 ? '-' : ''
       const excluded = (acc.include_in_total ?? 1) === 0
-      html += `<div class="account-row" style="${excluded ? 'opacity:0.5' : ''}" onclick="openEditModal('${acc.id}','${escJs(acc.name)}',${acc.balance},'${acc.type}',${acc.include_in_total ?? 1},${acc.billing_day ?? 'null'},${acc.payment_day ?? 'null'},${acc.credit_limit ?? 0},'${acc.payment_method ?? 'manual'}','${escJs(acc.payment_account ?? '')}')">
+      html += `<div class="account-row" style="${excluded ? 'opacity:0.5' : ''}" onclick="openEditModal('${acc.id}','${escJs(acc.name)}',${acc.balance},'${acc.type}',${acc.include_in_total ?? 1},${acc.billing_day ?? 'null'},${acc.payment_day ?? 'null'},${acc.credit_limit ?? 0},'${acc.payment_method ?? 'manual'}','${escJs(acc.payment_account_id ?? '')}')">
         <div style="flex:1;min-width:0">
           <div style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
             ${escHtml(acc.name)}
@@ -521,9 +547,7 @@ window.openAddAccountModal = function() {
   document.getElementById('acc-payment-method').value = 'manual'
   document.getElementById('acc-payment-account-group').style.display = 'none'
   const nonCC = allAccounts.filter(a => a.type !== '信用卡')
-  document.getElementById('acc-payment-account').innerHTML =
-    '<option value="">－ 未設定 －</option>' +
-    nonCC.map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+  document.getElementById('acc-payment-account').innerHTML = groupedAccountOptions(nonCC)
   document.getElementById('acc-cc-fields').style.display = 'none'
   document.getElementById('add-account-modal').classList.add('open')
 }
@@ -547,11 +571,12 @@ window.addAccount = async function() {
   const payment_day = type === '信用卡' ? (parseInt(document.getElementById('acc-payment-day').value) || null) : null
   const credit_limit = type === '信用卡' ? (parseInt(document.getElementById('acc-credit-limit').value) || null) : null
   const payment_method = type === '信用卡' ? document.getElementById('acc-payment-method').value : null
-  const payment_account = type === '信用卡' ? (document.getElementById('acc-payment-account').value || null) : null
+  const payment_account_id = type === '信用卡' ? (document.getElementById('acc-payment-account').value || null) : null
+  const payment_account = payment_account_id ? (allAccounts.find(a => a.id === payment_account_id)?.name ?? null) : null
 
   if (!name) { toast('請輸入帳戶名稱', 'error'); return }
 
-  const res = await api.addAsset({ name, type, bank, balance, include_in_total, billing_day, payment_day, credit_limit, payment_method, payment_account })
+  const res = await api.addAsset({ name, type, bank, balance, include_in_total, billing_day, payment_day, credit_limit, payment_method, payment_account, payment_account_id })
   if (res.ok) {
     closeAccountModal()
     toast(`已新增「${name}」`)
@@ -561,7 +586,7 @@ window.addAccount = async function() {
   }
 }
 
-window.openEditModal = function(id, name, balance, type, includeInTotal, billingDay, paymentDay, creditLimit, paymentMethod, paymentAccount) {
+window.openEditModal = function(id, name, balance, type, includeInTotal, billingDay, paymentDay, creditLimit, paymentMethod, paymentAccountId) {
   document.getElementById('edit-acc-id').value = id
   document.getElementById('edit-acc-orig-balance').value = balance
   document.getElementById('edit-acc-name-input').value = name
@@ -577,9 +602,7 @@ window.openEditModal = function(id, name, balance, type, includeInTotal, billing
   document.getElementById('edit-acc-payment-method').value = paymentMethod ?? 'manual'
   // 填入扣款帳戶選項
   const nonCC = allAccounts.filter(a => a.type !== '信用卡')
-  const paySel = document.getElementById('edit-acc-payment-account')
-  paySel.innerHTML = '<option value="">－ 未設定 －</option>' +
-    nonCC.map(a => `<option value="${escHtml(a.name)}"${a.name === paymentAccount ? ' selected' : ''}>${escHtml(a.name)}</option>`).join('')
+  document.getElementById('edit-acc-payment-account').innerHTML = groupedAccountOptions(nonCC, paymentAccountId || '')
   document.getElementById('edit-payment-account-group').style.display = (paymentMethod === 'auto') ? 'block' : 'none'
   previewInclude()
   document.getElementById('edit-balance-modal').classList.add('open')
@@ -631,13 +654,14 @@ window.saveBalance = async function() {
   const payment_day = type === '信用卡' ? (parseInt(document.getElementById('edit-acc-payment-day').value) || null) : null
   const credit_limit = type === '信用卡' ? (parseInt(document.getElementById('edit-acc-credit-limit').value) || null) : null
   const payment_method = type === '信用卡' ? document.getElementById('edit-acc-payment-method').value : null
-  const payment_account = type === '信用卡' ? (document.getElementById('edit-acc-payment-account').value || null) : null
+  const payment_account_id = type === '信用卡' ? (document.getElementById('edit-acc-payment-account').value || null) : null
+  const payment_account = payment_account_id ? (allAccounts.find(a => a.id === payment_account_id)?.name ?? null) : null
 
   if (!name) { toast('請輸入帳戶名稱', 'error'); return }
   if (isNaN(balance)) { toast('請輸入有效金額', 'error'); return }
   if (type === '信用卡' && balance > 0) balance = -balance
 
-  const res = await api.updateAsset(id, { name, type, balance, include_in_total, billing_day, payment_day, credit_limit, payment_method, payment_account })
+  const res = await api.updateAsset(id, { name, type, balance, include_in_total, billing_day, payment_day, credit_limit, payment_method, payment_account, payment_account_id })
   if (res.ok) {
     closeEditModal()
     toast('已更新')

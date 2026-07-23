@@ -46,7 +46,7 @@ const SCHEMA_STATEMENTS = [
     balance INTEGER NOT NULL DEFAULT 0, include_in_total INTEGER NOT NULL DEFAULT 1,
     billing_day INTEGER DEFAULT NULL, payment_day INTEGER DEFAULT NULL,
     credit_limit INTEGER DEFAULT 0, payment_method TEXT DEFAULT 'manual',
-    payment_account TEXT, updated_at DATE DEFAULT CURRENT_DATE
+    payment_account TEXT, payment_account_id TEXT, updated_at DATE DEFAULT CURRENT_DATE
   )`,
   `CREATE TABLE IF NOT EXISTS categories (
     id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, type TEXT NOT NULL DEFAULT '支出',

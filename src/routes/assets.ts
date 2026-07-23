@@ -54,8 +54,24 @@ app.get('/', async (c) => {
 })
 
 // 新增帳戶
+// 帳戶名稱唯一性只在「同類別」內檢查——跨類別同名是合理情況（例如同一家銀行
+// 同時有銀行帳戶和證券戶，都叫「國泰」），只有同類別同名才會讓餘額調整的
+// 名稱比對邏輯搞不清楚該打中哪一筆
+const TYPE_GROUP: Record<string, string> = {
+  '銀行': '銀行', '銀行存款': '銀行',
+  '證券戶': '證券戶', '投資帳戶': '證券戶',
+  '信用卡': '信用卡', '現金': '現金',
+}
+function typeGroup(type: string) { return TYPE_GROUP[type] ?? type }
+
+async function findDuplicateInGroup(db: D1Database, name: string, type: string, excludeId?: string) {
+  const { results } = await db.prepare('SELECT id, type FROM assets WHERE name = ?' + (excludeId ? ' AND id != ?' : ''))
+    .bind(...(excludeId ? [name, excludeId] : [name])).all<{ id: string; type: string }>()
+  return results.find(a => typeGroup(a.type) === typeGroup(type))
+}
+
 app.post('/', async (c) => {
-  const body = await c.req.json<{ name: string; type: string; bank?: string; balance?: number; include_in_total?: number; billing_day?: number | null; payment_day?: number | null; credit_limit?: number | null; payment_method?: string | null; payment_account?: string | null }>()
+  const body = await c.req.json<{ name: string; type: string; bank?: string; balance?: number; include_in_total?: number; billing_day?: number | null; payment_day?: number | null; credit_limit?: number | null; payment_method?: string | null; payment_account?: string | null; payment_account_id?: string | null }>()
 
   if (!body.name || !body.type) {
     return c.json({ ok: false, error: '缺少 name 或 type' }, 400)
@@ -63,6 +79,11 @@ app.post('/', async (c) => {
   if (!ACCOUNT_TYPES.includes(body.type as typeof ACCOUNT_TYPES[number]) &&
       body.type !== '銀行存款' && body.type !== '投資帳戶') {
     return c.json({ ok: false, error: `type 必須是：${ACCOUNT_TYPES.join('、')}` }, 400)
+  }
+
+  const dup = await findDuplicateInGroup(c.env.DB, body.name, body.type)
+  if (dup) {
+    return c.json({ ok: false, error: `「${typeGroup(body.type)}」類別中已有帳戶叫「${body.name}」，請使用不同名稱` }, 400)
   }
 
   const id = await createAsset(c.env.DB, {
@@ -76,6 +97,7 @@ app.post('/', async (c) => {
     credit_limit: body.credit_limit ?? null,
     payment_method: body.payment_method ?? 'manual',
     payment_account: body.payment_account ?? null,
+    payment_account_id: body.payment_account_id ?? null,
   })
 
   return c.json({ ok: true, id }, 201)
@@ -84,10 +106,17 @@ app.post('/', async (c) => {
 // 編輯帳戶（名稱、類別、餘額），餘額有變動時自動補一筆調整記錄
 app.patch('/:id', async (c) => {
   const id = c.req.param('id')
-  const body = await c.req.json<{ name?: string; type?: string; balance?: number; include_in_total?: number; billing_day?: number | null; payment_day?: number | null; credit_limit?: number | null; payment_method?: string | null; payment_account?: string | null }>()
+  const body = await c.req.json<{ name?: string; type?: string; balance?: number; include_in_total?: number; billing_day?: number | null; payment_day?: number | null; credit_limit?: number | null; payment_method?: string | null; payment_account?: string | null; payment_account_id?: string | null }>()
 
   const before = await getAssetById(c.env.DB, id)
   if (!before) return c.json({ ok: false, error: '找不到此帳戶' }, 404)
+
+  if (body.name && body.name !== before.name) {
+    const dup = await findDuplicateInGroup(c.env.DB, body.name, body.type ?? before.type, id)
+    if (dup) {
+      return c.json({ ok: false, error: `「${typeGroup(body.type ?? before.type)}」類別中已有帳戶叫「${body.name}」，請使用不同名稱` }, 400)
+    }
+  }
 
   const updated = await updateAssetFull(c.env.DB, id, {
     name: body.name,
@@ -99,6 +128,7 @@ app.patch('/:id', async (c) => {
     ...('credit_limit' in body ? { credit_limit: body.credit_limit } : {}),
     ...('payment_method' in body ? { payment_method: body.payment_method } : {}),
     ...('payment_account' in body ? { payment_account: body.payment_account } : {}),
+    ...('payment_account_id' in body ? { payment_account_id: body.payment_account_id } : {}),
   })
   if (!updated) return c.json({ ok: false, error: '更新失敗' }, 500)
 
@@ -112,6 +142,7 @@ app.patch('/:id', async (c) => {
       date: today,
       category: '其他',
       card: before.name,
+      account_id: before.id,
       type: diff >= 0 ? '收入' : '支出',
       status: '已對帳',
       source: '餘額調整',

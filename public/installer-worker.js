@@ -1159,12 +1159,15 @@ async function getTransactions(db, opts) {
   const countRow = await db.prepare(`SELECT COUNT(*) as total FROM transactions ${where}`).bind(...params).first();
   return { data: results, total: countRow?.total ?? 0 };
 }
-async function adjustAssetBalance(db, accountName, delta) {
-  if (!accountName) return;
-  await db.prepare("UPDATE assets SET balance = balance + ?, updated_at = date('now') WHERE name = ?").bind(delta, accountName).run();
+async function adjustAssetBalance(db, account, delta) {
+  if (account.id) {
+    await db.prepare("UPDATE assets SET balance = balance + ?, updated_at = date('now') WHERE id = ?").bind(delta, account.id).run();
+  } else if (account.name) {
+    await db.prepare("UPDATE assets SET balance = balance + ?, updated_at = date('now') WHERE name = ?").bind(delta, account.name).run();
+  }
 }
-async function calcAssetDelta(db, accountName, amount, type) {
-  const asset = await db.prepare("SELECT type FROM assets WHERE name = ?").bind(accountName).first();
+async function calcAssetDelta(db, account, amount, type) {
+  const asset = account.id ? await db.prepare("SELECT type FROM assets WHERE id = ?").bind(account.id).first() : account.name ? await db.prepare("SELECT type FROM assets WHERE name = ?").bind(account.name).first() : null;
   if (!asset) return 0;
   const isIncome = type === "\u6536\u5165";
   return isIncome ? amount : -amount;
@@ -1172,9 +1175,10 @@ async function calcAssetDelta(db, accountName, amount, type) {
 async function createTransaction(db, data) {
   const id = generateId("tx");
   await db.prepare("INSERT INTO transactions (id, name, amount, date, category, card, account_id, type, status, source, note, transfer_id, recurring_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(id, data.name, data.amount, data.date, data.category, data.card, data.account_id ?? null, data.type ?? "\u652F\u51FA", data.status, data.source, data.note ?? null, data.transfer_id ?? null, data.recurring_id ?? null).run();
-  if (data.source !== "\u9918\u984D\u8ABF\u6574" && data.card) {
-    const delta = await calcAssetDelta(db, data.card, data.amount, data.type ?? "\u652F\u51FA");
-    await adjustAssetBalance(db, data.card, delta);
+  if (data.source !== "\u9918\u984D\u8ABF\u6574" && (data.account_id || data.card)) {
+    const account = { id: data.account_id, name: data.card };
+    const delta = await calcAssetDelta(db, account, data.amount, data.type ?? "\u652F\u51FA");
+    await adjustAssetBalance(db, account, delta);
   }
   return id;
 }
@@ -1186,11 +1190,14 @@ async function createTransfer(db, data) {
     date: data.date,
     category: "\u8F49\u5E33",
     card: data.from_account,
+    account_id: data.from_account_id ?? null,
     type: "\u652F\u51FA",
     status: "\u5DF2\u5C0D\u5E33",
     source: "\u624B\u52D5\u8F38\u5165",
     note: data.note ?? null,
-    transfer_id: transferId
+    transfer_id: transferId,
+    deferred_to: null,
+    recurring_id: null
   });
   await createTransaction(db, {
     name: data.inName ?? `\u8F49\u5E33 \u2190 ${data.from_account}`,
@@ -1198,11 +1205,14 @@ async function createTransfer(db, data) {
     date: data.date,
     category: "\u8F49\u5E33",
     card: data.to_account,
+    account_id: data.to_account_id ?? null,
     type: "\u6536\u5165",
     status: "\u5DF2\u5C0D\u5E33",
     source: "\u624B\u52D5\u8F38\u5165",
     note: data.note ?? null,
-    transfer_id: transferId
+    transfer_id: transferId,
+    deferred_to: null,
+    recurring_id: null
   });
   if (data.fee && data.fee > 0) {
     await createTransaction(db, {
@@ -1211,55 +1221,63 @@ async function createTransfer(db, data) {
       date: data.date,
       category: "\u624B\u7E8C\u8CBB",
       card: data.from_account,
+      account_id: data.from_account_id ?? null,
       type: "\u652F\u51FA",
       status: "\u5DF2\u5C0D\u5E33",
       source: "\u624B\u52D5\u8F38\u5165",
       note: null,
-      transfer_id: transferId
+      transfer_id: transferId,
+      deferred_to: null,
+      recurring_id: null
     });
   }
   return transferId;
 }
 async function deleteTransferPair(db, transferId) {
-  const { results } = await db.prepare("SELECT card, amount, type FROM transactions WHERE transfer_id = ?").bind(transferId).all();
+  const { results } = await db.prepare("SELECT card, account_id, amount, type FROM transactions WHERE transfer_id = ?").bind(transferId).all();
   await db.prepare("DELETE FROM transactions WHERE transfer_id = ?").bind(transferId).run();
   for (const txn of results) {
-    if (txn.card) {
-      const delta = await calcAssetDelta(db, txn.card, txn.amount, txn.type);
-      await adjustAssetBalance(db, txn.card, -delta);
+    if (txn.card || txn.account_id) {
+      const account = { id: txn.account_id, name: txn.card };
+      const delta = await calcAssetDelta(db, account, txn.amount, txn.type);
+      await adjustAssetBalance(db, account, -delta);
     }
   }
 }
 async function updateTransaction(db, id, data) {
-  const old = await db.prepare("SELECT card, amount, type, source FROM transactions WHERE id = ?").bind(id).first();
+  const old = await db.prepare("SELECT card, account_id, amount, type, source FROM transactions WHERE id = ?").bind(id).first();
   const fields = Object.keys(data).filter((k) => data[k] !== void 0);
   if (!fields.length) return false;
   const sets = fields.map((f) => `${f} = ?`).join(", ");
   const values = fields.map((f) => data[f]);
   const result = await db.prepare(`UPDATE transactions SET ${sets} WHERE id = ?`).bind(...values, id).run();
-  const financialFields = /* @__PURE__ */ new Set(["card", "amount", "type"]);
+  const financialFields = /* @__PURE__ */ new Set(["card", "account_id", "amount", "type"]);
   const hasFinancialChange = fields.some((f) => financialFields.has(f));
   if (result.meta.changes > 0 && old && hasFinancialChange) {
     const newCard = (data.card !== void 0 ? data.card : old.card) || "";
+    const newAccountId = (data.account_id !== void 0 ? data.account_id : old.account_id) || null;
     const newAmount = data.amount !== void 0 ? data.amount : old.amount;
     const newType = data.type !== void 0 ? data.type : old.type;
-    if (old.card) {
-      const oldDelta = await calcAssetDelta(db, old.card, old.amount, old.type);
-      await adjustAssetBalance(db, old.card, -oldDelta);
+    if (old.card || old.account_id) {
+      const oldAccount = { id: old.account_id, name: old.card };
+      const oldDelta = await calcAssetDelta(db, oldAccount, old.amount, old.type);
+      await adjustAssetBalance(db, oldAccount, -oldDelta);
     }
-    if (newCard) {
-      const newDelta = await calcAssetDelta(db, newCard, newAmount, newType);
-      await adjustAssetBalance(db, newCard, newDelta);
+    if (newCard || newAccountId) {
+      const newAccount = { id: newAccountId, name: newCard };
+      const newDelta = await calcAssetDelta(db, newAccount, newAmount, newType);
+      await adjustAssetBalance(db, newAccount, newDelta);
     }
   }
   return result.meta.changes > 0;
 }
 async function deleteTransaction(db, id) {
-  const txn = await db.prepare("SELECT card, amount, type, source FROM transactions WHERE id = ?").bind(id).first();
+  const txn = await db.prepare("SELECT card, account_id, amount, type, source FROM transactions WHERE id = ?").bind(id).first();
   const result = await db.prepare("DELETE FROM transactions WHERE id = ?").bind(id).run();
-  if (result.meta.changes > 0 && txn && txn.card) {
-    const delta = await calcAssetDelta(db, txn.card, txn.amount, txn.type);
-    await adjustAssetBalance(db, txn.card, -delta);
+  if (result.meta.changes > 0 && txn && (txn.card || txn.account_id)) {
+    const account = { id: txn.account_id, name: txn.card };
+    const delta = await calcAssetDelta(db, account, txn.amount, txn.type);
+    await adjustAssetBalance(db, account, -delta);
   }
   return result.meta.changes > 0;
 }
@@ -1327,7 +1345,7 @@ async function getAssets(db) {
 }
 async function createAsset(db, data) {
   const id = generateId("acc");
-  await db.prepare("INSERT INTO assets (id, name, type, bank, balance, include_in_total, billing_day, payment_day, credit_limit, payment_method, payment_account, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, date('now'))").bind(id, data.name, data.type, data.bank, data.balance, data.include_in_total ?? 1, data.billing_day ?? null, data.payment_day ?? null, data.credit_limit ?? 0, data.payment_method ?? "manual", data.payment_account ?? null).run();
+  await db.prepare("INSERT INTO assets (id, name, type, bank, balance, include_in_total, billing_day, payment_day, credit_limit, payment_method, payment_account, payment_account_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, date('now'))").bind(id, data.name, data.type, data.bank, data.balance, data.include_in_total ?? 1, data.billing_day ?? null, data.payment_day ?? null, data.credit_limit ?? 0, data.payment_method ?? "manual", data.payment_account ?? null, data.payment_account_id ?? null).run();
   return id;
 }
 async function updateAsset(db, id, balance) {
@@ -1372,6 +1390,10 @@ async function updateAssetFull(db, id, data) {
   if ("payment_account" in data) {
     fields.push("payment_account");
     values.push(data.payment_account ?? null);
+  }
+  if ("payment_account_id" in data) {
+    fields.push("payment_account_id");
+    values.push(data.payment_account_id ?? null);
   }
   if (!fields.length) return null;
   const sets = [...fields.map((f) => `${f} = ?`), "updated_at = date('now')"].join(", ");
@@ -4001,6 +4023,8 @@ app.post("/transfer", async (c) => {
   const transfer_id = await createTransfer(c.env.DB, {
     from_account: body.from_account,
     to_account: body.to_account,
+    from_account_id: body.from_account_id ?? null,
+    to_account_id: body.to_account_id ?? null,
     amount: body.amount,
     date: body.date,
     note: body.note,
@@ -4011,21 +4035,23 @@ app.post("/transfer", async (c) => {
 app.patch("/transfer/:transferId", async (c) => {
   const transferId = c.req.param("transferId");
   const body = await c.req.json();
-  const { results } = await c.env.DB.prepare("SELECT id, type, card, name FROM transactions WHERE transfer_id = ?").bind(transferId).all();
+  const { results } = await c.env.DB.prepare("SELECT id, type, card, account_id, name FROM transactions WHERE transfer_id = ?").bind(transferId).all();
   if (results.length < 2) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u6B64\u8F49\u5E33\u8A18\u9304" }, 404);
   const outgoing = results.find((t) => t.type === "\u652F\u51FA");
   const incoming = results.find((t) => t.type === "\u6536\u5165");
   if (!outgoing || !incoming) return c.json({ ok: false, error: "\u8F49\u5E33\u8A18\u9304\u4E0D\u5B8C\u6574" }, 404);
   const fromAccount = body.from_account ?? outgoing.card;
   const toAccount = body.to_account ?? incoming.card;
+  const fromAccountId = body.from_account_id !== void 0 ? body.from_account_id : outgoing.account_id;
+  const toAccountId = body.to_account_id !== void 0 ? body.to_account_id : incoming.account_id;
   const base = {};
   if (body.amount !== void 0) base.amount = body.amount;
   if (body.date !== void 0) base.date = body.date;
   if ("note" in body) base.note = body.note;
   const outName = outgoing.name?.startsWith("\u8F49\u5E33") ? `\u8F49\u5E33 \u2192 ${toAccount}` : outgoing.name;
   const inName = incoming.name?.startsWith("\u8F49\u5E33") ? `\u8F49\u5E33 \u2190 ${fromAccount}` : incoming.name;
-  await updateTransaction(c.env.DB, outgoing.id, { ...base, card: fromAccount, name: outName });
-  await updateTransaction(c.env.DB, incoming.id, { ...base, card: toAccount, name: inName });
+  await updateTransaction(c.env.DB, outgoing.id, { ...base, card: fromAccount, account_id: fromAccountId, name: outName });
+  await updateTransaction(c.env.DB, incoming.id, { ...base, card: toAccount, account_id: toAccountId, name: inName });
   return c.json({ ok: true });
 });
 app.patch("/:id", async (c) => {
@@ -4579,6 +4605,7 @@ app2.post("/trades", async (c) => {
     tradeTransferId = await createTransfer(c.env.DB, {
       from_account: body.account,
       to_account: body.to_account,
+      to_account_id: body.to_account_id ?? null,
       amount: proceeds,
       date: body.date,
       note: `\u8CE3\u51FA ${body.symbol} ${body.name} \xD7${body.shares}`,
@@ -5104,13 +5131,15 @@ app4.post("/:id/defer", async (c) => {
   return c.json({ ok: true });
 });
 app4.post("/payment", async (c) => {
-  const { from_account, to_account, amount, date, bill_month } = await c.req.json();
+  const { from_account, to_account, amount, date, bill_month, from_account_id, to_account_id } = await c.req.json();
   if (!from_account || !to_account || !amount || !date) {
     return c.json({ ok: false, error: "\u7F3A\u5C11\u5FC5\u586B\u6B04\u4F4D" }, 400);
   }
   const transfer_id = await createTransfer(c.env.DB, {
     from_account,
     to_account,
+    from_account_id: from_account_id ?? null,
+    to_account_id: to_account_id ?? null,
     amount,
     date,
     note: `${bill_month ?? ""} \u4FE1\u7528\u5361\u5E33\u55AE\u4ED8\u6B3E`,
@@ -5168,6 +5197,23 @@ app5.get("/", async (c) => {
     }
   });
 });
+var TYPE_GROUP = {
+  "\u9280\u884C": "\u9280\u884C",
+  "\u9280\u884C\u5B58\u6B3E": "\u9280\u884C",
+  "\u8B49\u5238\u6236": "\u8B49\u5238\u6236",
+  "\u6295\u8CC7\u5E33\u6236": "\u8B49\u5238\u6236",
+  "\u4FE1\u7528\u5361": "\u4FE1\u7528\u5361",
+  "\u73FE\u91D1": "\u73FE\u91D1"
+};
+function typeGroup(type) {
+  return TYPE_GROUP[type] ?? type;
+}
+__name(typeGroup, "typeGroup");
+async function findDuplicateInGroup(db, name, type, excludeId) {
+  const { results } = await db.prepare("SELECT id, type FROM assets WHERE name = ?" + (excludeId ? " AND id != ?" : "")).bind(...excludeId ? [name, excludeId] : [name]).all();
+  return results.find((a) => typeGroup(a.type) === typeGroup(type));
+}
+__name(findDuplicateInGroup, "findDuplicateInGroup");
 app5.post("/", async (c) => {
   const body = await c.req.json();
   if (!body.name || !body.type) {
@@ -5175,6 +5221,10 @@ app5.post("/", async (c) => {
   }
   if (!ACCOUNT_TYPES.includes(body.type) && body.type !== "\u9280\u884C\u5B58\u6B3E" && body.type !== "\u6295\u8CC7\u5E33\u6236") {
     return c.json({ ok: false, error: `type \u5FC5\u9808\u662F\uFF1A${ACCOUNT_TYPES.join("\u3001")}` }, 400);
+  }
+  const dup = await findDuplicateInGroup(c.env.DB, body.name, body.type);
+  if (dup) {
+    return c.json({ ok: false, error: `\u300C${typeGroup(body.type)}\u300D\u985E\u5225\u4E2D\u5DF2\u6709\u5E33\u6236\u53EB\u300C${body.name}\u300D\uFF0C\u8ACB\u4F7F\u7528\u4E0D\u540C\u540D\u7A31` }, 400);
   }
   const id = await createAsset(c.env.DB, {
     name: body.name,
@@ -5186,7 +5236,8 @@ app5.post("/", async (c) => {
     payment_day: body.payment_day ?? null,
     credit_limit: body.credit_limit ?? null,
     payment_method: body.payment_method ?? "manual",
-    payment_account: body.payment_account ?? null
+    payment_account: body.payment_account ?? null,
+    payment_account_id: body.payment_account_id ?? null
   });
   return c.json({ ok: true, id }, 201);
 });
@@ -5195,6 +5246,12 @@ app5.patch("/:id", async (c) => {
   const body = await c.req.json();
   const before = await getAssetById(c.env.DB, id);
   if (!before) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u6B64\u5E33\u6236" }, 404);
+  if (body.name && body.name !== before.name) {
+    const dup = await findDuplicateInGroup(c.env.DB, body.name, body.type ?? before.type, id);
+    if (dup) {
+      return c.json({ ok: false, error: `\u300C${typeGroup(body.type ?? before.type)}\u300D\u985E\u5225\u4E2D\u5DF2\u6709\u5E33\u6236\u53EB\u300C${body.name}\u300D\uFF0C\u8ACB\u4F7F\u7528\u4E0D\u540C\u540D\u7A31` }, 400);
+    }
+  }
   const updated = await updateAssetFull(c.env.DB, id, {
     name: body.name,
     type: body.type,
@@ -5204,7 +5261,8 @@ app5.patch("/:id", async (c) => {
     ..."payment_day" in body ? { payment_day: body.payment_day } : {},
     ..."credit_limit" in body ? { credit_limit: body.credit_limit } : {},
     ..."payment_method" in body ? { payment_method: body.payment_method } : {},
-    ..."payment_account" in body ? { payment_account: body.payment_account } : {}
+    ..."payment_account" in body ? { payment_account: body.payment_account } : {},
+    ..."payment_account_id" in body ? { payment_account_id: body.payment_account_id } : {}
   });
   if (!updated) return c.json({ ok: false, error: "\u66F4\u65B0\u5931\u6557" }, 500);
   if (body.balance !== void 0 && body.balance !== before.balance) {
@@ -5217,6 +5275,7 @@ app5.patch("/:id", async (c) => {
       date: today,
       category: "\u5176\u4ED6",
       card: before.name,
+      account_id: before.id,
       type: diff >= 0 ? "\u6536\u5165" : "\u652F\u51FA",
       status: "\u5DF2\u5C0D\u5E33",
       source: "\u9918\u984D\u8ABF\u6574",
@@ -5632,7 +5691,17 @@ async function runNightlyJob(env2) {
     const { data: txns2 } = await getTransactions(DB, { date_from: periodStart, date_to: todayStr, card: cc.name, limit: 1e3 });
     const billAmount = txns2.filter((t) => t.type !== "\u6536\u5165" && !t.transfer_id).reduce((s, t) => s + t.amount, 0);
     if (billAmount > 0) {
-      await createTransfer(DB, { from_account: cc.payment_account, to_account: cc.name, amount: billAmount, date: todayStr, note: `${monthStr} \u81EA\u52D5\u6263\u7E73`, outName: "\u81EA\u52D5\u6263\u7E73", inName: "\u81EA\u52D5\u6263\u7E73" });
+      await createTransfer(DB, {
+        from_account: cc.payment_account,
+        from_account_id: cc.payment_account_id,
+        to_account: cc.name,
+        to_account_id: cc.id,
+        amount: billAmount,
+        date: todayStr,
+        note: `${monthStr} \u81EA\u52D5\u6263\u7E73`,
+        outName: "\u81EA\u52D5\u6263\u7E73",
+        inName: "\u81EA\u52D5\u6263\u7E73"
+      });
     }
   }
   const { data: txns } = await getTransactions(DB, { date: today, limit: 100 });

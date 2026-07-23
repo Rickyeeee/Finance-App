@@ -557,6 +557,7 @@ function renderCategorySelects() {
 const ACCT_TYPE_ORDER = ['銀行', '銀行存款', '證券戶', '投資帳戶', '信用卡', '現金']
 const ACCT_TYPE_LABEL = { '銀行': '銀行', '銀行存款': '銀行', '證券戶': '證券戶', '投資帳戶': '證券戶', '信用卡': '信用卡', '現金': '現金' }
 
+// value 用帳戶 id：跨類別同名帳戶（如銀行「國泰」+證券戶「國泰」）才不會選錯
 function groupedAccountOptions(accounts, withEmpty = false) {
   const groups = {}
   for (const a of accounts) {
@@ -569,7 +570,7 @@ function groupedAccountOptions(accounts, withEmpty = false) {
   for (const type of order) {
     if (!groups[type]?.length) continue
     html += `<optgroup label="${type}">`
-    html += groups[type].map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+    html += groups[type].map(a => `<option value="${escHtml(a.id)}">${escHtml(a.name)}</option>`).join('')
     html += '</optgroup>'
   }
   // 其他未分類
@@ -577,7 +578,7 @@ function groupedAccountOptions(accounts, withEmpty = false) {
   const others = accounts.filter(a => !knownTypes.has(ACCT_TYPE_LABEL[a.type] ?? a.type))
   if (others.length) {
     html += `<optgroup label="其他">`
-    html += others.map(a => `<option value="${escHtml(a.name)}">${escHtml(a.name)}</option>`).join('')
+    html += others.map(a => `<option value="${escHtml(a.id)}">${escHtml(a.name)}</option>`).join('')
     html += '</optgroup>'
   }
   return html
@@ -693,8 +694,10 @@ function _openTxnEditForm({ id, name, amount, date, category, card, note, type, 
   updateNormalTotal()
   const cs = document.getElementById('f-category')
   for (let i=0;i<cs.options.length;i++) if(cs.options[i].value===category){cs.selectedIndex=i;break}
+  // f-card 選項 value 是帳戶 id，用名稱找回對應 id 再選取
+  const cardAcctId = allAccounts.find(a => a.name === card)?.id
   const as = document.getElementById('f-card')
-  for (let i=0;i<as.options.length;i++) if(as.options[i].value===card){as.selectedIndex=i;break}
+  for (let i=0;i<as.options.length;i++) if(as.options[i].value===cardAcctId){as.selectedIndex=i;break}
   const delBtn = document.getElementById('modal-delete-btn')
   delBtn.style.display = ''
   delBtn.dataset.id = id
@@ -709,15 +712,20 @@ window.saveTxn = async function() {
 
   // 轉帳走獨立流程
   if (currentType === '轉帳') {
-    const from_account = document.getElementById('f-xfr-from').value
-    const to_account = document.getElementById('f-xfr-to').value
+    const from_account_id = document.getElementById('f-xfr-from').value
+    const to_account_id = document.getElementById('f-xfr-to').value
+    const fromObj = allAccounts.find(a => a.id === from_account_id)
+    const toObj = allAccounts.find(a => a.id === to_account_id)
     const amount = parseInt(document.getElementById('f-xfr-amount').value)
     const date = document.getElementById('f-xfr-date').value
     const note = document.getElementById('f-xfr-note').value.trim() || null
     const fee = parseInt(document.getElementById('f-xfr-fee').value) || 0
     if (!amount || !date) { toast('請填寫金額和日期', 'error'); return }
-    if (from_account === to_account) { toast('來源與目標帳戶不能相同', 'error'); return }
-    const res = await api.addTransfer({ from_account, to_account, amount, date, note, fee })
+    if (from_account_id === to_account_id) { toast('來源與目標帳戶不能相同', 'error'); return }
+    const res = await api.addTransfer({
+      from_account: fromObj?.name ?? '', to_account: toObj?.name ?? '',
+      from_account_id, to_account_id, amount, date, note, fee,
+    })
     if (res.ok) {
       closeTxnModal(); toast(fee > 0 ? `轉帳記錄已建立，手續費 NT$${fee.toLocaleString()} 另計` : '轉帳記錄已建立')
       await loadMonth()
@@ -730,12 +738,15 @@ window.saveTxn = async function() {
   const category = document.getElementById('f-category').value
   const baseAmount = parseInt(document.getElementById('f-amount').value)
   const fee = parseInt(document.getElementById('f-fee').value) || 0
+  const cardAcctId = document.getElementById('f-card').value
+  const cardObj = allAccounts.find(a => a.id === cardAcctId)
   const data = {
     name: document.getElementById('f-name').value.trim(),
     amount: baseAmount + fee,
     date: document.getElementById('f-date').value,
     category,
-    card: document.getElementById('f-card').value,
+    card: cardObj?.name ?? '',
+    account_id: cardObj?.id ?? null,
     type: currentType,
     note: fee > 0 ? `含手續費 NT$${fee.toLocaleString()}` : null,
   }
@@ -820,8 +831,9 @@ window.editTransfer = function(transferId) {
   renderXfrSelects()
   document.getElementById('edit-transfer-id').value = transferId
   document.getElementById('edit-transfer-txn-id').value = out.id
-  document.getElementById('xfr-from').value = out.card
-  document.getElementById('xfr-to').value = inc.card
+  // 優先用 account_id 選取；舊資料沒有 account_id 時才退回用名稱找（可能因同名選錯，僅供相容）
+  document.getElementById('xfr-from').value = out.account_id || allAccounts.find(a => a.name === out.card)?.id || ''
+  document.getElementById('xfr-to').value = inc.account_id || allAccounts.find(a => a.name === inc.card)?.id || ''
   document.getElementById('xfr-amount').value = String(out.amount)
   document.getElementById('xfr-date').value = out.date
   document.getElementById('xfr-note').value = out.note ?? ''
@@ -832,15 +844,19 @@ window.editTransfer = function(transferId) {
 }
 window.saveTransfer = async function() {
   const editId = document.getElementById('edit-transfer-id').value
-  const from_account = document.getElementById('xfr-from').value
-  const to_account = document.getElementById('xfr-to').value
+  const from_account_id = document.getElementById('xfr-from').value
+  const to_account_id = document.getElementById('xfr-to').value
+  const fromObj = allAccounts.find(a => a.id === from_account_id)
+  const toObj = allAccounts.find(a => a.id === to_account_id)
+  const from_account = fromObj?.name ?? ''
+  const to_account = toObj?.name ?? ''
   const amount = parseInt(document.getElementById('xfr-amount').value)
   const date = document.getElementById('xfr-date').value
   const note = document.getElementById('xfr-note').value.trim() || null
   if (!amount || !date) { toast('請填寫金額和日期', 'error'); return }
-  if (from_account === to_account) { toast('來源與目標帳戶不能相同', 'error'); return }
+  if (from_account_id === to_account_id) { toast('來源與目標帳戶不能相同', 'error'); return }
   if (editId) {
-    const res = await api.updateTransfer(editId, { from_account, to_account, amount, date, note })
+    const res = await api.updateTransfer(editId, { from_account, to_account, from_account_id, to_account_id, amount, date, note })
     if (res.ok) {
       closeTransferModal(); toast('轉帳記錄已更新')
       await loadMonth()
@@ -848,7 +864,7 @@ window.saveTransfer = async function() {
       if (showMonthly) renderMonthlyTable()
     } else toast(res.error ?? '更新失敗', 'error')
   } else {
-    const res = await api.addTransfer({ from_account, to_account, amount, date, note })
+    const res = await api.addTransfer({ from_account, to_account, from_account_id, to_account_id, amount, date, note })
     if (res.ok) {
       closeTransferModal(); toast('轉帳記錄已建立（兩筆）')
       await loadMonth()
@@ -1213,8 +1229,10 @@ window.openEditRecModal = function(id) {
   document.getElementById('r-card').innerHTML = groupedAccountOptions(allAccounts)
   const cs=document.getElementById('r-category')
   for(let i=0;i<cs.options.length;i++) if(cs.options[i].value===item.category){cs.selectedIndex=i;break}
+  // r-card 選項 value 是帳戶 id，用名稱找回對應 id 再選取
+  const cardAcctId = allAccounts.find(a => a.name === item.card)?.id
   const as=document.getElementById('r-card')
-  for(let i=0;i<as.options.length;i++) if(as.options[i].value===item.card){as.selectedIndex=i;break}
+  for(let i=0;i<as.options.length;i++) if(as.options[i].value===cardAcctId){as.selectedIndex=i;break}
   document.getElementById('rec-modal').classList.add('open')
 }
 
@@ -1226,13 +1244,16 @@ window.saveRecurring = async function() {
   const day = parseInt(document.getElementById('r-day').value)
   const startDate = document.getElementById('r-start-date').value
   const endDate = document.getElementById('r-end-date').value || null
+  // r-card 選項 value 是帳戶 id，定期項目表仍以名稱存放帳戶，這裡轉回名稱
+  const cardAcctId = document.getElementById('r-card').value
+  const cardObj = allAccounts.find(a => a.id === cardAcctId)
   const data = {
     name: document.getElementById('r-name').value.trim(),
     amount: parseInt(document.getElementById('r-amount').value),
     fee: parseInt(document.getElementById('r-fee').value) || 0,
     type: recType,
     category: document.getElementById('r-category').value,
-    card: document.getElementById('r-card').value,
+    card: cardObj?.name ?? '',
     frequency: freq,
     day_of_month: freq==='monthly'?day:1,
     start_date: startDate,

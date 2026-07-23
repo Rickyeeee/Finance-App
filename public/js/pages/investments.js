@@ -488,11 +488,12 @@ function updateAccountDatalist() {
   if (prev && opts.includes(prev)) select.value = prev
 
   // 入帳帳戶選項（非證券戶）：存入 data-all 供 updateToAccountGroup 使用
+  // value 用 id（跨類別同名帳戶才不會選錯），data-name 存名稱供顯示與送出用
   const toSel = document.getElementById('trade-to-account')
   if (toSel && window._allAssetAccounts) {
     const nonBroker = window._allAssetAccounts
       .filter(a => a.type !== '證券戶' && a.type !== '投資帳戶')
-      .map(a => a.name)
+      .map(a => ({ id: a.id, name: a.name }))
     toSel.dataset.all = JSON.stringify(nonBroker)
   }
 }
@@ -537,7 +538,7 @@ function updateToAccountGroup(type) {
     const all = JSON.parse(sel.dataset.all || '[]')
     if (!all.length) return
     sel.innerHTML = '<option value="">－ 不指定 －</option>' +
-      all.map(a => `<option value="${escHtml(a)}">${escHtml(a)}</option>`).join('')
+      all.map(a => `<option value="${escHtml(a.id)}">${escHtml(a.name)}</option>`).join('')
   }
 }
 
@@ -574,11 +575,12 @@ window.openEditTradeModal = function(tradeId) {
   if (trade.account && [...acctSelect.options].some(o => o.value === trade.account)) {
     acctSelect.value = trade.account
   }
-  // 設定入帳帳戶（若有）
+  // 設定入帳帳戶（若有）：trade.to_account 是名稱，選項 value 是 id，用名稱找回 id
   if (trade.type === '賣出' && trade.to_account) {
     const toSel = document.getElementById('trade-to-account')
-    if ([...toSel.options].some(o => o.value === trade.to_account)) {
-      toSel.value = trade.to_account
+    const toAcctId = (window._allAssetAccounts ?? []).find(a => a.name === trade.to_account)?.id
+    if (toAcctId && [...toSel.options].some(o => o.value === toAcctId)) {
+      toSel.value = toAcctId
     }
   }
 
@@ -657,7 +659,9 @@ window.saveTrade = async function() {
   const shares = parseFloat(document.getElementById('trade-shares').value)
   const price = parseFloat(document.getElementById('trade-price').value)
   const note = document.getElementById('trade-note').value.trim()
-  const toAccount = type === '賣出' ? document.getElementById('trade-to-account').value.trim() : ''
+  const toAccountId = type === '賣出' ? document.getElementById('trade-to-account').value.trim() : ''
+  const toAccountObj = (window._allAssetAccounts ?? []).find(a => a.id === toAccountId)
+  const toAccount = toAccountObj?.name ?? ''
 
   if (!symbol) { toast('請輸入股票代號', 'error'); return }
   if (!name) { toast('請輸入（或等候自動填入）股票名稱', 'error'); return }
@@ -667,7 +671,7 @@ window.saveTrade = async function() {
   if (!date) { toast('請選擇日期', 'error'); return }
 
   const payload = { symbol, name, account, type, shares, price, date, note: note || undefined }
-  if (type === '賣出' && toAccount) payload.to_account = toAccount
+  if (type === '賣出' && toAccount) { payload.to_account = toAccount; payload.to_account_id = toAccountId }
 
   const res = editingTradeId
     ? await api.updateInvestmentTrade(editingTradeId, { type, shares, price, date, account, note: note || null })

@@ -99,6 +99,7 @@ export type Asset = {
   credit_limit: number | null
   payment_method: string | null
   payment_account: string | null
+  payment_account_id: string | null
   updated_at: string | null
 }
 

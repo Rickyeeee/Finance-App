@@ -68,6 +68,7 @@ app.post('/', async (c) => {
 app.post('/transfer', async (c) => {
   const body = await c.req.json<{
     from_account: string; to_account: string; amount: number; date: string; note?: string; fee?: number
+    from_account_id?: string; to_account_id?: string
   }>()
 
   if (!body.from_account || !body.to_account || !body.amount || !body.date) {
@@ -80,6 +81,8 @@ app.post('/transfer', async (c) => {
   const transfer_id = await createTransfer(c.env.DB, {
     from_account: body.from_account,
     to_account: body.to_account,
+    from_account_id: body.from_account_id ?? null,
+    to_account_id: body.to_account_id ?? null,
     amount: body.amount,
     date: body.date,
     note: body.note,
@@ -91,11 +94,14 @@ app.post('/transfer', async (c) => {
 
 app.patch('/transfer/:transferId', async (c) => {
   const transferId = c.req.param('transferId')
-  const body = await c.req.json<{ amount?: number; date?: string; note?: string | null; from_account?: string; to_account?: string }>()
+  const body = await c.req.json<{
+    amount?: number; date?: string; note?: string | null
+    from_account?: string; to_account?: string; from_account_id?: string; to_account_id?: string
+  }>()
 
   const { results } = await c.env.DB
-    .prepare('SELECT id, type, card, name FROM transactions WHERE transfer_id = ?')
-    .bind(transferId).all<{ id: string; type: string; card: string; name: string }>()
+    .prepare('SELECT id, type, card, account_id, name FROM transactions WHERE transfer_id = ?')
+    .bind(transferId).all<{ id: string; type: string; card: string; account_id: string | null; name: string }>()
 
   if (results.length < 2) return c.json({ ok: false, error: '找不到此轉帳記錄' }, 404)
   const outgoing = results.find(t => t.type === '支出')
@@ -104,6 +110,8 @@ app.patch('/transfer/:transferId', async (c) => {
 
   const fromAccount = body.from_account ?? outgoing.card
   const toAccount = body.to_account ?? incoming.card
+  const fromAccountId = body.from_account_id !== undefined ? body.from_account_id : outgoing.account_id
+  const toAccountId = body.to_account_id !== undefined ? body.to_account_id : incoming.account_id
 
   const base: Record<string, unknown> = {}
   if (body.amount !== undefined) base.amount = body.amount
@@ -113,8 +121,8 @@ app.patch('/transfer/:transferId', async (c) => {
   // 只在預設名稱時才更新，保留自訂名稱（如投資賣出）
   const outName = outgoing.name?.startsWith('轉帳') ? `轉帳 → ${toAccount}` : outgoing.name
   const inName  = incoming.name?.startsWith('轉帳') ? `轉帳 ← ${fromAccount}` : incoming.name
-  await updateTransaction(c.env.DB, outgoing.id, { ...base, card: fromAccount, name: outName })
-  await updateTransaction(c.env.DB, incoming.id, { ...base, card: toAccount, name: inName })
+  await updateTransaction(c.env.DB, outgoing.id, { ...base, card: fromAccount, account_id: fromAccountId, name: outName })
+  await updateTransaction(c.env.DB, incoming.id, { ...base, card: toAccount, account_id: toAccountId, name: inName })
 
   return c.json({ ok: true })
 })
@@ -123,7 +131,7 @@ app.patch('/:id', async (c) => {
   const id = c.req.param('id')
   const body = await c.req.json<{
     name?: string; amount?: number; date?: string;
-    category?: string; card?: string; type?: string; status?: string; note?: string
+    category?: string; card?: string; account_id?: string | null; type?: string; status?: string; note?: string
   }>()
 
   const ok = await updateTransaction(c.env.DB, id, body)

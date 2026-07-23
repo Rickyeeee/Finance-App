@@ -856,10 +856,11 @@ window.paymentNotReady = function() {
 // ── 付款 Modal ──
 window.openPaymentModal = async function(cardId, billedAmount) {
   const accs = allAccounts
-  const nonCC = accs.filter(a => a.type !== '信用卡')
+  // 繳款來源只限銀行帳戶（現金、證券戶不適合當扣款來源）
+  const bankOnly = accs.filter(a => a.type === '銀行' || a.type === '銀行存款')
   const cc = accs.find(a => a.id === cardId)
   const fromSel = document.getElementById('pay-from-account')
-  fromSel.innerHTML = groupedAccountOptions(nonCC)
+  fromSel.innerHTML = groupedAccountOptions(bankOnly)
   // 若信用卡有設定 payment_account_id，預選它
   if (cc?.payment_account_id) {
     const opt = [...fromSel.options].find(o => o.value === cc.payment_account_id)

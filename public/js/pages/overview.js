@@ -546,8 +546,9 @@ window.openAddAccountModal = function() {
   document.getElementById('acc-credit-limit').value = ''
   document.getElementById('acc-payment-method').value = 'manual'
   document.getElementById('acc-payment-account-group').style.display = 'none'
-  const nonCC = allAccounts.filter(a => a.type !== '信用卡')
-  document.getElementById('acc-payment-account').innerHTML = groupedAccountOptions(nonCC)
+  // 扣款帳戶只限銀行帳戶（現金、證券戶不適合當扣款來源）
+  const bankOnly = allAccounts.filter(a => a.type === '銀行' || a.type === '銀行存款')
+  document.getElementById('acc-payment-account').innerHTML = groupedAccountOptions(bankOnly)
   document.getElementById('acc-cc-fields').style.display = 'none'
   document.getElementById('add-account-modal').classList.add('open')
 }
@@ -600,9 +601,9 @@ window.openEditModal = function(id, name, balance, type, includeInTotal, billing
   document.getElementById('edit-acc-payment-day').value = paymentDay ?? ''
   document.getElementById('edit-acc-credit-limit').value = creditLimit ?? ''
   document.getElementById('edit-acc-payment-method').value = paymentMethod ?? 'manual'
-  // 填入扣款帳戶選項
-  const nonCC = allAccounts.filter(a => a.type !== '信用卡')
-  document.getElementById('edit-acc-payment-account').innerHTML = groupedAccountOptions(nonCC, paymentAccountId || '')
+  // 填入扣款帳戶選項：只限銀行帳戶（現金、證券戶不適合當扣款來源）
+  const bankOnly = allAccounts.filter(a => a.type === '銀行' || a.type === '銀行存款')
+  document.getElementById('edit-acc-payment-account').innerHTML = groupedAccountOptions(bankOnly, paymentAccountId || '')
   document.getElementById('edit-payment-account-group').style.display = (paymentMethod === 'auto') ? 'block' : 'none'
   previewInclude()
   document.getElementById('edit-balance-modal').classList.add('open')

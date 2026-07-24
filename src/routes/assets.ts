@@ -20,27 +20,34 @@ app.get('/', async (c) => {
   const included = assets.filter(a => a.include_in_total !== 0)
   const cashAccounts = included.filter(a => a.type === '銀行' || a.type === '現金' || a.type === '銀行存款')
   const creditAccounts = included.filter(a => a.type === '信用卡')
-  const brokerAccounts = included.filter(a => a.type === '證券戶' || a.type === '投資帳戶')
 
   const totalCash = cashAccounts.reduce((s, a) => s + a.balance, 0)
   // 信用卡餘額為負值（負債），直接加總（負數）
   const creditBalance = creditAccounts.reduce((s, a) => s + a.balance, 0)
 
-  // 證券戶若有對應投資資料，取市值；否則用帳戶餘額
-  const brokerNames = new Set(brokerAccounts.map(a => a.name))
-  const includedInvTotal = investments
-    .filter(i => brokerNames.size === 0 || brokerNames.has(i.account))
-    .reduce((s, i) => s + i.market_value, 0)
-  const totalInvestments = brokerAccounts.length > 0 ? includedInvTotal : 0
+  // 投資市值／損益：「計入總資產」只決定要不要算進總資產淨值，不代表這筆投資
+  // 不存在——這裡一律用「所有」證券戶（不篩 include_in_total），不然把證券戶
+  // 設成不計入總資產後，投資市值卡片會直接歸零（曾經踩過這個坑）
+  const allBrokerAccounts = assets.filter(a => a.type === '證券戶' || a.type === '投資帳戶')
+  const allBrokerNames = new Set(allBrokerAccounts.map(a => a.name))
+  const relevantInvestments = investments.filter(i => allBrokerNames.size === 0 || allBrokerNames.has(i.account))
+  const totalInvestments = allBrokerAccounts.length > 0
+    ? relevantInvestments.reduce((s, i) => s + i.market_value, 0)
+    : 0
+  const investmentPnL = relevantInvestments.reduce((s, i) => s + i.profit_loss, 0)
 
-  const investmentPnL = investments
-    .filter(i => brokerNames.size === 0 || brokerNames.has(i.account))
-    .reduce((s, i) => s + i.profit_loss, 0)
+  // 總資產淨值：只有「計入總資產」的證券戶市值才算進去
+  const includedBrokerNames = new Set(
+    included.filter(a => a.type === '證券戶' || a.type === '投資帳戶').map(a => a.name)
+  )
+  const netWorthInvestments = allBrokerNames.size === 0
+    ? relevantInvestments.reduce((s, i) => s + i.market_value, 0)
+    : investments.filter(i => includedBrokerNames.has(i.account)).reduce((s, i) => s + i.market_value, 0)
 
   return c.json({
     ok: true,
     data: {
-      total_net_worth: totalCash + totalInvestments + creditBalance,
+      total_net_worth: totalCash + netWorthInvestments + creditBalance,
       total_cash: totalCash,
       total_investments: totalInvestments,
       total_credit_used: Math.abs(creditBalance),

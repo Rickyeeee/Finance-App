@@ -4948,17 +4948,21 @@ app5.get("/", async (c) => {
   const included = assets.filter((a) => a.include_in_total !== 0);
   const cashAccounts = included.filter((a) => a.type === "\u9280\u884C" || a.type === "\u73FE\u91D1" || a.type === "\u9280\u884C\u5B58\u6B3E");
   const creditAccounts = included.filter((a) => a.type === "\u4FE1\u7528\u5361");
-  const brokerAccounts = included.filter((a) => a.type === "\u8B49\u5238\u6236" || a.type === "\u6295\u8CC7\u5E33\u6236");
   const totalCash = cashAccounts.reduce((s, a) => s + a.balance, 0);
   const creditBalance = creditAccounts.reduce((s, a) => s + a.balance, 0);
-  const brokerNames = new Set(brokerAccounts.map((a) => a.name));
-  const includedInvTotal = investments.filter((i) => brokerNames.size === 0 || brokerNames.has(i.account)).reduce((s, i) => s + i.market_value, 0);
-  const totalInvestments = brokerAccounts.length > 0 ? includedInvTotal : 0;
-  const investmentPnL = investments.filter((i) => brokerNames.size === 0 || brokerNames.has(i.account)).reduce((s, i) => s + i.profit_loss, 0);
+  const allBrokerAccounts = assets.filter((a) => a.type === "\u8B49\u5238\u6236" || a.type === "\u6295\u8CC7\u5E33\u6236");
+  const allBrokerNames = new Set(allBrokerAccounts.map((a) => a.name));
+  const relevantInvestments = investments.filter((i) => allBrokerNames.size === 0 || allBrokerNames.has(i.account));
+  const totalInvestments = allBrokerAccounts.length > 0 ? relevantInvestments.reduce((s, i) => s + i.market_value, 0) : 0;
+  const investmentPnL = relevantInvestments.reduce((s, i) => s + i.profit_loss, 0);
+  const includedBrokerNames = new Set(
+    included.filter((a) => a.type === "\u8B49\u5238\u6236" || a.type === "\u6295\u8CC7\u5E33\u6236").map((a) => a.name)
+  );
+  const netWorthInvestments = allBrokerNames.size === 0 ? relevantInvestments.reduce((s, i) => s + i.market_value, 0) : investments.filter((i) => includedBrokerNames.has(i.account)).reduce((s, i) => s + i.market_value, 0);
   return c.json({
     ok: true,
     data: {
-      total_net_worth: totalCash + totalInvestments + creditBalance,
+      total_net_worth: totalCash + netWorthInvestments + creditBalance,
       total_cash: totalCash,
       total_investments: totalInvestments,
       total_credit_used: Math.abs(creditBalance),

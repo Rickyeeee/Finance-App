@@ -146,9 +146,22 @@ finance-app/
 - 外層 wrap **不能**設 `display:flex`：內層 strip 的 `width:300%` 會被當成 flex item 被自動壓縮打回正常寬度，排版跑掉（曾經踩過這個坑）
 - 如果 wrap 本身是被 flex 撐高（例如浮動視窗裡 `flex:1; min-height:0`），strip 跟裡面的 3 個面板都要補 `height:100%`，不然面板的 `overflow-y:auto` 沒有明確高度可比較，永遠不會觸發捲動（內容只是被外層 `overflow:hidden` 裁掉，不能捲）
 - 若 wrap 是在一般文件流裡（例如消費紀錄的當日紀錄，不是浮動視窗），拖曳時先把 wrap 高度鎖住（`getBoundingClientRect().height` 存成 inline style），放開後才平滑動畫到新內容的高度，避免拖曳時撐高造成頁面跳動
+- **高度鎖定只能在確定是水平滑動之後才做**（`onMove` 判斷出 `intent==='h'` 的當下），不要放在 `touchstart`：如果一碰到就鎖高度，會連一般點擊、往下捲動都觸發鎖定/釋放，造成畫面跳動、點擊落空（曾經踩過這個坑）
 
-### 每日小計
-- 出現在每日交易列表底部，靠右對齊（`.txn-row` 已無按鈕，不用留 padding-right）
+### 計算鍵盤（`public/js/calc-keyboard.js`）
+- 手機上金額欄（`.calc-input`）點擊會彈出自訂計算機鍵盤，取代原生數字鍵盤
+- 觸發邏輯**必須是「真正點擊」**（touchstart 到 touchend 之間位移 < 8px）才開鍵盤，不能在 `touchstart` 就直接開＋`preventDefault()`，不然使用者想滑動捲動時，手指一碰到金額欄就會跳出編輯、順便擋掉捲動（曾經踩過這個坑，要跟名稱等一般文字欄位靠原生 focus 判斷的觸發邏輯一致）
+
+### 登入 / Auth
+- PIN 存在 Cloudflare Worker secret（`AUTH_PIN`），不是 D1，登入邏輯在 `src/routes/auth.ts`（Ricky 版和朋友版共用）
+- 登入 token 存放位置依裝置分流：手機（含加到主畫面的 PWA，`navigator.userAgent` 含 iPhone/iPad/iPod/Android）用 `localStorage`，跨開關機保留；電腦版用 `sessionStorage`，關掉分頁/瀏覽器就要重新登入（考量公用電腦情境）
+- **自助改密碼**（設定 → 登入密碼）：透過 Cloudflare API 呼叫 `PUT .../workers/scripts/:name/secrets` 更新自己 Worker 的 `AUTH_PIN`，需要 `CF_API_TOKEN`（有 Workers Scripts:Edit 權限）+ `WORKER_NAME` 這兩個 secret
+  - 朋友透過安裝流程建立的實例會自動有這兩個 secret（`src/routes/installer.ts` 安裝時寫入使用者自己填的 API Token）
+  - **Ricky 自己手動架的正式站沒有**，需要另外手動 `wrangler secret put CF_API_TOKEN` / `WORKER_NAME` 才能用這個功能
+  - 改密碼後 Cloudflare 邊緣節點生效有數秒延遲屬正常現象（isolate 還沒重新載入新的 secret），不是 bug
+
+### 每日小計 / 今日摘要
+- 出現在每日交易列表底部（消費記錄）、總覽頁「今日摘要」底部，皆靠右對齊（`.txn-row` 已無按鈕，不用留 padding-right）
 - 格式：`收入 xx,xxx`（綠）`支出 xx,xxx`（紅），間距 `gap:14px`
 - `font-size:13px; font-weight:600`
-- 只有當天有 2 筆以上交易才顯示
+- 只要當天有 1 筆以上交易就顯示（不是 2 筆以上）

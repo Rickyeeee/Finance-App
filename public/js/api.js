@@ -129,8 +129,13 @@ export async function initAppName() {
 }
 
 // ── Auth ──
+// 手機（含已加到主畫面的 PWA）本來就有裝置鎖第一道防護，登入狀態可以跨開關機保留（localStorage）；
+// 電腦版可能在公用電腦上使用，改用 sessionStorage——關掉分頁/瀏覽器後登入狀態就消失，
+// 下次打開要重新輸入密碼
 const _AUTH_KEY = 'finance_token_' + location.hostname.replace(/[^a-z0-9]/gi, '').slice(-12)
-let _token = localStorage.getItem(_AUTH_KEY)
+const _isMobileDevice = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+const _authStorage = _isMobileDevice ? localStorage : sessionStorage
+let _token = _authStorage.getItem(_AUTH_KEY)
 let _loginPending = false
 
 async function _showLogin() {
@@ -194,7 +199,7 @@ window.__authLogin = async function () {
     const data = await res.json()
     if (data.ok) {
       _token = data.token
-      localStorage.setItem(_AUTH_KEY, _token)
+      _authStorage.setItem(_AUTH_KEY, _token)
       window.location.reload()
     } else {
       errEl.textContent = '密碼錯誤，請重試'
@@ -230,7 +235,7 @@ async function request(path, opts = {}) {
   })
   if (res.status === 401) {
     _token = null
-    localStorage.removeItem(_AUTH_KEY)
+    _authStorage.removeItem(_AUTH_KEY)
     _showLogin()
     return { ok: false, error: '未授權' }
   }
@@ -303,6 +308,10 @@ export function openUpdateModal() {
     // 重新填入目前名稱
     const cached = localStorage.getItem(_APP_NAME_KEY)
     if (cached) document.getElementById('__settings_name_input').value = cached
+    // 密碼欄位不留舊值
+    document.getElementById('__pin_current').value = ''
+    document.getElementById('__pin_new').value = ''
+    document.getElementById('__pin_msg').textContent = ''
     return
   }
 
@@ -319,6 +328,14 @@ export function openUpdateModal() {
     #__settings_name_btn{background:#238636;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
     #__settings_name_btn:disabled{opacity:.5;cursor:default}
     #__settings_name_msg{font-size:12px;margin-top:6px;min-height:16px}
+    #__pin_section{margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid #30363d}
+    #__pin_section label{display:block;font-size:12px;font-weight:600;color:#8b949e;margin-bottom:8px}
+    #__pin_section input{width:100%;background:#0d1117;border:1px solid #30363d;color:#e6edf3;padding:10px 14px;font-size:15px;border-radius:8px;outline:none;font-family:inherit;box-sizing:border-box}
+    #__pin_section input:focus{border-color:#58a6ff}
+    #__pin_new{margin-top:8px}
+    #__pin_btn{margin-top:8px;background:#238636;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+    #__pin_btn:disabled{opacity:.5;cursor:default}
+    #__pin_msg{font-size:12px;margin-top:6px;min-height:16px}
     #__update_section label{display:block;font-size:12px;font-weight:600;color:#8b949e;margin-bottom:8px}
     #__update_log{background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:12px;min-height:80px;max-height:160px;overflow-y:auto;font-size:12px;font-family:monospace;color:#8b949e;margin-bottom:12px;display:none}
     #__update_log .ok{color:#3fb950}
@@ -347,6 +364,13 @@ export function openUpdateModal() {
         <div id="__settings_name_row">
           <button id="__settings_name_btn" onclick="window.__saveAppName()">儲存名稱</button>
         </div>
+      </div>
+      <div id="__pin_section">
+        <label>登入密碼</label>
+        <input id="__pin_current" type="password" inputmode="numeric" autocomplete="current-password" placeholder="目前密碼">
+        <input id="__pin_new" type="password" inputmode="numeric" autocomplete="new-password" placeholder="新密碼（至少 4 碼）">
+        <div id="__pin_msg"></div>
+        <button id="__pin_btn" onclick="window.__changePin()">更新密碼</button>
       </div>
       ${isInstalled ? `
       <div id="__update_section">
@@ -397,6 +421,43 @@ window.__saveAppName = async function() {
   } finally {
     btn.disabled = false
     btn.textContent = '儲存名稱'
+  }
+}
+
+window.__changePin = async function() {
+  const curEl = document.getElementById('__pin_current')
+  const newEl = document.getElementById('__pin_new')
+  const msg = document.getElementById('__pin_msg')
+  const btn = document.getElementById('__pin_btn')
+  const currentPin = curEl.value.trim()
+  const newPin = newEl.value.trim()
+  if (!currentPin || !newPin) { msg.style.color = '#f85149'; msg.textContent = '請輸入目前密碼與新密碼'; return }
+  if (newPin.length < 4) { msg.style.color = '#f85149'; msg.textContent = '新密碼至少需要 4 碼'; return }
+  btn.disabled = true
+  btn.textContent = '更新中…'
+  msg.textContent = ''
+  try {
+    const res = await fetch('/api/auth/change-pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPin, newPin }),
+    })
+    const data = await res.json()
+    if (data.ok) {
+      msg.style.color = '#3fb950'
+      msg.textContent = '✓ 密碼已更新。Cloudflare 生效可能需要幾秒鐘，若馬上用新密碼登入失敗，請稍等一下再試'
+      curEl.value = ''
+      newEl.value = ''
+    } else {
+      msg.style.color = '#f85149'
+      msg.textContent = data.error || '更新失敗'
+    }
+  } catch {
+    msg.style.color = '#f85149'
+    msg.textContent = '連線失敗'
+  } finally {
+    btn.disabled = false
+    btn.textContent = '更新密碼'
   }
 }
 

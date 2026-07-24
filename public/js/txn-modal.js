@@ -119,9 +119,6 @@ function injectModal() {
 
     <!-- 轉帳欄位 -->
     <div id="shared-fields-transfer" style="display:none">
-      <div style="background:rgba(88,166,255,0.06);border:1px solid rgba(88,166,255,0.2);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--text-muted)">
-        同時建立兩筆關聯記錄：來源帳戶的支出 + 目標帳戶的收入
-      </div>
       <div class="grid-2">
         <div class="form-group">
           <label class="form-label">來源帳戶 *</label>

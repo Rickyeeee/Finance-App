@@ -4982,6 +4982,10 @@ function typeGroup(type) {
   return TYPE_GROUP[type] ?? type;
 }
 __name(typeGroup, "typeGroup");
+function isValidDay(day) {
+  return day == null || Number.isInteger(day) && day >= 1 && day <= 31;
+}
+__name(isValidDay, "isValidDay");
 async function findDuplicateInGroup(db, name, type, excludeId) {
   const { results } = await db.prepare("SELECT id, type FROM assets WHERE name = ?" + (excludeId ? " AND id != ?" : "")).bind(...excludeId ? [name, excludeId] : [name]).all();
   return results.find((a) => typeGroup(a.type) === typeGroup(type));
@@ -4994,6 +4998,9 @@ app5.post("/", async (c) => {
   }
   if (!ACCOUNT_TYPES.includes(body.type) && body.type !== "\u9280\u884C\u5B58\u6B3E" && body.type !== "\u6295\u8CC7\u5E33\u6236") {
     return c.json({ ok: false, error: `type \u5FC5\u9808\u662F\uFF1A${ACCOUNT_TYPES.join("\u3001")}` }, 400);
+  }
+  if (!isValidDay(body.billing_day) || !isValidDay(body.payment_day)) {
+    return c.json({ ok: false, error: "\u7D50\u7B97\u65E5/\u6263\u6B3E\u65E5\u8ACB\u8F38\u5165 1-31" }, 400);
   }
   const dup = await findDuplicateInGroup(c.env.DB, body.name, body.type);
   if (dup) {
@@ -5019,6 +5026,9 @@ app5.patch("/:id", async (c) => {
   const body = await c.req.json();
   const before = await getAssetById(c.env.DB, id);
   if (!before) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u6B64\u5E33\u6236" }, 404);
+  if (!isValidDay(body.billing_day) || !isValidDay(body.payment_day)) {
+    return c.json({ ok: false, error: "\u7D50\u7B97\u65E5/\u6263\u6B3E\u65E5\u8ACB\u8F38\u5165 1-31" }, 400);
+  }
   if (body.name && body.name !== before.name) {
     const dup = await findDuplicateInGroup(c.env.DB, body.name, body.type ?? before.type, id);
     if (dup) {
@@ -5325,12 +5335,47 @@ init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_process();
 init_virtual_unenv_global_polyfill_cloudflare_unenv_preset_node_console();
 init_performance2();
 var app8 = new Hono2();
+var CF_API = "https://api.cloudflare.com/client/v4";
 app8.post("/login", async (c) => {
   const { pin } = await c.req.json();
   if (!pin || pin !== c.env.AUTH_PIN) {
     return c.json({ ok: false, error: "\u5BC6\u78BC\u932F\u8AA4" }, 401);
   }
   return c.json({ ok: true, token: c.env.AUTH_TOKEN });
+});
+app8.post("/change-pin", async (c) => {
+  const { currentPin, newPin } = await c.req.json();
+  if (!currentPin || currentPin !== c.env.AUTH_PIN) {
+    return c.json({ ok: false, error: "\u76EE\u524D\u5BC6\u78BC\u4E0D\u6B63\u78BA" }, 401);
+  }
+  if (!newPin || newPin.length < 4) {
+    return c.json({ ok: false, error: "\u65B0\u5BC6\u78BC\u81F3\u5C11\u9700\u8981 4 \u78BC" }, 400);
+  }
+  if (newPin === currentPin) {
+    return c.json({ ok: false, error: "\u65B0\u5BC6\u78BC\u4E0D\u80FD\u8DDF\u76EE\u524D\u5BC6\u78BC\u76F8\u540C" }, 400);
+  }
+  if (!c.env.CF_API_TOKEN || !c.env.WORKER_NAME) {
+    return c.json({ ok: false, error: "\u6B64\u74B0\u5883\u5C1A\u672A\u8A2D\u5B9A\u81EA\u52A9\u6539\u5BC6\u78BC\u6240\u9700\u7684 CF_API_TOKEN / WORKER_NAME\uFF0C\u8ACB\u6539\u7528 wrangler secret put AUTH_PIN" }, 400);
+  }
+  const accountsRes = await fetch(`${CF_API}/accounts?per_page=1`, {
+    headers: { Authorization: `Bearer ${c.env.CF_API_TOKEN}` }
+  }).then((r) => r.json());
+  const accountId = accountsRes.success ? accountsRes.result?.[0]?.id : null;
+  if (!accountId) {
+    return c.json({ ok: false, error: "\u7121\u6CD5\u9A57\u8B49 Cloudflare \u5E33\u865F\uFF0C\u8ACB\u78BA\u8A8D CF_API_TOKEN \u662F\u5426\u6709\u6548" }, 500);
+  }
+  const putRes = await fetch(
+    `${CF_API}/accounts/${accountId}/workers/scripts/${c.env.WORKER_NAME}/secrets`,
+    {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${c.env.CF_API_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "AUTH_PIN", text: newPin, type: "secret_text" })
+    }
+  ).then((r) => r.json());
+  if (!putRes.success) {
+    return c.json({ ok: false, error: "\u5BC6\u78BC\u66F4\u65B0\u5931\u6557\uFF0C\u8ACB\u7A0D\u5F8C\u518D\u8A66" }, 500);
+  }
+  return c.json({ ok: true });
 });
 var auth_default = app8;
 

@@ -222,9 +222,20 @@ input.ck-focused{outline:2px solid var(--accent,#58a6ff)!important;outline-offse
     inp.setAttribute('inputmode', 'none')
     inp.setAttribute('autocomplete', 'off')
 
-    // 手機：攔截 touch，防止原生鍵盤
+    // 手機：只有「真正點擊」（沒有明顯位移）才開計算鍵盤，讓滑動/捲動手勢可以正常穿透——
+    // 跟名稱等一般文字欄位靠瀏覽器原生 focus 判斷的觸發邏輯一致，不會一碰到就跳出編輯
+    let tsx = 0, tsy = 0, tsMoved = false
     inp.addEventListener('touchstart', e => {
-      e.preventDefault()
+      const t = e.touches[0]
+      tsx = t.clientX; tsy = t.clientY; tsMoved = false
+    }, { passive: true })
+    inp.addEventListener('touchmove', e => {
+      const t = e.touches[0]
+      if (Math.abs(t.clientX - tsx) > 8 || Math.abs(t.clientY - tsy) > 8) tsMoved = true
+    }, { passive: true })
+    inp.addEventListener('touchend', e => {
+      if (tsMoved) return
+      e.preventDefault() // 阻止原生鍵盤彈出，改顯示自訂計算鍵盤
       openKeyboard(inp)
     }, { passive: false })
 

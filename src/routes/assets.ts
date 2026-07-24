@@ -64,6 +64,11 @@ const TYPE_GROUP: Record<string, string> = {
 }
 function typeGroup(type: string) { return TYPE_GROUP[type] ?? type }
 
+// 結算日/扣款日只能是 1-31（不存在的日期由前端「下個有效日」邏輯處理，這裡擋源頭）
+function isValidDay(day: number | null | undefined) {
+  return day == null || (Number.isInteger(day) && day >= 1 && day <= 31)
+}
+
 async function findDuplicateInGroup(db: D1Database, name: string, type: string, excludeId?: string) {
   const { results } = await db.prepare('SELECT id, type FROM assets WHERE name = ?' + (excludeId ? ' AND id != ?' : ''))
     .bind(...(excludeId ? [name, excludeId] : [name])).all<{ id: string; type: string }>()
@@ -79,6 +84,9 @@ app.post('/', async (c) => {
   if (!ACCOUNT_TYPES.includes(body.type as typeof ACCOUNT_TYPES[number]) &&
       body.type !== '銀行存款' && body.type !== '投資帳戶') {
     return c.json({ ok: false, error: `type 必須是：${ACCOUNT_TYPES.join('、')}` }, 400)
+  }
+  if (!isValidDay(body.billing_day) || !isValidDay(body.payment_day)) {
+    return c.json({ ok: false, error: '結算日/扣款日請輸入 1-31' }, 400)
   }
 
   const dup = await findDuplicateInGroup(c.env.DB, body.name, body.type)
@@ -110,6 +118,10 @@ app.patch('/:id', async (c) => {
 
   const before = await getAssetById(c.env.DB, id)
   if (!before) return c.json({ ok: false, error: '找不到此帳戶' }, 404)
+
+  if (!isValidDay(body.billing_day) || !isValidDay(body.payment_day)) {
+    return c.json({ ok: false, error: '結算日/扣款日請輸入 1-31' }, 400)
+  }
 
   if (body.name && body.name !== before.name) {
     const dup = await findDuplicateInGroup(c.env.DB, body.name, body.type ?? before.type, id)

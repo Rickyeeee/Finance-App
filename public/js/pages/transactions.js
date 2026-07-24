@@ -351,7 +351,8 @@ window.changeMonth = async function(dir) {
 
 window.selectDay = async function(date) {
   if (selectedDate === date) {
-    selectedDate = ''; resetDetailView(); renderCalendar(currentMonth, rebuildByDate()); return
+    window.openAddModal(date)
+    return
   }
   selectedDate = date
   renderCalendar(currentMonth, rebuildByDate())
@@ -490,7 +491,7 @@ function resetDetailView() {
 // 當日紀錄 strip 拖曳（跟月曆同一套手勢，左右滑切換前後天）
 ;(function () {
   const COMMIT = 70
-  let sx = 0, sy = 0, dx = 0, intent = null, active = false, animating = false
+  let sx = 0, sy = 0, dx = 0, intent = null, active = false, animating = false, heightLocked = false
 
   const wrap = document.querySelector('.daily-wrap')
   const strip = document.getElementById('daily-strip')
@@ -506,10 +507,7 @@ function resetDetailView() {
   function onStart(clientX, clientY) {
     if (animating || !selectedDate || showMonthly) return
     sx = clientX; sy = clientY
-    dx = 0; intent = null; active = true
-    // 拖曳期間先鎖住目前高度，避免預覽前後天內容長短不一時把整頁版面撐動、造成畫面跳動
-    wrap.style.height = wrap.getBoundingClientRect().height + 'px'
-    updateAdjacentDailyPanels()
+    dx = 0; intent = null; active = true; heightLocked = false
   }
   function onMove(clientX, clientY, preventDefault) {
     if (!active || animating) return
@@ -517,6 +515,13 @@ function resetDetailView() {
     const cdy = clientY - sy
     if (!intent && (Math.abs(cdx) > 5 || Math.abs(cdy) > 5)) {
       intent = Math.abs(cdx) > Math.abs(cdy) ? 'h' : 'v'
+      // 確定是水平滑動才鎖高度、準備前後天預覽內容——一般點擊/垂直捲動完全不碰版面，
+      // 避免每次點擊或往下捲動都觸發高度鎖定/釋放，造成畫面跳動或點擊落空
+      if (intent === 'h') {
+        wrap.style.height = wrap.getBoundingClientRect().height + 'px'
+        heightLocked = true
+        updateAdjacentDailyPanels()
+      }
     }
     if (intent !== 'h') return
     if (preventDefault) preventDefault()
@@ -530,7 +535,7 @@ function resetDetailView() {
   function onEnd() {
     if (!active) return
     active = false
-    if (intent !== 'h') { wrap.style.height = ''; return }
+    if (intent !== 'h') { if (heightLocked) releaseHeight(); return }
     if (Math.abs(dx) >= COMMIT) {
       animating = true
       const dir = dx < 0 ? 1 : -1
@@ -1234,9 +1239,18 @@ window.openRecDetail = async function(id) {
   if (item.is_active) {
     const futureDates = []
     let nd = item.next_date
-    for (let i = 0; i < 6; i++) {
-      futureDates.push(nd)
-      nd = calcNextDateRec(nd, item.frequency, item.day_of_month)
+    if (item.end_date) {
+      // 有截止日期：一次把剩餘所有期數列出來（設安全上限避免異常資料造成無窮迴圈）
+      while (nd <= item.end_date && futureDates.length < 200) {
+        futureDates.push(nd)
+        nd = calcNextDateRec(nd, item.frequency, item.day_of_month)
+      }
+    } else {
+      // 沒有截止日期：只顯示最近 6 期
+      for (let i = 0; i < 6; i++) {
+        futureDates.push(nd)
+        nd = calcNextDateRec(nd, item.frequency, item.day_of_month)
+      }
     }
     if (futureDates.length) {
       html += `<div style="font-size:11px;font-weight:600;color:var(--text-muted);padding:12px 0 6px;letter-spacing:.4px">即將到來</div>`

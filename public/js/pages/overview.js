@@ -528,12 +528,10 @@ async function loadDailySummary() {
     </div>`
   }).join('')
 
-  if (txns.length > 1) {
-    const parts = []
-    if (incTotal > 0) parts.push(`收入 <b style="color:#3fb950">$${incTotal.toLocaleString()}</b>`)
-    if (expTotal > 0) parts.push(`支出 <b style="color:var(--danger)">$${expTotal.toLocaleString()}</b>`)
-    if (parts.length) html += `<div style="padding:6px 0 0;font-size:12px;color:var(--text-muted);display:flex;justify-content:flex-end;gap:14px">${parts.join('')}</div>`
-  }
+  const parts = []
+  if (incTotal > 0) parts.push(`收入 <b style="color:#3fb950">$${incTotal.toLocaleString()}</b>`)
+  if (expTotal > 0) parts.push(`支出 <b style="color:var(--danger)">$${expTotal.toLocaleString()}</b>`)
+  if (parts.length) html += `<div style="padding:6px 0 0;font-size:12px;color:var(--text-muted);display:flex;justify-content:flex-end;gap:14px">${parts.join('')}</div>`
   el.innerHTML = html
 }
 
@@ -556,7 +554,6 @@ window.__ovEditTransfer = function(transferId) {
 window.openAddAccountModal = function() {
   document.getElementById('acc-name').value = ''
   document.getElementById('acc-type').value = '銀行'
-  document.getElementById('acc-bank').value = ''
   document.getElementById('acc-balance').value = '0'
   document.getElementById('acc-billing-day').value = ''
   document.getElementById('acc-payment-day').value = ''
@@ -581,7 +578,6 @@ window.closeAccountModal = function() {
 window.addAccount = async function() {
   const name = document.getElementById('acc-name').value.trim()
   const type = document.getElementById('acc-type').value
-  const bank = document.getElementById('acc-bank').value.trim()
   let balance = parseInt(document.getElementById('acc-balance').value) || 0
   if (type === '信用卡' && balance > 0) balance = -balance
   const include_in_total = document.getElementById('acc-include').checked ? 1 : 0
@@ -593,8 +589,10 @@ window.addAccount = async function() {
   const payment_account = payment_account_id ? (allAccounts.find(a => a.id === payment_account_id)?.name ?? null) : null
 
   if (!name) { toast('請輸入帳戶名稱', 'error'); return }
+  if (billing_day !== null && (billing_day < 1 || billing_day > 31)) { toast('結算日請輸入 1-31', 'error'); return }
+  if (payment_day !== null && (payment_day < 1 || payment_day > 31)) { toast('扣款日請輸入 1-31', 'error'); return }
 
-  const res = await api.addAsset({ name, type, bank, balance, include_in_total, billing_day, payment_day, credit_limit, payment_method, payment_account, payment_account_id })
+  const res = await api.addAsset({ name, type, balance, include_in_total, billing_day, payment_day, credit_limit, payment_method, payment_account, payment_account_id })
   if (res.ok) {
     closeAccountModal()
     toast(`已新增「${name}」`)
@@ -677,6 +675,8 @@ window.saveBalance = async function() {
 
   if (!name) { toast('請輸入帳戶名稱', 'error'); return }
   if (isNaN(balance)) { toast('請輸入有效金額', 'error'); return }
+  if (billing_day !== null && (billing_day < 1 || billing_day > 31)) { toast('結算日請輸入 1-31', 'error'); return }
+  if (payment_day !== null && (payment_day < 1 || payment_day > 31)) { toast('扣款日請輸入 1-31', 'error'); return }
   if (type === '信用卡' && balance > 0) balance = -balance
 
   const res = await api.updateAsset(id, { name, type, balance, include_in_total, billing_day, payment_day, credit_limit, payment_method, payment_account, payment_account_id })

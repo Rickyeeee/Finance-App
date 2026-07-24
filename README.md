@@ -7,6 +7,7 @@
 - 資料存在自己的 Cloudflare 帳號，完全隔離
 - 系統更新由維護者統一推送，用戶不需自己維護程式碼
 - 支援 PWA，可加到手機主畫面使用
+- 單頁應用（SPA）架構，切頁不重新整理、資料背景預載，體感接近原生 App
 
 ---
 
@@ -35,10 +36,11 @@
 
 ### 消費紀錄
 - 月曆、日列表、月統計三種檢視模式
-- 支出 / 收入 / 轉帳（轉帳同時建立兩筆關聯記錄，支援刪除）
+- 月曆與當日紀錄皆可左右滑動切換（跟手拖曳、即時預覽前後內容）
+- 支出 / 收入 / 轉帳（轉帳同時建立兩筆關聯記錄，編輯 / 刪除皆連動）
 - 自訂分類（名稱、排序、icon）
 - 定期項目（每月 / 每週 / 每年自動產生）
-- 手機版：點擊紀錄開啟編輯，刪除在 modal 內
+- 點擊列表整列直接開啟編輯 modal，不額外顯示按鈕；刪除在 modal 內
 
 ### 投資
 - 持股總覽：市值、成本、損益、報酬率
@@ -51,6 +53,8 @@
 ### 對帳
 - 上傳信用卡帳單文字，自動比對消費記錄
 - 狀態：吻合 / 金額不符 / 無記錄
+- 帳戶明細與消費記錄頁資料完全一致（含轉帳雙帳戶顯示），可左右滑動切換月份
+- 帳戶餘額比對以帳戶 ID 為準，避免同名帳戶互相誤判
 
 ### 快速新增（手機）
 - `add.html` 獨立 PWA，可加到手機主畫面，全螢幕無瀏覽器 UI
@@ -149,7 +153,7 @@ npm run deploy   # 資料都在 Cloudflare D1，程式碼重新部署即可
 ```
 finance-app/
 ├── src/
-│   ├── index.ts                  # Hono app 入口（維護者版本）
+│   ├── index.ts                  # Hono app 入口（維護者版本，含 SPA 路由與 /add manifest 動態切換）
 │   ├── installer-entry.ts        # 用戶 Worker 模板（proxy 靜態檔案）
 │   ├── shortcut-generator.ts     # iOS 捷徑產生器（嵌入 token）
 │   ├── bplist.ts                 # Binary plist encoder（純 TS，無外部依賴）
@@ -166,23 +170,25 @@ finance-app/
 │       ├── installer.ts          # 安裝 API（呼叫 Cloudflare API）
 │       └── gmail.ts              # Gmail OAuth（備用）
 ├── public/
-│   ├── index.html                # 總攬
-│   ├── transactions.html         # 消費紀錄（含定期項目分頁）
-│   ├── investments.html          # 投資
-│   ├── reconcile.html            # 帳戶對帳
-│   ├── report.html               # 報表
-│   ├── add.html                  # 快速新增（手機主畫面 PWA）
+│   ├── index.html                # SPA shell：所有頁面共用的 <template> + splash + modal 結構
 │   ├── install.html              # 安裝頁面（給朋友）
 │   ├── shortcut-install.html     # iOS 捷徑安裝 + Token 複製
 │   ├── installer-worker.js       # 編譯好的 Worker bundle（自動生成）
-│   ├── add-manifest.json         # add.html 的 PWA manifest
 │   ├── manifest.json             # 主 App PWA manifest
+│   ├── _headers                  # 靜態資源 Cache-Control（Cloudflare 慣例，Worker 不執行時仍生效）
 │   ├── sw.js                     # Service worker（離線快取）
 │   ├── css/style.css
 │   └── js/
-│       ├── api.js                # API 呼叫 + 共用 helpers
-│       ├── txn-modal.js          # 共用新增/編輯交易 modal（wizard）
-│       └── calc-keyboard.js      # 計算機鍵盤
+│       ├── router.js             # SPA router：網址 ↔ 頁面對應，切頁時動態載入對應模組
+│       ├── api.js                # API 呼叫 + 共用 helpers（modal 開關、swr 快取、scroll lock）
+│       ├── txn-modal.js          # 共用新增/編輯支出收入/轉帳 modal
+│       └── pages/                # 各頁邏輯，router 進入頁面時呼叫 show({ signal })
+│           ├── overview.js       # 總攬
+│           ├── transactions.js   # 消費紀錄（月曆 + 日列表 + 定期項目）
+│           ├── investments.js    # 投資
+│           ├── reconcile.js      # 帳戶對帳
+│           ├── report.js         # 報表
+│           └── add.js            # 快速新增（手機主畫面 PWA，走 /add 路由）
 ├── scripts/
 │   ├── build-installer.js        # build installer bundle
 │   ├── generate-shortcut.js      # 產生靜態 .shortcut 檔

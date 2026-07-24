@@ -176,7 +176,7 @@ export function generateShortcut(token: string): Uint8Array {
       ['Content-Type', 'application/json']
     ], 'jsonBody'),
 
-    a.notify('✅ 記帳完成', textWithVars([{ v: 'txnName' }, ' NT$', { v: 'amount' }]))
+    a.notify('✅ 記帳完成', textWithVars([{ v: 'txnName' }, ' $', { v: 'amount' }]))
   ]
 
   const shortcut = {

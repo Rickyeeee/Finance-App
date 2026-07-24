@@ -1575,7 +1575,7 @@ async function processRecurring(db) {
       type: item.type,
       status: "\u5F85\u78BA\u8A8D",
       source: "\u5B9A\u671F",
-      note: fee > 0 ? `\u542B\u624B\u7E8C\u8CBB NT${fee.toLocaleString()}` : item.note,
+      note: fee > 0 ? `\u542B\u624B\u7E8C\u8CBB $${fee.toLocaleString()}` : item.note,
       transfer_id: null,
       recurring_id: item.id
     });
@@ -4487,88 +4487,6 @@ app2.get("/history", async (c) => {
   `).bind(startDate, today).all();
   return c.json({ ok: true, data: results, start: startDate, end: today });
 });
-app2.get("/history", async (c) => {
-  const range = c.req.query("range") ?? "month";
-  const taipeiNow = new Date(Date.now() + 8 * 60 * 60 * 1e3);
-  const today = taipeiNow.toISOString().slice(0, 10);
-  if (range === "week") {
-    const start2 = new Date(taipeiNow);
-    start2.setUTCDate(start2.getUTCDate() - 6);
-    const startDate2 = start2.toISOString().slice(0, 10);
-    const { results: results2 } = await c.env.DB.prepare(`
-      SELECT snapshot_date, total_investments FROM asset_history
-      WHERE snapshot_date >= ? AND snapshot_date <= ?
-      ORDER BY snapshot_date ASC
-    `).bind(startDate2, today).all();
-    return c.json({ ok: true, data: results2, start: startDate2, end: today });
-  }
-  if (range === "month") {
-    const start2 = new Date(taipeiNow);
-    start2.setUTCDate(start2.getUTCDate() - 29);
-    const startDate2 = start2.toISOString().slice(0, 10);
-    const { results: results2 } = await c.env.DB.prepare(`
-      SELECT snapshot_date, total_investments FROM asset_history
-      WHERE snapshot_date >= ? AND snapshot_date <= ?
-      ORDER BY snapshot_date ASC
-    `).bind(startDate2, today).all();
-    return c.json({ ok: true, data: results2, start: startDate2, end: today });
-  }
-  const start = new Date(taipeiNow);
-  start.setUTCDate(start.getUTCDate() - 364);
-  const startDate = start.toISOString().slice(0, 10);
-  const { results } = await c.env.DB.prepare(`
-    SELECT snapshot_date, total_investments
-    FROM asset_history
-    WHERE snapshot_date IN (
-      SELECT MAX(snapshot_date) FROM asset_history
-      WHERE snapshot_date >= ? AND snapshot_date <= ?
-      GROUP BY substr(snapshot_date, 1, 7)
-    )
-    ORDER BY snapshot_date ASC
-  `).bind(startDate, today).all();
-  return c.json({ ok: true, data: results, start: startDate, end: today });
-});
-app2.get("/history", async (c) => {
-  const range = c.req.query("range") ?? "month";
-  const taipeiNow = new Date(Date.now() + 8 * 60 * 60 * 1e3);
-  const today = taipeiNow.toISOString().slice(0, 10);
-  if (range === "week") {
-    const start2 = new Date(taipeiNow);
-    start2.setUTCDate(start2.getUTCDate() - 6);
-    const startDate2 = start2.toISOString().slice(0, 10);
-    const { results: results2 } = await c.env.DB.prepare(`
-      SELECT snapshot_date, total_investments FROM asset_history
-      WHERE snapshot_date >= ? AND snapshot_date <= ?
-      ORDER BY snapshot_date ASC
-    `).bind(startDate2, today).all();
-    return c.json({ ok: true, data: results2, start: startDate2, end: today });
-  }
-  if (range === "month") {
-    const start2 = new Date(taipeiNow);
-    start2.setUTCDate(start2.getUTCDate() - 29);
-    const startDate2 = start2.toISOString().slice(0, 10);
-    const { results: results2 } = await c.env.DB.prepare(`
-      SELECT snapshot_date, total_investments FROM asset_history
-      WHERE snapshot_date >= ? AND snapshot_date <= ?
-      ORDER BY snapshot_date ASC
-    `).bind(startDate2, today).all();
-    return c.json({ ok: true, data: results2, start: startDate2, end: today });
-  }
-  const start = new Date(taipeiNow);
-  start.setUTCDate(start.getUTCDate() - 364);
-  const startDate = start.toISOString().slice(0, 10);
-  const { results } = await c.env.DB.prepare(`
-    SELECT snapshot_date, total_investments
-    FROM asset_history
-    WHERE snapshot_date IN (
-      SELECT MAX(snapshot_date) FROM asset_history
-      WHERE snapshot_date >= ? AND snapshot_date <= ?
-      GROUP BY substr(snapshot_date, 1, 7)
-    )
-    ORDER BY snapshot_date ASC
-  `).bind(startDate, today).all();
-  return c.json({ ok: true, data: results, start: startDate, end: today });
-});
 app2.get("/trades", async (c) => {
   const symbol = c.req.query("symbol");
   const trades = await getInvestmentTrades(c.env.DB, symbol);
@@ -4579,11 +4497,27 @@ app2.get("/pnl", async (c) => {
   const total = results.reduce((s, t) => s + (t.realized_pnl ?? 0), 0);
   return c.json({ ok: true, data: results, total_realized_pnl: total });
 });
-app2.get("/pnl", async (c) => {
-  const { results } = await c.env.DB.prepare(`SELECT * FROM investment_trades WHERE type = '\u8CE3\u51FA' ORDER BY date DESC, created_at DESC`).all();
-  const total = results.reduce((s, t) => s + (t.realized_pnl ?? 0), 0);
-  return c.json({ ok: true, data: results, total_realized_pnl: total });
-});
+async function recalcPosition(db, symbol, account) {
+  const trades = await getInvestmentTrades(db, symbol, account);
+  const sorted = [...trades].sort((a, b) => a.date.localeCompare(b.date) || a.created_at.localeCompare(b.created_at));
+  let shares = 0, avgCost = 0, totalRealizedPnl = 0;
+  for (const t of sorted) {
+    if (t.type === "\u8CB7\u5165") {
+      const ns = shares + t.shares;
+      avgCost = ns > 0 ? (shares * avgCost + t.shares * t.price) / ns : t.price;
+      shares = ns;
+    } else {
+      const pnl = Math.round((t.price - avgCost) * t.shares);
+      if (pnl !== (t.realized_pnl ?? 0)) {
+        await db.prepare("UPDATE investment_trades SET realized_pnl = ? WHERE id = ?").bind(pnl, t.id).run();
+      }
+      totalRealizedPnl += pnl;
+      shares = Math.max(0, shares - t.shares);
+    }
+  }
+  return { shares, avgCost, totalRealizedPnl };
+}
+__name(recalcPosition, "recalcPosition");
 app2.post("/trades", async (c) => {
   const body = await c.req.json();
   if (!body.symbol || !body.type || !body.shares || !body.price || !body.date) {
@@ -4594,11 +4528,10 @@ app2.post("/trades", async (c) => {
   }
   const amount = Math.round(body.shares * body.price);
   const fee = body.fee ?? 0;
-  const investments = await getInvestments(c.env.DB);
   const account = body.account ?? "";
-  const inv = investments.find((i) => i.symbol === body.symbol && i.account === account);
   const today = body.date;
-  const tradeRealizedPnl = body.type === "\u8CE3\u51FA" && inv ? Math.round((body.price - inv.avg_cost) * body.shares) - fee : 0;
+  const investments = await getInvestments(c.env.DB);
+  const inv = investments.find((i) => i.symbol === body.symbol && i.account === account);
   let tradeTransferId = null;
   if (body.type === "\u8CE3\u51FA" && body.to_account && body.account) {
     const proceeds = amount - fee;
@@ -4621,58 +4554,36 @@ app2.post("/trades", async (c) => {
     price: body.price,
     amount,
     date: body.date,
-    account: body.account ?? "",
+    account,
     to_account: body.type === "\u8CE3\u51FA" ? body.to_account ?? null : null,
-    realized_pnl: tradeRealizedPnl,
+    realized_pnl: 0,
     transfer_id: tradeTransferId,
     note: body.note ?? null
   });
-  if (inv) {
-    let newShares;
-    let newAvgCost;
-    let newRealizedPnl = inv.realized_pnl ?? 0;
-    if (body.type === "\u8CB7\u5165") {
-      newShares = inv.shares + body.shares;
-      newAvgCost = newShares > 0 ? (inv.shares * inv.avg_cost + body.shares * body.price) / newShares : body.price;
-    } else {
-      newShares = Math.max(0, inv.shares - body.shares);
-      newAvgCost = inv.avg_cost;
-      newRealizedPnl += tradeRealizedPnl;
-    }
-    const currentPerShare = inv.shares > 0 ? inv.current_price || inv.market_value / inv.shares : body.price;
-    const newMarketValue = Math.round(newShares * currentPerShare);
-    const newTotalCost = Math.round(newShares * newAvgCost);
+  if (inv || body.type === "\u8CB7\u5165") {
+    const { shares, avgCost, totalRealizedPnl } = await recalcPosition(c.env.DB, body.symbol, account);
+    const currentPerShare = inv ? inv.shares > 0 ? inv.current_price || inv.market_value / inv.shares : body.price : body.price;
+    const newMarketValue = Math.round(shares * currentPerShare);
+    const newTotalCost = Math.round(shares * avgCost);
     const newProfitLoss = newMarketValue - newTotalCost;
     const newReturnRate = newTotalCost > 0 ? Math.round(newProfitLoss / newTotalCost * 1e4) / 100 : 0;
-    if (newShares === 0 && body.type === "\u8CE3\u51FA") {
+    if (shares === 0 && inv) {
       await deleteInvestment(c.env.DB, inv.id);
     } else {
       await upsertInvestment(c.env.DB, {
-        ...inv,
-        shares: newShares,
-        avg_cost: Math.round(newAvgCost * 100) / 100,
+        ...inv ?? { current_price: body.price, previous_close: 0 },
+        name: body.name,
+        symbol: body.symbol,
+        account,
+        shares,
+        avg_cost: Math.round(avgCost * 100) / 100,
         market_value: newMarketValue,
         profit_loss: newProfitLoss,
         return_rate: newReturnRate,
-        realized_pnl: Math.round(newRealizedPnl),
+        realized_pnl: Math.round(totalRealizedPnl),
         updated_at: today
       });
     }
-  } else if (body.type === "\u8CB7\u5165") {
-    await upsertInvestment(c.env.DB, {
-      name: body.name,
-      symbol: body.symbol,
-      shares: body.shares,
-      avg_cost: body.price,
-      market_value: amount,
-      profit_loss: 0,
-      return_rate: 0,
-      realized_pnl: 0,
-      current_price: body.price,
-      previous_close: 0,
-      updated_at: today,
-      account: body.account ?? ""
-    });
   }
   return c.json({ ok: true, id });
 });
@@ -4692,25 +4603,10 @@ app2.patch("/trades/:id", async (c) => {
     "UPDATE investment_trades SET type=?, shares=?, price=?, amount=?, date=?, account=?, note=? WHERE id=?"
   ).bind(newType, newShares, newPrice, newAmount, newDate, newAccount, newNote ?? null, id).run();
   const effectiveAccount = newAccount || trade.account;
-  const allForPair = await getInvestmentTrades(c.env.DB, trade.symbol, effectiveAccount);
   const allInv = await getInvestments(c.env.DB);
   const inv = allInv.find((i) => i.symbol === trade.symbol && i.account === effectiveAccount);
   if (!inv) return c.json({ ok: true });
-  const remaining = allForPair.map(
-    (t) => t.id === id ? { ...t, type: newType, shares: newShares, price: newPrice, date: newDate } : t
-  );
-  const sorted = [...remaining].sort((a, b) => a.date.localeCompare(b.date));
-  let shares = 0, avgCost = 0, realizedPnl = 0;
-  for (const t of sorted) {
-    if (t.type === "\u8CB7\u5165") {
-      const ns = shares + t.shares;
-      avgCost = ns > 0 ? (shares * avgCost + t.shares * t.price) / ns : t.price;
-      shares = ns;
-    } else {
-      realizedPnl += (t.price - avgCost) * t.shares;
-      shares = Math.max(0, shares - t.shares);
-    }
-  }
+  const { shares, avgCost, totalRealizedPnl } = await recalcPosition(c.env.DB, trade.symbol, effectiveAccount);
   const currentPerShare = inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : 0);
   const newMarketValue = Math.round(shares * currentPerShare);
   const newTotalCost = Math.round(shares * avgCost);
@@ -4723,111 +4619,7 @@ app2.patch("/trades/:id", async (c) => {
     market_value: newMarketValue,
     profit_loss: newProfitLoss,
     return_rate: newReturnRate,
-    realized_pnl: Math.round(realizedPnl),
-    updated_at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)
-  });
-  return c.json({ ok: true });
-});
-app2.patch("/trades/:id", async (c) => {
-  const id = c.req.param("id");
-  const body = await c.req.json();
-  const trade = await c.env.DB.prepare("SELECT * FROM investment_trades WHERE id = ?").bind(id).first();
-  if (!trade) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u6B64\u8A18\u9304" }, 404);
-  const newType = body.type ?? trade.type;
-  const newShares = body.shares ?? trade.shares;
-  const newPrice = body.price ?? trade.price;
-  const newDate = body.date ?? trade.date;
-  const newAccount = body.account ?? trade.account;
-  const newNote = "note" in body ? body.note : trade.note;
-  const newAmount = Math.round(newShares * newPrice);
-  await c.env.DB.prepare(
-    "UPDATE investment_trades SET type=?, shares=?, price=?, amount=?, date=?, account=?, note=? WHERE id=?"
-  ).bind(newType, newShares, newPrice, newAmount, newDate, newAccount, newNote ?? null, id).run();
-  const effectiveAccount = newAccount || trade.account;
-  const allForPair = await getInvestmentTrades(c.env.DB, trade.symbol, effectiveAccount);
-  const allInv = await getInvestments(c.env.DB);
-  const inv = allInv.find((i) => i.symbol === trade.symbol && i.account === effectiveAccount);
-  if (!inv) return c.json({ ok: true });
-  const remaining = allForPair.map(
-    (t) => t.id === id ? { ...t, type: newType, shares: newShares, price: newPrice, date: newDate } : t
-  );
-  const sorted = [...remaining].sort((a, b) => a.date.localeCompare(b.date));
-  let shares = 0, avgCost = 0, realizedPnl = 0;
-  for (const t of sorted) {
-    if (t.type === "\u8CB7\u5165") {
-      const ns = shares + t.shares;
-      avgCost = ns > 0 ? (shares * avgCost + t.shares * t.price) / ns : t.price;
-      shares = ns;
-    } else {
-      realizedPnl += (t.price - avgCost) * t.shares;
-      shares = Math.max(0, shares - t.shares);
-    }
-  }
-  const currentPerShare = inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : 0);
-  const newMarketValue = Math.round(shares * currentPerShare);
-  const newTotalCost = Math.round(shares * avgCost);
-  const newProfitLoss = newMarketValue - newTotalCost;
-  const newReturnRate = newTotalCost > 0 ? Math.round(newProfitLoss / newTotalCost * 1e4) / 100 : 0;
-  await upsertInvestment(c.env.DB, {
-    ...inv,
-    shares,
-    avg_cost: Math.round(avgCost * 100) / 100,
-    market_value: newMarketValue,
-    profit_loss: newProfitLoss,
-    return_rate: newReturnRate,
-    realized_pnl: Math.round(realizedPnl),
-    updated_at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)
-  });
-  return c.json({ ok: true });
-});
-app2.patch("/trades/:id", async (c) => {
-  const id = c.req.param("id");
-  const body = await c.req.json();
-  const trade = await c.env.DB.prepare("SELECT * FROM investment_trades WHERE id = ?").bind(id).first();
-  if (!trade) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u6B64\u8A18\u9304" }, 404);
-  const newType = body.type ?? trade.type;
-  const newShares = body.shares ?? trade.shares;
-  const newPrice = body.price ?? trade.price;
-  const newDate = body.date ?? trade.date;
-  const newAccount = body.account ?? trade.account;
-  const newNote = "note" in body ? body.note : trade.note;
-  const newAmount = Math.round(newShares * newPrice);
-  await c.env.DB.prepare(
-    "UPDATE investment_trades SET type=?, shares=?, price=?, amount=?, date=?, account=?, note=? WHERE id=?"
-  ).bind(newType, newShares, newPrice, newAmount, newDate, newAccount, newNote ?? null, id).run();
-  const effectiveAccount = newAccount || trade.account;
-  const allForPair = await getInvestmentTrades(c.env.DB, trade.symbol, effectiveAccount);
-  const allInv = await getInvestments(c.env.DB);
-  const inv = allInv.find((i) => i.symbol === trade.symbol && i.account === effectiveAccount);
-  if (!inv) return c.json({ ok: true });
-  const remaining = allForPair.map(
-    (t) => t.id === id ? { ...t, type: newType, shares: newShares, price: newPrice, date: newDate } : t
-  );
-  const sorted = [...remaining].sort((a, b) => a.date.localeCompare(b.date));
-  let shares = 0, avgCost = 0, realizedPnl = 0;
-  for (const t of sorted) {
-    if (t.type === "\u8CB7\u5165") {
-      const ns = shares + t.shares;
-      avgCost = ns > 0 ? (shares * avgCost + t.shares * t.price) / ns : t.price;
-      shares = ns;
-    } else {
-      realizedPnl += (t.price - avgCost) * t.shares;
-      shares = Math.max(0, shares - t.shares);
-    }
-  }
-  const currentPerShare = inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : 0);
-  const newMarketValue = Math.round(shares * currentPerShare);
-  const newTotalCost = Math.round(shares * avgCost);
-  const newProfitLoss = newMarketValue - newTotalCost;
-  const newReturnRate = newTotalCost > 0 ? Math.round(newProfitLoss / newTotalCost * 1e4) / 100 : 0;
-  await upsertInvestment(c.env.DB, {
-    ...inv,
-    shares,
-    avg_cost: Math.round(avgCost * 100) / 100,
-    market_value: newMarketValue,
-    profit_loss: newProfitLoss,
-    return_rate: newReturnRate,
-    realized_pnl: Math.round(realizedPnl),
+    realized_pnl: Math.round(totalRealizedPnl),
     updated_at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)
   });
   return c.json({ ok: true });
@@ -4836,33 +4628,14 @@ app2.delete("/trades/:id", async (c) => {
   const id = c.req.param("id");
   const trade = await c.env.DB.prepare("SELECT * FROM investment_trades WHERE id = ?").bind(id).first();
   if (!trade) return c.json({ ok: false, error: "\u627E\u4E0D\u5230\u6B64\u8A18\u9304" }, 404);
-  const allForPair = await getInvestmentTrades(c.env.DB, trade.symbol, trade.account);
   const allInv = await getInvestments(c.env.DB);
+  const inv = allInv.find((i) => i.symbol === trade.symbol && i.account === trade.account);
   await deleteInvestmentTrade(c.env.DB, id);
   if (trade.transfer_id) {
     await deleteTransferPair(c.env.DB, trade.transfer_id);
   }
-  const remaining = allForPair.filter((t) => t.id !== id);
-  const inv = allInv.find((i) => i.symbol === trade.symbol && i.account === trade.account);
   const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-  if (remaining.length === 0) {
-    if (inv) await deleteInvestment(c.env.DB, inv.id);
-    return c.json({ ok: true });
-  }
-  const sorted = [...remaining].sort((a, b) => a.date.localeCompare(b.date));
-  let shares = 0;
-  let avgCost = 0;
-  let realizedPnl = 0;
-  for (const t of sorted) {
-    if (t.type === "\u8CB7\u5165") {
-      const newShares = shares + t.shares;
-      avgCost = newShares > 0 ? (shares * avgCost + t.shares * t.price) / newShares : t.price;
-      shares = newShares;
-    } else {
-      realizedPnl += (t.price - avgCost) * t.shares;
-      shares = Math.max(0, shares - t.shares);
-    }
-  }
+  const { shares, avgCost, totalRealizedPnl } = await recalcPosition(c.env.DB, trade.symbol, trade.account);
   if (shares === 0) {
     if (inv) await deleteInvestment(c.env.DB, inv.id);
     return c.json({ ok: true });
@@ -4886,7 +4659,7 @@ app2.delete("/trades/:id", async (c) => {
     market_value: newMarketValue,
     profit_loss: newProfitLoss,
     return_rate: newReturnRate,
-    realized_pnl: Math.round(realizedPnl),
+    realized_pnl: Math.round(totalRealizedPnl),
     updated_at: today
   });
   return c.json({ ok: true });
@@ -4972,7 +4745,7 @@ app3.get("/daily", async (c) => {
   const total = txns.reduce((s, t) => s + t.amount, 0);
   const lines = txns.map((t) => `\u2022 ${t.name} $${t.amount.toLocaleString()}\uFF08${t.category}\uFF09`);
   const summaryText = txns.length ? `\u{1F4CA} ${date} \u6D88\u8CBB\u6458\u8981
-\u5171 ${txns.length} \u7B46\uFF0C\u7E3D\u91D1\u984D NT$${total.toLocaleString()}
+\u5171 ${txns.length} \u7B46\uFF0C\u7E3D\u91D1\u984D $${total.toLocaleString()}
 
 ${lines.join("\n")}
 
@@ -5439,7 +5212,7 @@ app7.patch("/:id/future", async (c) => {
       if (templateData[f] !== void 0) txnData[f] = templateData[f];
     }
     if (templateData.amount !== void 0) txnData.amount = templateData.amount + fee;
-    txnData.note = fee > 0 ? `\u542B\u624B\u7E8C\u8CBB NT$${fee.toLocaleString()}` : templateData.note ?? null;
+    txnData.note = fee > 0 ? `\u542B\u624B\u7E8C\u8CBB $${fee.toLocaleString()}` : templateData.note ?? null;
     const fields = Object.keys(txnData);
     if (fields.length) {
       const sets = fields.map((f) => `${f} = ?`).join(", ");
@@ -5481,6 +5254,28 @@ app7.post("/:id/generate", async (c) => {
   const accountId = assetRow?.id ?? null;
   const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
   const body = await c.req.json().catch(() => ({}));
+  const onlyDate = body.only_date;
+  if (onlyDate) {
+    const existing = await c.env.DB.prepare(
+      "SELECT id FROM transactions WHERE recurring_id = ? AND date = ? LIMIT 1"
+    ).bind(id, onlyDate).first();
+    if (existing) return c.json({ ok: true, id: existing.id, count: 0 });
+    const txnId = await createTransaction(c.env.DB, {
+      name: item.name,
+      amount: item.amount + fee,
+      date: onlyDate,
+      category: item.category,
+      card: cardName,
+      account_id: accountId,
+      type: item.type,
+      status: "\u5F85\u78BA\u8A8D",
+      source: "\u5B9A\u671F",
+      note: fee > 0 ? `\u542B\u624B\u7E8C\u8CBB $${fee.toLocaleString()}` : item.note ?? null,
+      transfer_id: null,
+      recurring_id: item.id
+    });
+    return c.json({ ok: true, id: txnId, count: 1 });
+  }
   const until = body.until_date ?? today;
   let nd = item.next_date;
   let count3 = 0;
@@ -5499,7 +5294,7 @@ app7.post("/:id/generate", async (c) => {
         type: item.type,
         status: "\u5F85\u78BA\u8A8D",
         source: "\u5B9A\u671F",
-        note: fee > 0 ? `\u542B\u624B\u7E8C\u8CBB NT$${fee.toLocaleString()}` : item.note ?? null,
+        note: fee > 0 ? `\u542B\u624B\u7E8C\u8CBB $${fee.toLocaleString()}` : item.note ?? null,
         transfer_id: null,
         recurring_id: item.id
       });
@@ -5650,9 +5445,10 @@ app9.all("*", async (c) => {
   try {
     const res = await fetch(origin + url.pathname + url.search);
     const contentType = res.headers.get("Content-Type") || "text/html; charset=utf-8";
+    const cacheControl = res.headers.get("Cache-Control") || "no-store";
     return new Response(res.body, {
       status: res.status,
-      headers: { "Content-Type": contentType }
+      headers: { "Content-Type": contentType, "Cache-Control": cacheControl }
     });
   } catch {
     return c.text("\u8F09\u5165\u5931\u6557\uFF0C\u8ACB\u7A0D\u5F8C\u518D\u8A66", 502);
@@ -5707,7 +5503,7 @@ async function runNightlyJob(env2) {
   const { data: txns } = await getTransactions(DB, { date: today, limit: 100 });
   const totalAmount = txns.reduce((s, t) => s + t.amount, 0);
   const summaryText = txns.length ? `\u{1F4CA} ${today} \u6D88\u8CBB\u6458\u8981
-\u5171 ${txns.length} \u7B46\uFF0C\u7E3D\u91D1\u984D NT$${totalAmount.toLocaleString()}` : `\u{1F4CA} ${today} \u6D88\u8CBB\u6458\u8981
+\u5171 ${txns.length} \u7B46\uFF0C\u7E3D\u91D1\u984D $${totalAmount.toLocaleString()}` : `\u{1F4CA} ${today} \u6D88\u8CBB\u6458\u8981
 \u4ECA\u65E5\u7121\u6D88\u8CBB\u8A18\u9304`;
   await upsertDailySummary(DB, today, {
     total_amount: totalAmount,

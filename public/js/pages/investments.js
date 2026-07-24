@@ -1,4 +1,4 @@
-import { api, toast, formatMoney, initAppName, swr } from '/js/api.js'
+import { api, toast, initAppName, swr } from '/js/api.js'
 
 // 此模組由 build-spa 從 investments.html 抽出，router 每次進入頁面時呼叫 show()
 // Chart 實例放模組層級：重新進入頁面時能 destroy 前一次的實例
@@ -41,7 +41,6 @@ let allTrades = {}
 let brokerAccountNames = []
 let lookupTimer = null
 let currentGrowthRange = 'month'
-let editingTradeId = null
 let currentDetailId = null   // investment.id，唯一識別 (symbol, account) 組合
 
 const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
@@ -150,30 +149,45 @@ window.refreshAll = async function(silent = false) {
   }
 }
 
+// 台股看盤習慣：漲(正)用紅、跌(負)用綠 —— 跟全站其他頁面（綠=賺/收入、紅=賠/支出）相反，僅投資頁適用
+function twColor(v) { return v >= 0 ? 'var(--danger)' : 'var(--success)' }
+
+// 投資頁不顯示 $ 貨幣符號，只顯示數字（跟全站其他頁面用 formatMoney 不同）
+function fmtNum(n) {
+  if (n === null || n === undefined) return '–'
+  return Math.abs(n).toLocaleString()
+}
+
+// 最上面 4 張摘要卡例外：保留 $ 符號
+function fmtTop(n) {
+  const s = fmtNum(n)
+  return s === '–' ? s : '$' + s
+}
+
 // ── 摘要卡片 ──────────────────────────────
 function renderSummary(summary) {
-  document.getElementById('total-value').textContent = formatMoney(summary.total_value)
-  document.getElementById('total-cost-sub').textContent = `成本 ${formatMoney(Math.round(summary.total_cost))}`
+  document.getElementById('total-value').textContent = fmtTop(summary.total_value)
+  document.getElementById('total-cost-sub').textContent = `成本 ${fmtNum(Math.round(summary.total_cost))}`
 
   const dailyEl = document.getElementById('total-daily-pnl')
   if (summary.total_daily_pnl !== 0) {
-    dailyEl.textContent = formatMoney(summary.total_daily_pnl)
-    dailyEl.style.color = summary.total_daily_pnl >= 0 ? 'var(--success)' : 'var(--danger)'
+    dailyEl.textContent = fmtTop(summary.total_daily_pnl)
+    dailyEl.style.color = twColor(summary.total_daily_pnl)
   } else {
     dailyEl.textContent = '–'
     dailyEl.style.color = 'var(--text-muted)'
   }
 
   const pnlEl = document.getElementById('total-pnl')
-  pnlEl.textContent = formatMoney(summary.total_profit_loss)
-  pnlEl.style.color = summary.total_profit_loss >= 0 ? 'var(--success)' : 'var(--danger)'
+  pnlEl.textContent = fmtTop(summary.total_profit_loss)
+  pnlEl.style.color = twColor(summary.total_profit_loss)
   document.getElementById('overall-return-sub').textContent = Math.abs(summary.overall_return).toFixed(2) + '%'
 
   const realEl = document.getElementById('total-realized-pnl')
   const rp = summary.total_realized_pnl ?? 0
   if (rp !== 0) {
-    realEl.textContent = formatMoney(rp)
-    realEl.style.color = rp >= 0 ? 'var(--success)' : 'var(--danger)'
+    realEl.textContent = fmtTop(rp)
+    realEl.style.color = twColor(rp)
   } else {
     realEl.textContent = '–'
     realEl.style.color = 'var(--text-muted)'
@@ -205,14 +219,14 @@ function renderInvestmentCards() {
   for (const [account, invs] of Object.entries(groups)) {
     const groupValue = invs.reduce((s, i) => s + i.market_value, 0)
     const groupPnl = invs.reduce((s, i) => s + i.profit_loss, 0)
-    const pnlColor = groupPnl >= 0 ? 'var(--success)' : 'var(--danger)'
+    const pnlColor = twColor(groupPnl)
 
     html += `<div class="broker-section">
       <div class="broker-header">
         <span class="broker-name">🏦 ${escHtml(account)}</span>
         <div class="broker-summary">
-          <span>${formatMoney(groupValue)}</span>
-          <span style="color:${pnlColor}">${formatMoney(groupPnl)}</span>
+          <span>${fmtNum(groupValue)}</span>
+          <span style="color:${pnlColor}">${fmtNum(groupPnl)}</span>
         </div>
       </div>`
 
@@ -227,7 +241,7 @@ function renderInvestmentCards() {
 function renderInvCard(inv, totalPortfolio = 0) {
   const perShare = inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : 0)
   const priceStr = perShare > 0
-    ? '$' + perShare.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    ? perShare.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '–'
 
   const s = v => v >= 0 ? '+' : '-'   // 正負號，formatMoney 已用 Math.abs
@@ -237,16 +251,16 @@ function renderInvCard(inv, totalPortfolio = 0) {
   if (inv.current_price && inv.previous_close && inv.previous_close > 0) {
     const rate = (inv.current_price - inv.previous_close) / inv.previous_close * 100
     dailyPnl = Math.round((inv.current_price - inv.previous_close) * inv.shares)
-    dailyColor = rate >= 0 ? 'var(--success)' : 'var(--danger)'
+    dailyColor = twColor(rate)
     dailyRateStr = `${Math.abs(rate).toFixed(2)}%`
-    dailyPnlStr = formatMoney(dailyPnl)
+    dailyPnlStr = fmtNum(dailyPnl)
   }
 
   // 市值占比
   const weight = totalPortfolio > 0 ? (inv.market_value / totalPortfolio * 100).toFixed(1) : '–'
 
   // 累計損益
-  const pnlColor = inv.profit_loss >= 0 ? 'var(--success)' : 'var(--danger)'
+  const pnlColor = twColor(inv.profit_loss)
 
   return `<div class="inv-card" onclick="openDetail('${escJs(inv.id)}')">
 
@@ -271,7 +285,7 @@ function renderInvCard(inv, totalPortfolio = 0) {
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="color:var(--text-muted)">市值</span>
         <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-weight:600;color:var(--accent)">${formatMoney(inv.market_value)}</span>
+          <span style="font-weight:600;color:var(--accent)">${fmtNum(inv.market_value)}</span>
           <span style="font-size:11px;color:var(--text-muted);background:var(--surface2);padding:1px 6px;border-radius:4px">${weight}%</span>
         </div>
       </div>
@@ -285,7 +299,7 @@ function renderInvCard(inv, totalPortfolio = 0) {
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="color:var(--text-muted)">累計損益</span>
         <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-weight:600;color:${pnlColor}">${formatMoney(inv.profit_loss)}</span>
+          <span style="font-weight:600;color:${pnlColor}">${fmtNum(inv.profit_loss)}</span>
           <span style="font-size:11px;color:${pnlColor};background:rgba(0,0,0,0.2);padding:1px 6px;border-radius:4px">${Math.abs(inv.return_rate).toFixed(2)}%</span>
         </div>
       </div>
@@ -312,81 +326,117 @@ function renderDetail(inv) {
   if (!inv) return
   const symbol = inv.symbol
 
-  document.getElementById('detail-title').textContent = inv.name
+  document.getElementById('detail-title').textContent = `${inv.symbol} ${inv.name}`
 
-  const trades = allTrades[symbol + '|' + inv.account] ?? []
+  const trades = (allTrades[symbol + '|' + inv.account] ?? []).slice().sort((a, b) => b.date.localeCompare(a.date))
   const totalCost = Math.round(inv.shares * inv.avg_cost)
   const perShare = inv.current_price || (inv.shares > 0 ? inv.market_value / inv.shares : 0)
-  const pnlColor = inv.profit_loss >= 0 ? 'var(--success)' : 'var(--danger)'
+  const pnlColor = twColor(inv.profit_loss)
   const priceDisplay = perShare > 0
-    ? '$' + perShare.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    ? perShare.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '–'
 
   let dailyRow = ''
   if (inv.current_price && inv.previous_close) {
     const dailyPnl = Math.round((inv.current_price - inv.previous_close) * inv.shares)
     const dailyRate = ((inv.current_price - inv.previous_close) / inv.previous_close * 100).toFixed(2)
-    const dColor = dailyPnl >= 0 ? 'var(--success)' : 'var(--danger)'
+    const dColor = twColor(dailyPnl)
     dailyRow = `<div class="detail-pnl-row">
       <span class="detail-pnl-label">今日損益</span>
-      <span style="color:${dColor};font-weight:700">${formatMoney(dailyPnl)}<span style="font-size:12px;font-weight:400;margin-left:6px">${Math.abs(parseFloat(dailyRate)).toFixed(2)}%</span></span>
+      <span style="color:${dColor};font-weight:700">${fmtNum(dailyPnl)}<span style="font-size:12px;font-weight:400;margin-left:6px">${Math.abs(parseFloat(dailyRate)).toFixed(2)}%</span></span>
     </div>`
   }
+  const realizedPnl = inv.realized_pnl ?? 0
+  const extraPnlBlock = (dailyRow || realizedPnl !== 0) ? `
+    <div class="detail-pnl-block">
+      ${dailyRow}
+      ${realizedPnl !== 0 ? `<div class="detail-pnl-row">
+        <span class="detail-pnl-label">已實現損益</span>
+        <span style="color:${twColor(realizedPnl)};font-weight:700">${fmtNum(realizedPnl)}</span>
+      </div>` : ''}
+    </div>` : ''
 
+  // 每筆明細的「現值/損益」：買入＝以目前市價估算這筆的現值與損益；賣出＝賣出金額與這筆已實現損益
   const tradesHtml = trades.length
-    ? trades.map(t => `
-      <div class="trade-row">
-        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
-          <span class="trade-type type-${t.type === '買入' ? 'buy' : 'sell'}">${t.type}</span>
-          <span>${t.shares.toLocaleString()} 股 @ $${t.price.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
-          <div style="text-align:right">
-            <div style="font-weight:600">${formatMoney(t.amount)}</div>
-            <div style="font-size:11px;color:var(--text-muted)">${t.date}</div>
+    ? trades.map(t => {
+        const [y, m, d] = t.date.split('-')
+        const isBuy = t.type === '買入'
+        const priceStr = Number(t.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        let rightMain, rightSub, rightColor
+        if (isBuy) {
+          const curVal = Math.round(t.shares * perShare)
+          const pnl = curVal - Math.round(t.amount)
+          rightMain = fmtNum(curVal)
+          rightColor = twColor(pnl)
+          rightSub = fmtNum(pnl)
+        } else {
+          const rpnl = t.realized_pnl ?? 0
+          rightMain = fmtNum(t.amount)
+          rightColor = twColor(rpnl)
+          rightSub = fmtNum(rpnl)
+        }
+        return `<div class="trade-row-v2">
+          <div class="tr-date">${m}/${d}<br>${y}</div>
+          <span class="trade-type type-${isBuy ? 'buy' : 'sell'}">${t.type}</span>
+          <div class="tr-col">
+            <div class="tr-col-main">${t.shares.toLocaleString()} 股</div>
+            <div class="tr-col-sub">${priceStr}</div>
           </div>
-          <button class="trade-edit" onclick="openEditTradeModal('${t.id}')" title="編輯">✏️</button>
-          <button class="trade-del" onclick="deleteTrade('${t.id}','${symbol}')" title="刪除">🗑</button>
-        </div>
-      </div>`).join('')
+          <div class="tr-col tr-col-right">
+            <div class="tr-col-main">${rightMain}</div>
+            <div class="tr-col-sub" style="color:${rightColor}">${rightSub}</div>
+          </div>
+          <div class="tr-actions">
+            <button class="trade-del" onclick="deleteTrade('${t.id}','${symbol}')" title="刪除" style="font-size:14px;padding:2px 6px">🗑</button>
+          </div>
+        </div>`
+      }).join('')
     : '<div style="padding:20px 0;font-size:14px;color:var(--text-muted);text-align:center">尚無交易記錄</div>'
 
   document.getElementById('detail-body').innerHTML = `
-    <div style="color:var(--text-muted);font-size:13px;margin-bottom:20px">🏦 ${escHtml(inv.account)}</div>
+    <div style="color:var(--text-muted);font-size:13px;margin-bottom:4px">🏦 ${escHtml(inv.account)}</div>
 
-    <div class="card" style="margin-bottom:16px">
-      <table class="detail-table">
-        <tr><td>代號</td><td><span style="font-family:monospace;font-weight:700;color:var(--accent)">${inv.symbol}</span></td></tr>
-        <tr><td>總股數</td><td>${inv.shares.toLocaleString()} 股</td></tr>
-        <tr><td>平均成本</td><td>$${inv.avg_cost.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>
-        <tr><td>市價</td><td>${priceDisplay}</td></tr>
-        <tr><td>總成本</td><td>${formatMoney(totalCost)}</td></tr>
-        <tr><td>市值</td><td><strong>${formatMoney(inv.market_value)}</strong></td></tr>
-      </table>
-    </div>
-
-    <div class="detail-pnl-block">
-      <div class="detail-pnl-row">
-        <span class="detail-pnl-label">未實現損益</span>
-        <span style="color:${pnlColor};font-weight:700">${formatMoney(inv.profit_loss)}<span style="font-size:12px;font-weight:400;margin-left:6px">${Math.abs(inv.return_rate).toFixed(2)}%</span></span>
+    <div class="detail-stat-grid">
+      <div>
+        <div class="stat-label">預估損益</div>
+        <div class="stat-value lg" style="color:${pnlColor}">${fmtNum(inv.profit_loss)}</div>
       </div>
-      ${dailyRow}
-      ${(() => {
-        const rp = inv.realized_pnl ?? 0
-        if (rp === 0) return ''
-        const rpColor = rp >= 0 ? 'var(--success)' : 'var(--danger)'
-        return `<div class="detail-pnl-row">
-          <span class="detail-pnl-label">已實現損益</span>
-          <span style="color:${rpColor};font-weight:700">${formatMoney(rp)}</span>
-        </div>`
-      })()}
+      <div>
+        <div class="stat-label">報酬率</div>
+        <div class="stat-value lg" style="color:${pnlColor}">${Math.abs(inv.return_rate).toFixed(2)}%</div>
+      </div>
+      <div>
+        <div class="stat-label">庫存（股）</div>
+        <div class="stat-value">${inv.shares.toLocaleString()}</div>
+      </div>
+      <div>
+        <div class="stat-label">付出成本</div>
+        <div class="stat-value">${fmtNum(totalCost)}</div>
+      </div>
+      <div>
+        <div class="stat-label">現價</div>
+        <div class="stat-value">${priceDisplay}</div>
+      </div>
+      <div>
+        <div class="stat-label">成本均價</div>
+        <div class="stat-value">${inv.avg_cost.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      </div>
     </div>
 
-    <div class="section-header" style="margin-bottom:12px">
-      <div class="section-title">交易記錄</div>
+    ${extraPnlBlock}
+
+    <div class="section-header" style="margin-bottom:4px">
+      <div class="section-title">明細</div>
       <button class="btn btn-primary btn-sm" onclick="openAddTradeModal('${inv.symbol}','${escJs(inv.name)}','${escJs(inv.account)}')">新增 +</button>
     </div>
 
+    ${trades.length ? `<div class="trade-header-row">
+      <div class="tr-date">成交日</div>
+      <div class="trade-type-ph">類型</div>
+      <div class="tr-col">股數/單價</div>
+      <div class="tr-col tr-col-right">現值/損益</div>
+      <div class="tr-actions-ph"></div>
+    </div>` : ''}
     <div id="detail-trades">${tradesHtml}</div>
   `
 }
@@ -430,9 +480,9 @@ function renderPnlRecords(records, totalPnl) {
   const badge = document.getElementById('pnl-total-badge')
 
   if (badge) {
-    const color = totalPnl >= 0 ? 'var(--success)' : 'var(--danger)'
+    const color = twColor(totalPnl)
     badge.style.color = color
-    badge.textContent = records.length ? `累計 NT$${Math.abs(totalPnl).toLocaleString()}` : ''
+    badge.textContent = records.length ? `累計 ${Math.abs(totalPnl).toLocaleString()}` : ''
   }
 
   if (!records.length) {
@@ -449,9 +499,9 @@ function renderPnlRecords(records, totalPnl) {
       <td style="color:var(--text-muted)">${t.date}</td>
       <td><strong>${escHtml(t.symbol)}</strong> ${escHtml(t.name)}</td>
       <td style="text-align:right">${t.shares.toLocaleString()}</td>
-      <td style="text-align:right">$${Number(t.price).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-      <td style="text-align:right">NT$${t.amount.toLocaleString()}</td>
-      <td style="text-align:right" class="${cls}">NT$${Math.abs(pnl).toLocaleString()}</td>
+      <td style="text-align:right">${Number(t.price).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td style="text-align:right">${t.amount.toLocaleString()}</td>
+      <td style="text-align:right" class="${cls}">${Math.abs(pnl).toLocaleString()}</td>
       <td style="text-align:right">${toAcct}</td>
       <td style="text-align:center"><button class="trade-del" onclick="deleteTrade('${t.id}')" title="刪除" style="font-size:14px;padding:2px 6px">🗑</button></td>
     </tr>`
@@ -508,9 +558,6 @@ window.openAddTradeModal = function(symbol = '', name = '', account = '') {
   } else if (acctSelect.options.length) {
     acctSelect.selectedIndex = 0
   }
-  document.getElementById('trade-modal-title').textContent = '新增交易'
-  document.getElementById('trade-symbol').readOnly = false
-  editingTradeId = null
   document.getElementById('trade-type').value = '買入'
   document.getElementById('trade-date').value = today
   document.getElementById('trade-shares').value = ''
@@ -544,48 +591,6 @@ function updateToAccountGroup(type) {
 
 window.closeAddTradeModal = function() {
   document.getElementById('add-trade-modal').classList.remove('open')
-  editingTradeId = null
-}
-
-window.openEditTradeModal = function(tradeId) {
-  // 從 allTrades 找到這筆交易
-  let trade = null
-  for (const trades of Object.values(allTrades)) {
-    trade = trades.find(t => t.id === tradeId)
-    if (trade) break
-  }
-  if (!trade) return
-
-  editingTradeId = tradeId
-  document.getElementById('trade-modal-title').textContent = '編輯交易'
-  document.getElementById('trade-symbol').value = trade.symbol
-  document.getElementById('trade-symbol').readOnly = true
-  document.getElementById('trade-name').value = trade.name
-  document.getElementById('trade-type').value = trade.type
-  document.getElementById('trade-date').value = trade.date
-  document.getElementById('trade-shares').value = trade.shares
-  document.getElementById('trade-price').value = trade.price
-  document.getElementById('trade-note').value = trade.note ?? ''
-  document.getElementById('trade-lookup-hint').textContent = ''
-  updateToAccountGroup(trade.type)
-  calcTradeAmount()
-
-  // 設定證券戶
-  const acctSelect = document.getElementById('trade-account')
-  if (trade.account && [...acctSelect.options].some(o => o.value === trade.account)) {
-    acctSelect.value = trade.account
-  }
-  // 設定入帳帳戶（若有）：trade.to_account 是名稱，選項 value 是 id，用名稱找回 id
-  if (trade.type === '賣出' && trade.to_account) {
-    const toSel = document.getElementById('trade-to-account')
-    const toAcctId = (window._allAssetAccounts ?? []).find(a => a.name === trade.to_account)?.id
-    if (toAcctId && [...toSel.options].some(o => o.value === toAcctId)) {
-      toSel.value = toAcctId
-    }
-  }
-
-  document.getElementById('add-trade-modal').classList.add('open')
-  setTimeout(() => document.getElementById('trade-shares').focus(), 50)
 }
 
 window.onSymbolInput = function(raw) {
@@ -625,7 +630,7 @@ window.calcTradeAmount = function() {
   const type = document.getElementById('trade-type').value
   const preview = document.getElementById('trade-amount-preview')
   if (shares > 0 && price > 0) {
-    document.getElementById('trade-amount-value').textContent = 'NT$' + Math.round(shares * price).toLocaleString()
+    document.getElementById('trade-amount-value').textContent = Math.round(shares * price).toLocaleString()
     preview.style.display = 'block'
     // 賣出時顯示預估損益
     const pnlSpan = document.getElementById('trade-pnl-preview')
@@ -636,8 +641,8 @@ window.calcTradeAmount = function() {
       const inv = allInvestments.find(i => i.symbol === sym && i.account === acct)
       if (inv && inv.avg_cost > 0) {
         const pnl = Math.round((price - inv.avg_cost) * shares)
-        pnlVal.textContent = `NT$${Math.abs(pnl).toLocaleString()}`
-        pnlVal.style.color = pnl >= 0 ? 'var(--success)' : 'var(--danger)'
+        pnlVal.textContent = Math.abs(pnl).toLocaleString()
+        pnlVal.style.color = twColor(pnl)
         pnlSpan.style.display = 'inline'
       } else {
         pnlSpan.style.display = 'none'
@@ -673,9 +678,7 @@ window.saveTrade = async function() {
   const payload = { symbol, name, account, type, shares, price, date, note: note || undefined }
   if (type === '賣出' && toAccount) { payload.to_account = toAccount; payload.to_account_id = toAccountId }
 
-  const res = editingTradeId
-    ? await api.updateInvestmentTrade(editingTradeId, { type, shares, price, date, account, note: note || null })
-    : await api.addInvestmentTrade(payload)
+  const res = await api.addInvestmentTrade(payload)
   if (res.ok) {
     closeAddTradeModal()
     const pnlMsg = type === '賣出' && toAccount ? `，入帳至 ${toAccount}` : ''
@@ -718,7 +721,7 @@ function renderHoldingChart(investments) {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { position: 'right', labels: { color: '#8b949e', font: { size: 11 }, boxWidth: 12 } },
-        tooltip: { callbacks: { label: ctx => `${ctx.label}: NT$${ctx.raw.toLocaleString()}` } }
+        tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.raw.toLocaleString()}` } }
       }
     }
   })
@@ -814,9 +817,10 @@ function drawGrowthChart(range, res) {
   const nonNull = values.filter(v => v !== null)
   const first = nonNull[0] ?? 0
   const last = nonNull[nonNull.length - 1] ?? 0
+  // 台股習慣：漲紅跌綠，跟全站其他頁面相反，僅投資頁適用
   const isUp = last >= first
-  const lineColor = isUp ? '#3fb950' : '#f85149'
-  const fillColor = isUp ? 'rgba(63,185,80,0.08)' : 'rgba(248,81,73,0.08)'
+  const lineColor = isUp ? '#f85149' : '#3fb950'
+  const fillColor = isUp ? 'rgba(248,81,73,0.08)' : 'rgba(63,185,80,0.08)'
 
   // 猜的區段虛線淡灰、有真資料的區段用正常顏色
   const carriedColor = 'rgba(139,148,158,0.55)'
@@ -847,7 +851,7 @@ function drawGrowthChart(range, res) {
         legend: { display: false },
         tooltip: { callbacks: { label: ctx => {
           if (ctx.raw == null) return '無資料'
-          const val = 'NT$' + ctx.raw.toLocaleString()
+          const val = ctx.raw.toLocaleString()
           return isCarried[ctx.dataIndex] ? val + '（無快照，沿用前一筆）' : val
         } } }
       },
@@ -866,9 +870,9 @@ function drawGrowthChart(range, res) {
 // Y 軸標籤：範圍小於 5 萬時用小數，避免整數萬四捨五入後格線標籤重複（如連續三個都顯示「25W」）
 function wLabel(v, ticks) {
   const range = Math.abs((ticks.at(-1)?.value ?? v) - (ticks[0]?.value ?? v))
-  if (Math.abs(v) < 10000) return 'NT$' + v.toLocaleString()
+  if (Math.abs(v) < 10000) return v.toLocaleString()
   const decimals = range < 50000 ? 1 : 0
-  return 'NT$' + (v / 10000).toFixed(decimals) + 'W'
+  return (v / 10000).toFixed(decimals) + 'W'
 }
 
 window.setGrowthRange = async function(range) {

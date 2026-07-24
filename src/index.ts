@@ -32,13 +32,17 @@ app.get('/api/app-config', async (c) => {
   }
 })
 
-// add.html 專用 manifest
+// add 頁專用 manifest（獨立的主畫面圖示身分：不同名稱、不同 icon、不同 start_url）。
+// 現在 /add 已經是主 SPA 裡的一頁，實際切換到其他頁面時是純前端路由、不會有真正的換頁，
+// 所以這裡放心讓它跟主 App 的身分不同也不會再卡住。
 app.get('/add-manifest.json', async (c) => {
   return c.json({
-    name: '記帳',
-    short_name: '記帳',
+    name: '新增記錄',
+    short_name: '新增',
     description: '快速新增記錄',
-    start_url: '/add.html',
+    // 帶 ?r= 版本標記：iOS 主畫面圖示的快取常常不會出現在「設定 > Safari > 網站資料」裡，
+    // 使用者刪不掉、清不掉，只能靠換一個沒被快取過的 start_url 逼 iOS 建立全新的獨立圖示身分
+    start_url: '/add?r=2',
     scope: '/',
     display: 'standalone',
     background_color: '#0d1117',
@@ -153,7 +157,14 @@ app.post('/api/cron/run', async (c) => {
 })
 
 // SPA：舊的頁面路徑一律回傳 index.html（前端 router 依 pathname 顯示對應頁面）
-const SPA_PATHS = new Set(['/transactions.html', '/reconcile.html', '/investments.html', '/report.html'])
+// /add、/add.html 現在也是同一個 SPA 裡的一頁（不再是獨立檔案），
+// 這樣從 add 頁切到消費記錄等頁面時是純前端路由切換，不會有真正的瀏覽器換頁——
+// 這是修掉 iOS 主畫面 App 之間切換會卡住的根本方法。
+const SPA_PATHS = new Set(['/transactions.html', '/reconcile.html', '/investments.html', '/report.html', '/add', '/add.html'])
+
+// /add、/add.html 專屬的主畫面圖示身分（manifest、標題、icon 都不同），
+// 只影響「加入主畫面」當下抓到的識別資訊，不影響實際頁面內容或後續的 SPA 內部導覽
+const ADD_PATHS = new Set(['/add', '/add.html'])
 
 // 靜態檔案 fallback（讓 ASSETS binding 處理所有未匹配的路由）
 app.all('*', async (c) => {
@@ -167,14 +178,20 @@ app.all('*', async (c) => {
   }
   const res = await (c.env.ASSETS as Fetcher).fetch(assetReq)
   const ct = res.headers.get('content-type') ?? ''
-  if (path === '/sw.js') {
-    // SW 絕對不能被快取，否則瀏覽器拿不到新版本
-    const newRes = new Response(res.body, res)
-    newRes.headers.set('Cache-Control', 'no-store')
-    return newRes
-  }
+  // sw.js / js/ / css/ 的 no-store 快取規則在 public/_headers 設定——
+  // 這些路徑對應真實存在的靜態檔案，Cloudflare 會直接由 Assets 層回應，
+  // 不會進到這支 Worker，在這裡設 header 不會有效果
   if (ct.includes('text/html')) {
-    const newRes = new Response(res.body, res)
+    let body = await res.text()
+    if (ADD_PATHS.has(path)) {
+      body = body
+        .replace('<link rel="manifest" href="/manifest.json">', '<link rel="manifest" href="/add-manifest.json">')
+        .replace(/<meta name="apple-mobile-web-app-title" content="[^"]*">/, '<meta name="apple-mobile-web-app-title" content="新增記錄">')
+        .replace(/<link rel="apple-touch-icon" href="[^"]*">/, '<link rel="apple-touch-icon" href="/icons/add-icon.svg">')
+        .replace(/<meta name="theme-color" content="[^"]*">/, '<meta name="theme-color" content="#0d1117">')
+    }
+    const newRes = new Response(body, res)
+    newRes.headers.set('Content-Type', 'text/html;charset=UTF-8')
     newRes.headers.set('Cache-Control', 'no-cache')
     return newRes
   }

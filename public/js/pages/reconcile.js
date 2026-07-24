@@ -1,5 +1,5 @@
 import { api, toast, catIcon, initAppName, swr } from '/js/api.js'
-import { openAddTxnModal, openEditTxnModal, preloadTxnModalData } from '/js/txn-modal.js'
+import { openAddTxnModal, openEditTxnModal, openEditTransferModal, preloadTxnModalData } from '/js/txn-modal.js'
 
 // 此模組由 build-spa 從 reconcile.html 抽出，router 每次進入頁面時呼叫 show()
 
@@ -325,7 +325,7 @@ async function buildCCCardHtml(acc, useCache = false) {
   } else if (periodEnd && periodEnd > todayStr) {
     // 結算日尚未到 → 顯示累計消費金額
     statusHtml = billingStatus?.totalExpense
-      ? `<span style="color:var(--text-muted);font-size:13px;font-weight:600">NT$${billingStatus.totalExpense.toLocaleString()}</span>`
+      ? `<span style="color:var(--text-muted);font-size:13px;font-weight:600">$${billingStatus.totalExpense.toLocaleString()}</span>`
       : `<span style="color:var(--text-muted);font-size:12px">本期無消費</span>`
   } else if (!billingStatus) {
     // 結算日已過但無交易
@@ -336,9 +336,9 @@ async function buildCCCardHtml(acc, useCache = false) {
     // 有交易、扣款日已過、未繳
     statusHtml = `<span style="color:var(--danger);font-size:13px;font-weight:600">未繳款</span>`
   } else if (billingStatus.allDecided) {
-    statusHtml = `<span style="color:var(--success);font-size:13px;font-weight:600">NT$${billingStatus.amount.toLocaleString()} 應繳</span>`
+    statusHtml = `<span style="color:var(--success);font-size:13px;font-weight:600">$${billingStatus.amount.toLocaleString()} 應繳</span>`
   } else {
-    const totalStr = billingStatus.totalExpense ? ` · NT$${billingStatus.totalExpense.toLocaleString()}` : ''
+    const totalStr = billingStatus.totalExpense ? ` · $${billingStatus.totalExpense.toLocaleString()}` : ''
     statusHtml = `<span style="color:var(--warning);font-size:13px">未對帳${totalStr}</span>`
   }
 
@@ -456,8 +456,8 @@ function renderAcctSection() {
   function renderRow(acc) {
     const icon = iconMap[acc.type] ?? '💼'
     const bal = acc.balance >= 0
-      ? `<span style="color:var(--accent)">NT$${acc.balance.toLocaleString()}</span>`
-      : `<span style="color:var(--danger)">NT$${Math.abs(acc.balance).toLocaleString()}</span>`
+      ? `<span style="color:var(--accent)">$${acc.balance.toLocaleString()}</span>`
+      : `<span style="color:var(--danger)">$${Math.abs(acc.balance).toLocaleString()}</span>`
     return `<div class="acct-row" onclick="openAcctView('${escHtml(acc.id)}','${escHtml(acc.name)}')">
       <div class="acct-row-icon">${icon}</div>
       <div class="acct-row-info">
@@ -573,7 +573,7 @@ async function saveAllPending() {
 function renderRecModal() {
   // 淨額 = 支出 − 收入（折扣會減少帳單）
   const totalNet = recTxns.reduce((s, t) => t.type === '收入' ? s - t.amount : s + t.amount, 0)
-  document.getElementById('rec-modal-card-total').textContent = totalNet ? `NT$${totalNet.toLocaleString()}` : 'NT$0'
+  document.getElementById('rec-modal-card-total').textContent = totalNet ? `$${totalNet.toLocaleString()}` : '$0'
 
   const decided = recTxns.filter(t => {
     if (t.status === '待確認') return false
@@ -584,7 +584,7 @@ function renderRecModal() {
   const confirmedNet = recTxns.filter(t => t.status === '已對帳').reduce((s,t) => t.type === '收入' ? s - t.amount : s + t.amount, 0)
   document.getElementById('rec-count').textContent = `${decided.length}/${recTxns.length}`
   const amtEl = document.getElementById('rec-amount')
-  amtEl.textContent = 'NT$' + Math.abs(confirmedNet).toLocaleString()
+  amtEl.textContent = '$' + Math.abs(confirmedNet).toLocaleString()
   amtEl.style.color = confirmedNet > 0 ? 'var(--danger)' : confirmedNet < 0 ? 'var(--success)' : ''
 
   // 待儲存提示
@@ -624,7 +624,7 @@ function renderRecModal() {
 
       // 金額顏色：一律依收支類型
       const amtColor = isIncome ? 'var(--success)' : 'var(--danger)'
-      const amtDisplay = `NT$${t.amount.toLocaleString()}`
+      const amtDisplay = `$${t.amount.toLocaleString()}`
 
       const isPrevActedOn = isPrevPeriod && (isConfirmed || pendingDeferrals.has(t.id))
       const amtColorFinal = amtColor
@@ -723,7 +723,7 @@ window.openAcctView = function(accId, accName) {
   const acctObj = allAccounts.find(a => a.id === accId)
   const balEl = document.getElementById('acct-view-balance')
   if (acctObj != null) {
-    balEl.textContent = 'NT$' + Math.abs(acctObj.balance).toLocaleString()
+    balEl.textContent = '$' + Math.abs(acctObj.balance).toLocaleString()
     balEl.style.color = acctObj.balance >= 0 ? 'var(--accent)' : 'var(--danger)'
   } else {
     balEl.textContent = ''
@@ -733,13 +733,102 @@ window.openAcctView = function(accId, accName) {
   loadAcctView()
 }
 
-window.acctMonthNav = function(dir) {
+// 算出滑動/按鈕切換後的目標月份；超出範圍回傳 null
+function computeAcctNavMonth(dir) {
   const [y, m] = acctViewMonth.split('-').map(Number)
   const d = dir === 1 ? new Date(y, m, 1) : new Date(y, m - 2, 1)
   const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
-  if (val > _nowMonth || val < _minAcctMonth) return
+  if (val > _nowMonth || val < _minAcctMonth) return null
+  return val
+}
+
+window.acctMonthNav = function(dir) {
+  const val = computeAcctNavMonth(dir)
+  if (!val) return
   acctViewMonth = val
   loadAcctView()
+}
+
+// 跟消費記錄頁一樣的轉帳合併邏輯（額外多存 account_id，帳戶檢視要用 id 篩選、
+// 不能用名稱篩選——同名帳戶可能橫跨不同類別，例如銀行「國泰」+證券戶「國泰」）
+function mergeTransferPairsWithIds(txns) {
+  const result = []
+  const seen = new Set()
+  for (const t of txns) {
+    if (t.transfer_id) {
+      if (seen.has(t.transfer_id)) continue
+      seen.add(t.transfer_id)
+      const out = txns.find(x => x.transfer_id === t.transfer_id && x.type === '支出') || t
+      const inc = txns.find(x => x.transfer_id === t.transfer_id && x.type === '收入') || t
+      result.push({ ...out, _isMergedTransfer: true, _outTxn: out, _incTxn: inc, _xfrFrom: out.card, _xfrTo: inc.card, _xfrFromId: out.account_id, _xfrToId: inc.account_id })
+    } else {
+      result.push(t)
+    }
+  }
+  return result
+}
+
+// 依帳戶篩選+排序（跟消費記錄頁一樣先合併轉帳兩腳，才能顯示「來源 → 目標」）
+function filterAcctTxns(rawTxns, acctObj) {
+  const merged = mergeTransferPairsWithIds(rawTxns)
+  return merged.filter(t => t._isMergedTransfer
+    ? (t._xfrFromId === acctObj?.id || t._xfrToId === acctObj?.id || t._xfrFrom === _currentAcctViewName || t._xfrTo === _currentAcctViewName)
+    : (acctObj?.id ? t.account_id === acctObj.id : t.card === _currentAcctViewName)
+  ).sort((a, b) => b.date.localeCompare(a.date))
+}
+
+// 某個月份的帳戶明細（優先用 swr 快取，供拖曳預覽用；快取沒有就回傳 null）
+function acctTxnsForMonth(month, acctObj) {
+  if (month === acctViewMonth) return acctViewTxns
+  const raw = swr.get(`txns-${month}`)
+  if (!raw) return null
+  return filterAcctTxns(raw, acctObj)
+}
+
+function acctListRowsHtml(txns) {
+  if (!txns.length) return '<div style="padding:20px 0;color:var(--text-muted);text-align:center">本月無記錄</div>'
+  let html = ''
+  let lastDate = ''
+  for (const t of txns) {
+    if (t.date !== lastDate) {
+      html += `<div style="font-size:11px;color:var(--text-muted);padding:10px 0 4px">${fmtDateHeader(t.date)}</div>`
+      lastDate = t.date
+    }
+    // 轉帳的顯示方式跟消費記錄頁/總覽保持一致：橘色、名稱是「轉帳」、
+    // 副標顯示「來源 → 目標」兩邊帳戶名稱（不是只顯示單一帳戶）
+    const isTransfer = !!t._isMergedTransfer
+    const icon = isTransfer
+      ? `<div class="av-txn-icon" style="background:rgba(208,112,48,0.15)">↔</div>`
+      : `<div class="av-txn-icon">${catIcon(t.category)}</div>`
+    const amtColor = isTransfer ? '#d07030' : (t.type === '收入' ? 'var(--success)' : 'var(--danger)')
+    const name = isTransfer ? (t.note || '轉帳') : (t.name || t.category)
+    const sub = isTransfer ? `${escHtml(t._xfrFrom)} → ${escHtml(t._xfrTo)}` : escHtml(t.category)
+    const recBadge = t.source === '定期' ? ' <span title="定期項目" style="font-size:12px">🔁</span>' : ''
+    html += `<div class="av-txn-row" style="cursor:pointer" onclick="openEditAcctTxn('${escHtml(t.id)}')">
+      ${icon}
+      <div class="av-txn-info">
+        <div class="av-txn-name">${escHtml(name)}${recBadge}</div>
+        <div class="av-txn-sub">${sub}</div>
+      </div>
+      <div class="av-txn-amt" style="color:${amtColor}">$${t.amount.toLocaleString()}</div>
+    </div>`
+  }
+  return html
+}
+
+function acctPanelHtml(month, acctObj) {
+  const txns = acctTxnsForMonth(month, acctObj)
+  if (txns === null) return '<div style="padding:20px 0;color:var(--text-muted);text-align:center">載入中…</div>'
+  return acctListRowsHtml(txns)
+}
+
+// 拖曳時即時預覽前後一個月的內容
+function updateAdjacentAcctPanels() {
+  const acctObj = allAccounts.find(a => a.id === _currentAcctViewId)
+  const prevMonth = computeAcctNavMonth(-1)
+  const nextMonth = computeAcctNavMonth(1)
+  document.getElementById('acct-view-list-prev').innerHTML = prevMonth ? acctPanelHtml(prevMonth, acctObj) : ''
+  document.getElementById('acct-view-list-next').innerHTML = nextMonth ? acctPanelHtml(nextMonth, acctObj) : ''
 }
 
 async function loadAcctView() {
@@ -751,51 +840,41 @@ async function loadAcctView() {
   document.getElementById('acct-view-list').innerHTML = '<div style="padding:20px 0;color:var(--text-muted);text-align:center">載入中…</div>'
 
   const acctObj = allAccounts.find(a => a.id === _currentAcctViewId)
-  const queryParams = acctObj?.id
-    ? { month, account_id: acctObj.id, limit: 500 }
-    : { month, card: _currentAcctViewName, limit: 500 }
-  const res = await api.getTransactions(queryParams)
+  // 抓整月全部帳戶的紀錄（不加 account/card 篩選），跟消費記錄頁一樣先合併轉帳的
+  // 兩腳，才能顯示「來源 → 目標」兩邊帳戶名稱；篩選出跟目前這個帳戶有關的部分
+  const res = await api.getTransactions({ month, limit: 500 })
   if (!res.ok) {
     document.getElementById('acct-view-list').innerHTML = '<div style="padding:20px 0;color:var(--danger);text-align:center">載入失敗</div>'
     return
   }
-  acctViewTxns = (res.data ?? []).sort((a, b) => b.date.localeCompare(a.date))
+  swr.set(`txns-${month}`, res.data ?? [])
+  acctViewTxns = filterAcctTxns(res.data ?? [], acctObj)
 
   if (!acctViewTxns.length) {
     document.getElementById('acct-view-list').innerHTML = '<div style="padding:20px 0;color:var(--text-muted);text-align:center">本月無記錄</div>'
     document.getElementById('acct-view-count').textContent = '0'
     const totalEl = document.getElementById('acct-view-total')
-    totalEl.textContent = 'NT$0'
+    totalEl.textContent = '$0'
     totalEl.style.color = ''
+    updateAdjacentAcctPanels()
     return
   }
 
-  const incomeAmt = acctViewTxns.filter(t => t.type === '收入').reduce((s, t) => s + t.amount, 0)
-  const expenseAmt = acctViewTxns.filter(t => t.type !== '收入').reduce((s, t) => s + t.amount, 0)
+  // 轉帳對這個帳戶來說是流入還是流出：目標帳戶是自己 → 流入（算收入），
+  // 來源帳戶是自己 → 流出（算支出）；一般收支則直接用 type 判斷
+  const isInflow = t => t._isMergedTransfer
+    ? (t._xfrToId === acctObj?.id || t._xfrTo === _currentAcctViewName)
+    : t.type === '收入'
+  const incomeAmt = acctViewTxns.filter(isInflow).reduce((s, t) => s + t.amount, 0)
+  const expenseAmt = acctViewTxns.filter(t => !isInflow(t)).reduce((s, t) => s + t.amount, 0)
   const net = incomeAmt - expenseAmt
   const totalEl = document.getElementById('acct-view-total')
-  totalEl.textContent = 'NT$' + Math.abs(net).toLocaleString()
+  totalEl.textContent = '$' + Math.abs(net).toLocaleString()
   totalEl.style.color = net >= 0 ? 'var(--success)' : 'var(--danger)'
   document.getElementById('acct-view-count').textContent = acctViewTxns.length
 
-  let html = ''
-  let lastDate = ''
-  for (const t of acctViewTxns) {
-    if (t.date !== lastDate) {
-      html += `<div style="font-size:11px;color:var(--text-muted);padding:10px 0 4px">${fmtDateHeader(t.date)}</div>`
-      lastDate = t.date
-    }
-    const amtColor = t.type === '收入' ? 'var(--success)' : 'var(--danger)'
-    html += `<div class="av-txn-row" style="cursor:pointer" onclick="openEditAcctTxn('${escHtml(t.id)}')">
-      <div class="av-txn-icon">${catIcon(t.category)}</div>
-      <div class="av-txn-info">
-        <div class="av-txn-name">${escHtml(t.name || t.category)}</div>
-        <div class="av-txn-sub">${escHtml(t.category)}</div>
-      </div>
-      <div class="av-txn-amt" style="color:${amtColor}">NT$${t.amount.toLocaleString()}</div>
-    </div>`
-  }
-  document.getElementById('acct-view-list').innerHTML = html
+  document.getElementById('acct-view-list').innerHTML = acctListRowsHtml(acctViewTxns)
+  updateAdjacentAcctPanels()
 }
 
 window.closeAcctView = function() {
@@ -817,6 +896,10 @@ window.openNewTxnForAcct = function() {
 window.openEditAcctTxn = function(id) {
   const t = acctViewTxns.find(x => x.id === id)
   if (!t) return
+  if (t._isMergedTransfer) {
+    openEditTransferModal(t._outTxn, t._incTxn, { onSave: _refreshAcctView })
+    return
+  }
   openEditTxnModal(t, { onSave: _refreshAcctView })
 }
 
@@ -888,7 +971,7 @@ window.confirmPayment = async function() {
   const res = await api.addPayment({ from_account, to_account, from_account_id, to_account_id, amount, date })
   if (res.ok) {
     closePaymentModal()
-    toast(`付款轉帳已建立：${from_account} → ${to_account} NT$${amount.toLocaleString()}`)
+    toast(`付款轉帳已建立：${from_account} → ${to_account} $${amount.toLocaleString()}`)
     renderAll()
   } else toast(res.error ?? '操作失敗', 'error')
 }
@@ -901,6 +984,68 @@ document.getElementById('acct-view-modal').addEventListener('click', e => {
   if (e.target === document.getElementById('acct-view-modal')) closeAcctView()
 })
 
+// 帳戶明細 strip 拖曳（跟消費記錄的月曆／每日內容同一套手勢：3 格橫排，即時跟手，
+// 超過門檻放開才 commit，並在放開瞬間把新月份的內容同步塞進中間格，讓拖曳跟切換無縫接上）
+;(function () {
+  const COMMIT = 60
+  let sx = 0, sy = 0, dx = 0, intent = null, active = false, animating = false
+
+  const wrap = document.querySelector('.acct-view-wrap')
+  const strip = document.getElementById('acct-view-strip')
+  if (!wrap || !strip) return
+
+  function setStrip(dxPx, animate) {
+    strip.style.transition = animate ? 'transform 0.25s cubic-bezier(0.4,0,0.2,1)' : 'none'
+    strip.style.transform = dxPx === 0
+      ? 'translateX(-33.333%)'
+      : `translateX(calc(-33.333% + ${dxPx}px))`
+  }
+
+  function onStart(clientX, clientY) {
+    if (animating) return
+    sx = clientX; sy = clientY
+    dx = 0; intent = null; active = true
+  }
+  function onMove(clientX, clientY, preventDefault) {
+    if (!active || animating) return
+    const cdx = clientX - sx
+    const cdy = clientY - sy
+    if (!intent && (Math.abs(cdx) > 5 || Math.abs(cdy) > 5)) {
+      intent = Math.abs(cdx) > Math.abs(cdy) ? 'h' : 'v'
+    }
+    if (intent !== 'h') return
+    if (preventDefault) preventDefault()
+    dx = cdx
+    setStrip(dx, false)
+  }
+  function onEnd() {
+    if (!active) return
+    active = false
+    if (intent !== 'h') return
+    const dir = dx < 0 ? 1 : -1
+    const canCommit = Math.abs(dx) >= COMMIT && computeAcctNavMonth(dir) != null
+    if (canCommit) {
+      animating = true
+      strip.style.transition = 'transform 0.22s cubic-bezier(0.4,0,0.2,1)'
+      strip.style.transform = dir > 0 ? 'translateX(-66.666%)' : 'translateX(0%)'
+      setTimeout(() => {
+        strip.style.transition = 'none'
+        const newMonth = computeAcctNavMonth(dir)
+        document.getElementById('acct-view-list').innerHTML = acctPanelHtml(newMonth, allAccounts.find(a => a.id === _currentAcctViewId))
+        strip.style.transform = 'translateX(-33.333%)'
+        acctMonthNav(dir)
+        animating = false
+      }, 230)
+    } else {
+      setStrip(0, true)
+    }
+  }
+
+  // 只在手機（觸控）啟用，電腦版只有月曆可以滑動
+  wrap.addEventListener('touchstart', e => onStart(e.touches[0].clientX, e.touches[0].clientY), { passive: true, signal })
+  wrap.addEventListener('touchmove', e => onMove(e.touches[0].clientX, e.touches[0].clientY, () => e.preventDefault()), { passive: false, signal })
+  wrap.addEventListener('touchend', onEnd, { passive: true, signal })
+})()
 
 renderAll()
 }

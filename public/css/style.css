@@ -57,10 +57,12 @@ body {
   font-size: 16px;
   font-weight: 700;
   color: var(--text);
+  text-decoration: none;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   gap: 8px;
+  cursor: pointer;
 }
 .sidebar-logo span { font-size: 20px; }
 .sidebar-nav { flex: 1; padding: 8px 0; }
@@ -321,18 +323,26 @@ select option { background: var(--surface2); }
   z-index: 1000;
   visibility: hidden;
   pointer-events: none;
-  transition: background 0.25s ease, visibility 0s linear 0.25s;
+  /* 關閉不設 transition：拿掉 open class 要瞬間消失，不要黑影殘留或卡頓 */
 }
 .modal-overlay.open {
   background: rgba(0,0,0,0.7);
   visibility: visible;
   pointer-events: auto;
-  transition: background 0.25s ease;
+  transition: background 0.25s ease; /* 只有「打開」要有淡入效果 */
   touch-action: none;
 }
 .modal-overlay.open .modal {
   touch-action: pan-y;
   overscroll-behavior: contain;
+}
+/* 關閉當下強制關掉自己跟裡面所有元素的 transition/animation（例如編輯消費紀錄
+   視窗裡支出/收入/轉帳切換鈕的 transition:all），避免任何殘留動畫造成關閉時
+   卡頓、殘影 */
+.modal-overlay.closing,
+.modal-overlay.closing * {
+  transition: none !important;
+  animation: none !important;
 }
 
 .modal {
@@ -433,6 +443,10 @@ select option { background: var(--surface2); }
   padding: 10px 0; border-bottom: 1px solid var(--border);
 }
 .txn-row:last-child { border-bottom: none; }
+/* 整列可點擊編輯：桌機用 hover、手機用 active，都要有可點擊的視覺提示 */
+.txn-row { cursor: pointer; transition: background 0.1s; }
+.txn-row:hover { background: rgba(48,54,61,0.35); border-radius: 8px; margin: 0 -8px; padding-left: 8px; padding-right: 8px; }
+.txn-row:active { background: rgba(48,54,61,0.5); }
 .txn-info { flex: 1; min-width: 0; }
 .txn-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
 .txn-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
@@ -442,8 +456,8 @@ select option { background: var(--surface2); }
 .amt-exp { color: var(--danger); }
 
 @media (max-width: 768px) {
-  .txn-row { gap: 8px; padding: 9px 0; cursor: pointer; }
-  .txn-row:active { background: rgba(48,54,61,0.5); border-radius: 8px; margin: 0 -8px; padding-left: 8px; padding-right: 8px; }
+  .txn-row { gap: 8px; padding: 9px 0; }
+  .txn-row:active { border-radius: 8px; margin: 0 -8px; padding-left: 8px; padding-right: 8px; }
   .txn-name { font-size: 13px; }
   .txn-right .btn { display: none; }
   .txn-amt { font-size: 13px; min-width: 62px; }
@@ -475,14 +489,8 @@ select option { background: var(--surface2); }
 .bottom-nav { display: none; }
 
 /* ── Mobile ── */
-@keyframes pageFadeIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
 @media (max-width: 768px) {
   .sidebar { display: none; }
-  .main { animation: pageFadeIn 0.18s ease-out; }
   .main {
     margin-left: 0; width: 100%; max-width: 100vw;
     overflow-x: hidden;
@@ -509,30 +517,31 @@ select option { background: var(--surface2); }
   /* 防止 iOS 輸入框自動縮放（font-size < 16px 會觸發） */
   input, select, textarea { font-size: 16px; }
 
-  /* Modal 從底部滑出 */
-  .modal-overlay { align-items: flex-end; padding: 0; }
+  /* Modal：手機也維持置中浮動視窗，不使用由下往上滑出的 bottom sheet
+     （max-width 不在這裡覆寫，沿用各 modal 自己的設定或桌機預設的 90vw，
+     width:100% 只是讓它在可用空間內盡量撐開，兩者取較小值，不會超出螢幕） */
+  .modal-overlay { padding: 16px; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
   .modal {
-    width: 100%; max-width: 100%;
-    max-height: 88vh; overflow-y: auto; overscroll-behavior: none;
-    border-radius: 24px 24px 0 0;
-    padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
-    transform: translateY(100%);
-    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
-    will-change: transform;
+    width: 100%;
+    /* iOS Safari 的網址列/工具列會收合，用 vh 算出來的高度會比實際看得到的
+       畫面還大，導致內容（尤其最下面的按鈕）被切掉；dvh 是即時可視高度，
+       才會準；85 也留太少，改 80 多留一點空間給安全區域 */
+    max-height: 80vh;
+    max-height: 80dvh;
+    overflow-y: auto;
+    overscroll-behavior: none;
+    border-radius: 20px;
+    padding: 18px;
   }
-  .modal-overlay.open .modal { transform: translateY(0); }
-  /* 頂部拖曳指示條 */
-  .modal::before {
-    content: '';
-    display: block;
-    width: 36px; height: 4px;
-    background: var(--border);
-    border-radius: 2px;
-    margin: -8px auto 16px;
-  }
+  /* 編輯記錄類的表單內容偏多，手機上要在不捲動的情況下整個放進視窗，
+     間距壓縮一點 */
+  .modal-header { margin-bottom: 10px; }
+  .modal .form-group { margin-bottom: 6px; }
+  .modal .form-label { margin-bottom: 4px; }
+  .modal .type-toggle { margin-bottom: 8px; }
   /* 按鈕全寬排列 */
-  .modal-footer { flex-direction: column-reverse; gap: 8px; }
-  .modal-footer .btn { width: 100%; justify-content: center; padding: 12px; font-size: 15px; }
+  .modal-footer { flex-direction: column-reverse; gap: 6px; }
+  .modal-footer .btn { width: 100%; justify-content: center; padding: 10px; font-size: 15px; }
 
   .toast-container { bottom: max(env(safe-area-inset-bottom) + 70px, 86px); top: auto; right: 12px; left: 12px; }
   .toast { max-width: 100%; }

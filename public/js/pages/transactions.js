@@ -391,11 +391,8 @@ function mergeTransferPairs(txns) {
 }
 
 // ── 當日總覽 ──
-function renderDailyView(txns) {
-  document.getElementById('daily-view').style.display = 'block'
-  document.getElementById('monthly-view').style.display = 'none'
-  const el = document.getElementById('daily-view')
-  if (!txns.length) { el.innerHTML = '<div class="empty-state" style="padding:20px 0">當日無記錄</div>'; return }
+function dailyViewHtml(txns) {
+  if (!txns.length) return '<div class="empty-state" style="padding:20px 0">當日無記錄</div>'
 
   const realTxns = txns.filter(t => !t.transfer_id)
   const expTotal = realTxns.filter(t => t.type !== '收入').reduce((s,t) => s+t.amount, 0)
@@ -404,22 +401,20 @@ function renderDailyView(txns) {
   let html = mergeTransferPairs(txns).map(t => {
     if (t._isMergedTransfer) {
       const icon = `<div style="width:38px;height:38px;border-radius:50%;background:rgba(208,112,48,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">↔</div>`
-      return `<div class="txn-row" onclick="if(window.innerWidth<=768)editTransfer('${t.transfer_id}')">
+      return `<div class="txn-row" onclick="editTransfer('${t.transfer_id}')">
         ${icon}
         <div class="txn-info">
           <div class="txn-name">${escHtml(t.note || '轉帳')}</div>
           <div class="txn-meta">${escHtml(t._xfrFrom)} → ${escHtml(t._xfrTo)}</div>
         </div>
         <div class="txn-right">
-          <span class="txn-amt" style="color:#d07030">NT$${t.amount.toLocaleString()}</span>
-          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editTransfer('${t.transfer_id}')">編輯</button>
-          <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteTxn('${t.id}',true)">刪</button>
+          <span class="txn-amt" style="color:#d07030">$${t.amount.toLocaleString()}</span>
         </div>
       </div>`
     }
     const editAttrs = `'${t.id}','${escJs(t.name)}',${t.amount},'${t.date}','${escJs(t.category)}','${escJs(t.card||'')}','${escJs(t.note||'')}','${escJs(t.type||'支出')}','${escJs(t.recurring_id||'')}'`
     const recBadge = t.source === '定期' ? ' <span title="定期項目" style="font-size:13px">🔁</span>' : ''
-    return `<div class="txn-row" onclick="if(window.innerWidth<=768)editTxn(${editAttrs})">
+    return `<div class="txn-row" onclick="editTxn(${editAttrs})">
       ${resolvedCatIconHtml(t.category, 38)}
       <div class="txn-info">
         <div class="txn-name">${escHtml(t.name || t.category)}${recBadge}</div>
@@ -427,8 +422,6 @@ function renderDailyView(txns) {
       </div>
       <div class="txn-right">
         <span class="txn-amt ${t.type==='收入'?'amt-inc':'amt-exp'}">${fmtSigned(t.amount,t.type)}</span>
-        <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editTxn(${editAttrs})">編輯</button>
-        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteTxn('${t.id}',false)">刪</button>
       </div>
     </div>`
   }).join('')
@@ -438,22 +431,143 @@ function renderDailyView(txns) {
     const parts = []
     if (incTotal > 0) parts.push(`<span style="color:#3fb950">收入 $${incTotal.toLocaleString()}</span>`)
     if (expTotal > 0) parts.push(`<span style="color:#f85149">支出 $${expTotal.toLocaleString()}</span>`)
-    if (parts.length) html += `<div class="daily-summary" style="display:flex;justify-content:flex-end;gap:14px;padding:6px 0 2px;padding-right:92px;font-size:13px;font-weight:600">${parts.join('')}</div>`
+    if (parts.length) html += `<div class="daily-summary" style="display:flex;justify-content:flex-end;gap:14px;padding:6px 0 2px;font-size:13px;font-weight:600">${parts.join('')}</div>`
   }
-  el.innerHTML = html
+  return html
+}
+
+function txnsForDate(dateStr) {
+  const month = dateStr.slice(0, 7)
+  const source = month === currentMonth ? cachedTxns : (swr.get(`txns-${month}`) || [])
+  return source.filter(t => t.date === dateStr)
+}
+
+function shiftDate(dateStr, delta) {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const nd = new Date(y, m - 1, d + delta)
+  return `${nd.getFullYear()}-${String(nd.getMonth()+1).padStart(2,'0')}-${String(nd.getDate()).padStart(2,'0')}`
+}
+
+function renderDailyView(txns) {
+  document.getElementById('daily-wrap').style.display = 'block'
+  document.getElementById('monthly-view').style.display = 'none'
+  document.getElementById('daily-view').innerHTML = dailyViewHtml(txns)
+}
+
+// 拖曳時即時預覽前後一天的內容
+function updateAdjacentDailyPanels() {
+  if (!selectedDate) return
+  document.getElementById('daily-view-prev').innerHTML = dailyViewHtml(txnsForDate(shiftDate(selectedDate, -1)))
+  document.getElementById('daily-view-next').innerHTML = dailyViewHtml(txnsForDate(shiftDate(selectedDate, 1)))
+}
+function clearAdjacentDailyPanels() {
+  document.getElementById('daily-view-prev').innerHTML = ''
+  document.getElementById('daily-view-next').innerHTML = ''
+}
+
+// 滑動切到某一天：更新選取狀態、月曆與內容（跨月時背景重抓資料）
+function commitDaySwipe(newDate) {
+  selectedDate = newDate
+  const newMonth = newDate.slice(0, 7)
+  const monthChanged = newMonth !== currentMonth
+  if (monthChanged) {
+    currentMonth = newMonth
+    cachedTxns = swr.get(`txns-${currentMonth}`) || []
+  }
+  renderCalendar(currentMonth, rebuildByDate())
+  document.getElementById('daily-view').innerHTML = dailyViewHtml(txnsForDate(newDate))
+  const [,mm,dd] = newDate.split('-')
+  document.getElementById('detail-title').textContent = `${parseInt(mm)} 月 ${parseInt(dd)} 日`
+  if (monthChanged) loadMonth()
 }
 
 function resetDetailView() {
   document.getElementById('detail-title').textContent = '當日總覽'
   document.getElementById('daily-view').innerHTML = '<div class="empty-state" style="padding:20px 0">點選月曆中的日期查看當日記錄</div>'
+  clearAdjacentDailyPanels()
 }
+
+// 當日紀錄 strip 拖曳（跟月曆同一套手勢，左右滑切換前後天）
+;(function () {
+  const COMMIT = 70
+  let sx = 0, sy = 0, dx = 0, intent = null, active = false, animating = false
+
+  const wrap = document.querySelector('.daily-wrap')
+  const strip = document.getElementById('daily-strip')
+  if (!wrap || !strip) return
+
+  function setStrip(dxPx, animate) {
+    strip.style.transition = animate ? 'transform 0.25s cubic-bezier(0.4,0,0.2,1)' : 'none'
+    strip.style.transform = dxPx === 0
+      ? 'translateX(-33.333%)'
+      : `translateX(calc(-33.333% + ${dxPx}px))`
+  }
+
+  function onStart(clientX, clientY) {
+    if (animating || !selectedDate || showMonthly) return
+    sx = clientX; sy = clientY
+    dx = 0; intent = null; active = true
+    // 拖曳期間先鎖住目前高度，避免預覽前後天內容長短不一時把整頁版面撐動、造成畫面跳動
+    wrap.style.height = wrap.getBoundingClientRect().height + 'px'
+    updateAdjacentDailyPanels()
+  }
+  function onMove(clientX, clientY, preventDefault) {
+    if (!active || animating) return
+    const cdx = clientX - sx
+    const cdy = clientY - sy
+    if (!intent && (Math.abs(cdx) > 5 || Math.abs(cdy) > 5)) {
+      intent = Math.abs(cdx) > Math.abs(cdy) ? 'h' : 'v'
+    }
+    if (intent !== 'h') return
+    if (preventDefault) preventDefault()
+    dx = cdx
+    setStrip(dx, false)
+  }
+  function releaseHeight() {
+    wrap.style.transition = ''
+    wrap.style.height = ''
+  }
+  function onEnd() {
+    if (!active) return
+    active = false
+    if (intent !== 'h') { wrap.style.height = ''; return }
+    if (Math.abs(dx) >= COMMIT) {
+      animating = true
+      const dir = dx < 0 ? 1 : -1
+      strip.style.transition = 'transform 0.22s cubic-bezier(0.4,0,0.2,1)'
+      strip.style.transform = dir > 0 ? 'translateX(-66.666%)' : 'translateX(0%)'
+      setTimeout(() => {
+        strip.style.transition = 'none'
+        commitDaySwipe(shiftDate(selectedDate, dir))
+        strip.style.transform = 'translateX(-33.333%)'
+        clearAdjacentDailyPanels()
+        // 內容切換完成後，高度從鎖定值平滑長高/縮短到新內容實際高度——
+        // 版面頂端不動，只有下緣跟著伸縮，符合「從最下方增減」的需求
+        const newHeight = document.getElementById('daily-view').scrollHeight
+        requestAnimationFrame(() => {
+          wrap.style.transition = 'height 0.2s ease'
+          wrap.style.height = newHeight + 'px'
+        })
+        setTimeout(() => { releaseHeight(); animating = false }, 220)
+      }, 230)
+    } else {
+      setStrip(0, true)
+      setTimeout(() => { clearAdjacentDailyPanels(); releaseHeight() }, 250)
+    }
+  }
+
+  // 只在手機（觸控）啟用，電腦版只有月曆可以滑動
+  wrap.addEventListener('touchstart', e => onStart(e.touches[0].clientX, e.touches[0].clientY), { passive: true })
+  wrap.addEventListener('touchmove', e => onMove(e.touches[0].clientX, e.touches[0].clientY, () => e.preventDefault()), { passive: false })
+  wrap.addEventListener('touchend', onEnd, { passive: true })
+})()
 
 // ── 整月 toggle ──
 window.toggleMonthly = function() {
   showMonthly = !showMonthly
   syncToggleBtn()
   if (showMonthly) {
-    document.getElementById('daily-view').style.display = 'none'
+    document.getElementById('daily-wrap').style.display = 'none'
     document.getElementById('monthly-view').style.display = 'block'
     selectedDate = ''
     document.querySelectorAll('#cal-grid .cal-cell.selected, #cal-grid .cal-cell.today').forEach(el => el.classList.remove('selected', 'today'))
@@ -462,7 +576,7 @@ window.toggleMonthly = function() {
     renderMonthlyTable()
   } else {
     document.getElementById('monthly-view').style.display = 'none'
-    document.getElementById('daily-view').style.display = 'block'
+    document.getElementById('daily-wrap').style.display = 'block'
     const thisMonth = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' }).slice(0, 7)
     selectedDate = currentMonth === thisMonth ? today : `${currentMonth}-01`
     renderCalendar(currentMonth, rebuildByDate())
@@ -506,22 +620,20 @@ function renderMonthlyTable() {
     html += mergeTransferPairs(txns).map(t => {
       if (t._isMergedTransfer) {
         const icon = `<div style="width:38px;height:38px;border-radius:50%;background:rgba(208,112,48,0.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">↔</div>`
-        return `<div class="txn-row" onclick="if(window.innerWidth<=768)editTransfer('${t.transfer_id}')">
+        return `<div class="txn-row" onclick="editTransfer('${t.transfer_id}')">
           ${icon}
           <div class="txn-info">
             <div class="txn-name">${escHtml(t.note || '轉帳')}</div>
             <div class="txn-meta">${escHtml(t._xfrFrom)} → ${escHtml(t._xfrTo)}</div>
           </div>
           <div class="txn-right">
-            <span class="txn-amt" style="color:#d07030">NT$${t.amount.toLocaleString()}</span>
-            <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editTransfer('${t.transfer_id}')">編輯</button>
-            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteTxn('${t.id}',true)">刪</button>
+            <span class="txn-amt" style="color:#d07030">$${t.amount.toLocaleString()}</span>
           </div>
         </div>`
       }
       const editAttrs = `'${t.id}','${escJs(t.name)}',${t.amount},'${t.date}','${escJs(t.category)}','${escJs(t.card||'')}','${escJs(t.note||'')}','${escJs(t.type||'支出')}','${escJs(t.recurring_id||'')}'`
       const recBadge = t.source === '定期' ? ' <span title="定期項目" style="font-size:13px">🔁</span>' : ''
-      return `<div class="txn-row" onclick="if(window.innerWidth<=768)editTxn(${editAttrs})">
+      return `<div class="txn-row" onclick="editTxn(${editAttrs})">
         ${resolvedCatIconHtml(t.category, 38)}
         <div class="txn-info">
           <div class="txn-name">${escHtml(t.name || t.category)}${recBadge}</div>
@@ -529,8 +641,6 @@ function renderMonthlyTable() {
         </div>
         <div class="txn-right">
           <span class="txn-amt ${t.type==='收入'?'amt-inc':'amt-exp'}">${fmtSigned(t.amount,t.type)}</span>
-          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();editTxn(${editAttrs})">編輯</button>
-          <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteTxn('${t.id}',false)">刪</button>
         </div>
       </div>`
     }).join('')
@@ -540,7 +650,7 @@ function renderMonthlyTable() {
       const parts = []
       if (incTotal > 0) parts.push(`<span style="color:#3fb950">收入 $${incTotal.toLocaleString()}</span>`)
       if (expTotal > 0) parts.push(`<span style="color:#f85149">支出 $${expTotal.toLocaleString()}</span>`)
-      if (parts.length) html += `<div class="daily-summary" style="display:flex;justify-content:flex-end;gap:14px;padding:6px 0 2px;padding-right:92px;font-size:13px;font-weight:600">${parts.join('')}</div>`
+      if (parts.length) html += `<div class="daily-summary" style="display:flex;justify-content:flex-end;gap:14px;padding:6px 0 2px;font-size:13px;font-weight:600">${parts.join('')}</div>`
     }
   }
   container.innerHTML = html
@@ -648,18 +758,20 @@ window.updateNormalTotal = function() {
   const fee = parseInt(document.getElementById('f-fee').value) || 0
   const el = document.getElementById('fee-total-normal')
   if (fee > 0 && base > 0) {
-    el.textContent = `NT$${base.toLocaleString()} + 手續費 NT$${fee.toLocaleString()} = 合計 NT$${(base + fee).toLocaleString()}`
+    el.textContent = `$${base.toLocaleString()} + 手續費 $${fee.toLocaleString()} = 合計 $${(base + fee).toLocaleString()}`
   } else {
     el.textContent = ''
   }
 }
 
 let _pendingEditTxn = null
+let _pendingFutureRec = null
 let _editScopeRec = 'this'
 
 window.editTxn = function(id, name, amount, date, category, card, note, type, recurringId) {
   if (recurringId) {
     _pendingEditTxn = { id, name, amount, date, category, card, note, type, recurringId }
+    _pendingFutureRec = null
     _editScopeRec = 'this'
     document.getElementById('scope-txn-name').textContent = name || category
     document.getElementById('scope-modal').classList.add('open')
@@ -671,12 +783,13 @@ window.editTxn = function(id, name, amount, date, category, card, note, type, re
 window.pickScope = function(scope) {
   _editScopeRec = scope
   document.getElementById('scope-modal').classList.remove('open')
+  if (_pendingFutureRec) { _handleFutureRecScope(scope); return }
   _openTxnEditForm(_pendingEditTxn)
 }
 
 function _openTxnEditForm({ id, name, amount, date, category, card, note, type, recurringId } = {}) {
   // 從 note 反解手續費
-  const feeMatch = note ? note.match(/含手續費\s*NT\$([0-9,]+)/) : null
+  const feeMatch = note ? note.match(/含手續費\s*\$([0-9,]+)/) : null
   const fee = feeMatch ? parseInt(feeMatch[1].replace(/,/g, '')) : 0
   const baseAmount = fee > 0 ? amount - fee : amount
 
@@ -705,7 +818,7 @@ function _openTxnEditForm({ id, name, amount, date, category, card, note, type, 
   document.getElementById('txn-modal').classList.add('open')
 }
 
-window.closeTxnModal = function() { document.getElementById('txn-modal').classList.remove('open') }
+window.closeTxnModal = function() { window.__closeModalInstant('txn-modal') }
 
 window.saveTxn = async function() {
   const id = document.getElementById('edit-id').value
@@ -727,7 +840,7 @@ window.saveTxn = async function() {
       from_account_id, to_account_id, amount, date, note, fee,
     })
     if (res.ok) {
-      closeTxnModal(); toast(fee > 0 ? `轉帳記錄已建立，手續費 NT$${fee.toLocaleString()} 另計` : '轉帳記錄已建立')
+      closeTxnModal(); toast(fee > 0 ? `轉帳記錄已建立，手續費 $${fee.toLocaleString()} 另計` : '轉帳記錄已建立')
       await loadMonth()
       if (selectedDate) renderDailyView(cachedTxns.filter(t => t.date === selectedDate))
       if (showMonthly) renderMonthlyTable()
@@ -748,7 +861,7 @@ window.saveTxn = async function() {
     card: cardObj?.name ?? '',
     account_id: cardObj?.id ?? null,
     type: currentType,
-    note: fee > 0 ? `含手續費 NT$${fee.toLocaleString()}` : null,
+    note: fee > 0 ? `含手續費 $${fee.toLocaleString()}` : null,
   }
   if (!data.amount || !data.date) { toast('請填寫金額和日期', 'error'); return }
   const recurringId = document.getElementById('edit-recurring-id').value
@@ -809,7 +922,7 @@ window.openTransferModal = function() {
   renderXfrSelects()
   document.getElementById('transfer-modal').classList.add('open')
 }
-window.closeTransferModal = function() { document.getElementById('transfer-modal').classList.remove('open') }
+window.closeTransferModal = function() { window.__closeModalInstant('transfer-modal') }
 window.deleteTransfer = async function() {
   const transferId = document.getElementById('edit-transfer-id').value
   if (!transferId) return
@@ -996,9 +1109,9 @@ function renderRecurring() {
   const monthlyInc = calcMonthlyEquiv(recItems.filter(i => activeAndStarted(i) && i.type === '收入'))
   const net = monthlyInc - monthlyExp
   document.getElementById('rec-monthly-bar').innerHTML = `
-    <div class="monthly-bar-item"><div class="monthly-bar-label">月均支出</div><div class="monthly-bar-val" style="color:var(--danger)">NT$${monthlyExp.toLocaleString()}</div></div>
-    <div class="monthly-bar-item"><div class="monthly-bar-label">月均收入</div><div class="monthly-bar-val" style="color:var(--success)">NT$${monthlyInc.toLocaleString()}</div></div>
-    <div class="monthly-bar-item"><div class="monthly-bar-label">月均淨額</div><div class="monthly-bar-val" style="color:${net>=0?'var(--success)':'var(--danger)'}">NT$${Math.abs(net).toLocaleString()}</div></div>
+    <div class="monthly-bar-item"><div class="monthly-bar-label">月均支出</div><div class="monthly-bar-val" style="color:var(--danger)">$${monthlyExp.toLocaleString()}</div></div>
+    <div class="monthly-bar-item"><div class="monthly-bar-label">月均收入</div><div class="monthly-bar-val" style="color:var(--success)">$${monthlyInc.toLocaleString()}</div></div>
+    <div class="monthly-bar-item"><div class="monthly-bar-label">月均淨額</div><div class="monthly-bar-val" style="color:${net>=0?'var(--success)':'var(--danger)'}">$${Math.abs(net).toLocaleString()}</div></div>
     <div class="monthly-bar-item" style="margin-left:auto"><div class="monthly-bar-label">啟用項目</div><div class="monthly-bar-val">${active.length} 個</div></div>
   `
 
@@ -1013,7 +1126,7 @@ function renderRecurring() {
   for (const g of groups) {
     if (!g.items.length) continue
     const gTotal = g.items.filter(i=>i.type!=='收入').reduce((s,i)=>s+calcMonthlyEquiv([i]),0)
-    html += `<div class="rec-group-hd"><span>${g.label}（${g.items.length}）</span>${g.label==='啟用中'&&gTotal>0?`<span style="color:var(--danger)">月均 −NT$${gTotal.toLocaleString()}</span>`:''}</div>`
+    html += `<div class="rec-group-hd"><span>${g.label}（${g.items.length}）</span>${g.label==='啟用中'&&gTotal>0?`<span style="color:var(--danger)">月均 −$${gTotal.toLocaleString()}</span>`:''}</div>`
     for (const item of g.items) {
       const isInc = item.type === '收入'
       const daysUntil = Math.ceil((new Date(item.next_date) - new Date(today)) / 86400000)
@@ -1026,7 +1139,7 @@ function renderRecurring() {
         : hasEnded
         ? `<span style="font-size:10px;color:var(--text-muted);background:var(--surface2);border-radius:4px;padding:1px 5px">已結束</span>`
         : ''
-      const feeTag = item.fee > 0 ? `<span style="font-size:11px;color:var(--text-muted)">內含手續費 NT$${item.fee.toLocaleString()}</span>` : ''
+      const feeTag = item.fee > 0 ? `<span style="font-size:11px;color:var(--text-muted)">內含手續費 $${item.fee.toLocaleString()}</span>` : ''
       html += `<div class="rec-item" style="${dimStyle};cursor:pointer" onclick="openRecDetail('${item.id}')">
         ${resolvedCatIconHtml(item.category,40)}
         <div class="rec-item-info">
@@ -1036,7 +1149,7 @@ function renderRecurring() {
           </div>
         </div>
         <div class="rec-item-right">
-          <div class="rec-item-amt" style="color:${isInc?'var(--success)':'var(--danger)'}">NT$${(item.amount+(item.fee||0)).toLocaleString()}</div>
+          <div class="rec-item-amt" style="color:${isInc?'var(--success)':'var(--danger)'}">$${(item.amount+(item.fee||0)).toLocaleString()}</div>
           ${feeTag}
           <div class="rec-item-next" style="${dueSoon&&!notStarted?'color:var(--warning)':''}">${dueSoon&&!notStarted?'⚠️ ':''}${notStarted?'起始 '+item.start_date:'下次 '+item.next_date}</div>
         </div>
@@ -1064,7 +1177,7 @@ function calcNextDateRec(dateStr, frequency, dayOfMonth = 1) {
 }
 
 window.openRecDetail = async function(id) {
-  const item = recItems.find(i => i.id === id)
+  let item = recItems.find(i => i.id === id)
   if (!item) return
   _recDetailCurrentId = id
 
@@ -1081,12 +1194,23 @@ window.openRecDetail = async function(id) {
   document.getElementById('rec-detail-modal').classList.add('open')
   document.getElementById('rcd-terminate-btn').style.display = item.is_active ? 'block' : 'none'
 
+  // 已到期（next_date <= today）但還沒生成的項目，打開時立即補生成，不要停留在「即將到來」
+  if (item.is_active && item.next_date <= today) {
+    await api.generateRecurring(id)
+    const rr = await api.getRecurring()
+    if (rr.ok) {
+      recItems = rr.data
+      item = recItems.find(i => i.id === id) ?? item
+      renderRecurring()
+    }
+  }
+
   const res = await api.getRecurringTransactions(id)
   const txns = (res.ok ? res.data ?? [] : []).sort((a, b) => a.date.localeCompare(b.date))
 
   const totalAmt = txns.reduce((s, t) => s + t.amount, 0)
   if (totalAmt) {
-    document.getElementById('rcd-total').textContent = `NT$${totalAmt.toLocaleString()}`
+    document.getElementById('rcd-total').textContent = `$${totalAmt.toLocaleString()}`
     document.getElementById('rcd-total').style.color = color
     document.getElementById('rcd-total-label').textContent = '已累積'
   }
@@ -1104,7 +1228,7 @@ window.openRecDetail = async function(id) {
         <div style="font-size:14px;font-weight:500">${y}/${m}/${day}</div>
         <div style="font-size:11px;color:${statusColor};margin-top:2px">${t.status}</div>
       </div>
-      <div style="font-size:14px;font-weight:700;color:${color}">NT$${t.amount.toLocaleString()}</div>
+      <div style="font-size:14px;font-weight:700;color:${color}">$${t.amount.toLocaleString()}</div>
     </div>`
   })
   if (item.is_active) {
@@ -1119,10 +1243,10 @@ window.openRecDetail = async function(id) {
     }
     futureDates.forEach((d, i) => {
       const [y, m, day] = d.split('-')
-      html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(48,54,61,.2);opacity:0.6;cursor:pointer" onclick="generateAndEditFuture('${item.id}')">
+      html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(48,54,61,.2);opacity:0.6;cursor:pointer" onclick="openFutureRecEdit('${item.id}','${d}')">
         <div style="width:30px;height:30px;border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--text-muted);flex-shrink:0">${i === 0 ? '次' : ''}</div>
         <div style="flex:1;font-size:14px;color:var(--text-muted)">${y}/${m}/${day}</div>
-        <div style="font-size:14px;font-weight:600;color:${color}">NT$${(item.amount + (item.fee || 0)).toLocaleString()}</div>
+        <div style="font-size:14px;font-weight:600;color:${color}">$${(item.amount + (item.fee || 0)).toLocaleString()}</div>
       </div>`
     })
   }
@@ -1130,9 +1254,35 @@ window.openRecDetail = async function(id) {
   document.getElementById('rcd-list').innerHTML = html
 }
 
-window.generateAndEditFuture = function(recurringId) {
+window.openFutureRecEdit = function(recurringId, date) {
+  const item = recItems.find(i => i.id === recurringId)
+  _pendingFutureRec = { recurringId, date }
+  _pendingEditTxn = null
+  _editScopeRec = 'this'
+  document.getElementById('scope-txn-name').textContent = `${item?.name || item?.category || ''}　${date}`
+  document.getElementById('scope-modal').classList.add('open')
+}
+
+async function _handleFutureRecScope(scope) {
+  const { recurringId, date } = _pendingFutureRec
+  _pendingFutureRec = null
+
+  if (scope === 'future') {
+    document.getElementById('rec-detail-modal').classList.remove('open')
+    openEditRecModal(recurringId)
+    return
+  }
+
+  // 只改這筆：先把這個「即將到來」的日期單獨生成一筆，再直接打開一般編輯表單
+  // （範圍已經選過了，不用再問一次）
+  const res = await api.generateRecurringOnce(recurringId, date)
+  if (!res.ok) { toast(res.error ?? '生成失敗', 'error'); return }
+  const r = await api.getTransaction(res.id)
+  if (!r?.ok || !r.data) { toast('無法載入紀錄', 'error'); return }
+  const t = r.data
   document.getElementById('rec-detail-modal').classList.remove('open')
-  openEditRecModal(recurringId)
+  _openTxnEditForm({ id: t.id, name: t.name || '', amount: t.amount, date: t.date, category: t.category, card: t.card || '', note: t.note || '', type: t.type || '支出', recurringId: t.recurring_id || '' })
+  await Promise.all([loadMonth(), loadRecurring()])
 }
 
 window.openRecTxnEdit = async function(txnId) {
@@ -1271,7 +1421,8 @@ window.saveRecurring = async function() {
   }
   const res = id ? await api.updateRecurring(id,data) : await api.addRecurring(data)
   if(res.ok){
-    if(!id && res.id) await api.generateRecurring(res.id)
+    // 新增或編輯後，若 next_date 已到期（含起始日期設在過去），立即補生成，不等隔日 cron
+    await api.generateRecurring(id || res.id)
     closeRecModal(); toast(id?'已更新':'已新增')
     const rr=await api.getRecurring()
     if(rr.ok){recItems=rr.data;renderRecurring()}
@@ -1338,7 +1489,7 @@ function escJs(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
 init()
 
 // bottom-nav「+」由 router 呼叫：帶當前選取日期跳到快速新增頁
-window.__getAddHref = () => '/add.html?date=' + (selectedDate || today)
+window.__getAddSearch = () => '?date=' + (selectedDate || today)
 
 // ── 手機：Modal 向下滑動關閉 ──
 // 註：月曆換月滑動由上面的 cal-strip 三格滑條處理，這裡不能再掛一套
@@ -1357,11 +1508,7 @@ if (window.innerWidth <= 768) {
   })
 }
 
-window.openMobileAdd = function(date) {
-  location.href = '/add.html' + (date ? '?date=' + date : '')
-}
-
-// 從 add.html 返回時重新整理資料
+// 從別的分頁/裝置切回來時重新整理資料
 window.addEventListener('pageshow', function(e) {
   if (e.persisted) {
     swr.delete('txns-' + currentMonth)

@@ -17,7 +17,7 @@ app.get('/daily', async (c) => {
   const total = txns.reduce((s, t) => s + t.amount, 0)
   const lines = txns.map(t => `• ${t.name} $${t.amount.toLocaleString()}（${t.category}）`)
   const summaryText = txns.length
-    ? `📊 ${date} 消費摘要\n共 ${txns.length} 筆，總金額 NT$${total.toLocaleString()}\n\n${lines.join('\n')}\n\n已寫入系統 ✅`
+    ? `📊 ${date} 消費摘要\n共 ${txns.length} 筆，總金額 $${total.toLocaleString()}\n\n${lines.join('\n')}\n\n已寫入系統 ✅`
     : `📊 ${date} 消費摘要\n今日無消費記錄`
 
   return c.json({

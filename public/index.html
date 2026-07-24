@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="瑞奇財務">
 <meta name="theme-color" content="#161b22">
 <link rel="apple-touch-icon" href="/icons/icon.svg">
-<link rel="stylesheet" href="/css/style.css?v=1784791747361">
+<link rel="stylesheet" href="/css/style.css?v=1784876897602">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 #splash {
@@ -42,7 +42,9 @@
   <div id="splash-bar"></div>
 </div>
 <script>
-if (!sessionStorage.getItem('splashShown')) {
+// /add 是快速輸入用的獨立主畫面圖示入口，要求打開就直接看到輸入畫面，不要有開機動畫
+const isAddEntry = location.pathname === '/add' || location.pathname === '/add.html'
+if (!isAddEntry && !sessionStorage.getItem('splashShown')) {
   const s = document.getElementById('splash')
   s.classList.remove('hide')
   s.style.transition = ''
@@ -51,9 +53,9 @@ if (!sessionStorage.getItem('splashShown')) {
 </script>
 
 <aside class="sidebar">
-  <div class="sidebar-logo">
+  <a href="/" data-page="overview" class="sidebar-logo">
     <span>💰</span><span>瑞奇財務</span>
-  </div>
+  </a>
   <nav class="sidebar-nav">
     <a href="/" class="nav-item" data-page="overview"><span class="icon">🏠</span><span>資產總覽</span></a>
     <a href="/transactions.html" class="nav-item" data-page="transactions"><span class="icon">📋</span><span>消費記錄</span></a>
@@ -70,7 +72,7 @@ if (!sessionStorage.getItem('splashShown')) {
 <nav class="bottom-nav">
   <a href="/" class="bottom-nav-item" data-page="overview"><span class="nav-icon">🏠</span><span>總覽</span></a>
   <a href="/report.html" class="bottom-nav-item" data-page="report"><span class="nav-icon">📊</span><span>報表</span></a>
-  <a href="/add.html" class="bottom-nav-item add-center"><span class="nav-icon">+</span></a>
+  <a href="/add" class="bottom-nav-item add-center"><span class="nav-icon">+</span></a>
   <a href="/reconcile.html" class="bottom-nav-item" data-page="reconcile"><span class="nav-icon">🔍</span><span>對帳</span></a>
   <a href="/investments.html" class="bottom-nav-item" data-page="investments"><span class="nav-icon">📈</span><span>投資</span></a>
 </nav>
@@ -207,7 +209,7 @@ if (!sessionStorage.getItem('splashShown')) {
       <input type="text" id="acc-bank" placeholder="例：中國信託（選填）">
     </div>
     <div class="form-group">
-      <label class="form-label">初始餘額 (NT$)</label>
+      <label class="form-label">初始餘額 ($)</label>
       <input type="number" id="acc-balance" placeholder="0" class="calc-input">
     </div>
     <div id="acc-cc-fields" style="display:none">
@@ -222,7 +224,7 @@ if (!sessionStorage.getItem('splashShown')) {
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">信用卡額度 (NT$)</label>
+        <label class="form-label">信用卡額度 ($)</label>
         <input type="number" id="acc-credit-limit" placeholder="0" inputmode="numeric">
       </div>
       <div class="form-group">
@@ -276,7 +278,7 @@ if (!sessionStorage.getItem('splashShown')) {
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">餘額 (NT$)</label>
+      <label class="form-label">餘額 ($)</label>
       <input type="number" id="edit-acc-balance" placeholder="0" class="calc-input" oninput="previewAdjustment()">
     </div>
     <div id="adjustment-preview" style="display:none;padding:10px 12px;background:var(--surface2);border-radius:6px;font-size:12px;color:var(--text-muted);margin-bottom:4px"></div>
@@ -292,7 +294,7 @@ if (!sessionStorage.getItem('splashShown')) {
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">信用卡額度 (NT$)</label>
+        <label class="form-label">信用卡額度 ($)</label>
         <input type="number" id="edit-acc-credit-limit" placeholder="0" inputmode="numeric">
       </div>
       <div class="form-group">
@@ -346,6 +348,11 @@ if (!sessionStorage.getItem('splashShown')) {
 
 .cal-wrap { overflow:hidden; position:relative; }
 .cal-strip { display:flex; width:300%; transform:translateX(-33.333%); will-change:transform; }
+
+.daily-wrap { overflow:hidden; position:relative; touch-action:pan-y; }
+.daily-strip { display:flex; width:300%; transform:translateX(-33.333%); will-change:transform; }
+.daily-view-panel { width:33.333%; flex-shrink:0; box-sizing:border-box; }
+
 .cal-grid {
   flex:1; min-width:0;
   display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,1fr);
@@ -470,8 +477,14 @@ if (!sessionStorage.getItem('splashShown')) {
             總覽 <span id="overview-arrow">▾</span>
           </button>
         </div>
-        <div id="daily-view">
-          <div class="empty-state" style="padding:20px 0">點選月曆中的日期查看當日記錄</div>
+        <div class="daily-wrap" id="daily-wrap">
+          <div class="daily-strip" id="daily-strip">
+            <div id="daily-view-prev" class="daily-view-panel"></div>
+            <div id="daily-view" class="daily-view-panel">
+              <div class="empty-state" style="padding:20px 0">點選月曆中的日期查看當日記錄</div>
+            </div>
+            <div id="daily-view-next" class="daily-view-panel"></div>
+          </div>
         </div>
         <div id="monthly-view" style="display:none"></div>
       </div>
@@ -519,12 +532,12 @@ if (!sessionStorage.getItem('splashShown')) {
         <select id="f-category"></select>
       </div>
       <div class="form-group">
-        <label class="form-label">金額 (NT$) *</label>
+        <label class="form-label">金額 ($) *</label>
         <input type="number" id="f-amount" placeholder="0" class="calc-input" oninput="updateNormalTotal()">
       </div>
       <div id="fee-section-normal" style="display:none">
         <div class="form-group" style="margin-bottom:4px">
-          <label class="form-label">手續費 (NT$)</label>
+          <label class="form-label">手續費 ($)</label>
           <input type="number" id="f-fee" placeholder="0" class="calc-input" oninput="updateNormalTotal()">
         </div>
         <div id="fee-total-normal" style="font-size:12px;color:var(--text-muted);padding:0 0 8px;font-weight:500"></div>
@@ -558,7 +571,7 @@ if (!sessionStorage.getItem('splashShown')) {
       </div>
       <div class="grid-2">
         <div class="form-group">
-          <label class="form-label">金額 (NT$) *</label>
+          <label class="form-label">金額 ($) *</label>
           <input type="number" id="f-xfr-amount" placeholder="0" class="calc-input">
         </div>
         <div class="form-group">
@@ -568,7 +581,7 @@ if (!sessionStorage.getItem('splashShown')) {
       </div>
       <div id="fee-section-transfer" style="display:none">
         <div class="form-group" style="margin-bottom:4px">
-          <label class="form-label">手續費 (NT$) <span style="color:var(--text-muted);font-weight:400;font-size:11px">從來源帳戶額外扣除</span></label>
+          <label class="form-label">手續費 ($) <span style="color:var(--text-muted);font-weight:400;font-size:11px">從來源帳戶額外扣除</span></label>
           <input type="number" id="f-xfr-fee" placeholder="0" class="calc-input">
         </div>
       </div>
@@ -657,9 +670,6 @@ if (!sessionStorage.getItem('splashShown')) {
       <div class="modal-title">↔ 帳戶轉帳</div>
       <button class="modal-close" onclick="closeTransferModal()">×</button>
     </div>
-    <div style="background:rgba(88,166,255,0.06);border:1px solid rgba(88,166,255,0.2);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text-muted)">
-      轉帳會同時建立兩筆關聯記錄：來源帳戶的支出和目標帳戶的收入。
-    </div>
     <div class="grid-2">
       <div class="form-group">
         <label class="form-label">來源帳戶 *</label>
@@ -672,7 +682,7 @@ if (!sessionStorage.getItem('splashShown')) {
     </div>
     <div class="grid-2">
       <div class="form-group">
-        <label class="form-label">金額 (NT$) *</label>
+        <label class="form-label">金額 ($) *</label>
         <input type="number" id="xfr-amount" placeholder="0" class="calc-input">
       </div>
       <div class="form-group">
@@ -738,7 +748,7 @@ if (!sessionStorage.getItem('splashShown')) {
     </div>
     <div class="grid-2">
       <div class="form-group">
-        <label class="form-label">金額 (NT$) *</label>
+        <label class="form-label">金額 ($) *</label>
         <input type="number" id="r-amount" placeholder="0" class="calc-input">
       </div>
       <div class="form-group">
@@ -775,7 +785,7 @@ if (!sessionStorage.getItem('splashShown')) {
       </div>
     </div>
     <div class="form-group" style="margin-bottom:4px">
-      <label class="form-label">手續費 (NT$) <span style="color:var(--text-muted);font-weight:400;font-size:11px">選填，每次觸發自動加入</span></label>
+      <label class="form-label">手續費 ($) <span style="color:var(--text-muted);font-weight:400;font-size:11px">選填，每次觸發自動加入</span></label>
       <input type="number" id="r-fee" placeholder="0" class="calc-input">
     </div>
     <div class="modal-footer">
@@ -1008,7 +1018,9 @@ if (!sessionStorage.getItem('splashShown')) {
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-.acct-view-list { flex: 1; overflow-y: auto; padding: 0 14px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.acct-view-wrap { flex: 1; min-height: 0; overflow: hidden; position: relative; touch-action: pan-y; }
+.acct-view-strip { display: flex; width: 300%; height: 100%; transform: translateX(-33.333%); will-change: transform; }
+.acct-view-list { width: 33.333%; height: 100%; flex-shrink: 0; overflow-y: auto; padding: 0 14px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; box-sizing: border-box; }
 .acct-view-footer {
   padding: 10px 18px 12px;
   border-top: 1px solid var(--border);
@@ -1080,7 +1092,7 @@ if (!sessionStorage.getItem('splashShown')) {
       <span id="rec-pending-hint" style="display:none;font-size:11px;color:var(--warning);font-weight:600;background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.3);border-radius:6px;padding:3px 8px"></span>
       <div class="rec-modal-footer-item">
         <span class="rec-modal-footer-label">對帳金額</span>
-        <span class="rec-modal-footer-val" id="rec-amount">NT$0</span>
+        <span class="rec-modal-footer-val" id="rec-amount">$0</span>
       </div>
     </div>
   </div>
@@ -1100,10 +1112,16 @@ if (!sessionStorage.getItem('splashShown')) {
       <span id="acct-month-display" style="font-size:13px;font-weight:600;min-width:100px;text-align:center"></span>
       <button id="acct-month-next" onclick="acctMonthNav(1)" style="background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:0 6px;line-height:1">›</button>
     </div>
-    <div class="acct-view-list" id="acct-view-list"></div>
+    <div class="acct-view-wrap">
+      <div class="acct-view-strip" id="acct-view-strip">
+        <div class="acct-view-list" id="acct-view-list-prev"></div>
+        <div class="acct-view-list" id="acct-view-list"></div>
+        <div class="acct-view-list" id="acct-view-list-next"></div>
+      </div>
+    </div>
     <div class="acct-view-footer">
       <span style="color:var(--text-muted)">共 <span id="acct-view-count">0</span> 筆</span>
-      <span>合計 <strong id="acct-view-total">NT$0</strong></span>
+      <span>合計 <strong id="acct-view-total">$0</strong></span>
     </div>
   </div>
 </div>
@@ -1129,7 +1147,7 @@ if (!sessionStorage.getItem('splashShown')) {
     </div>
     <div class="grid-2">
       <div class="form-group">
-        <label class="form-label">付款金額 (NT$)</label>
+        <label class="form-label">付款金額 ($)</label>
         <input type="number" id="pay-amount" placeholder="0" class="calc-input">
       </div>
       <div class="form-group">
@@ -1189,70 +1207,19 @@ if (!sessionStorage.getItem('splashShown')) {
 }
 .inv-name { font-size: 15px; font-weight: 600; margin-top: 1px; }
 
-/* 詳情滑入面板 */
-.detail-panel {
-  position: fixed;
-  inset: 0;
-  z-index: 500;
-  background: var(--bg);
-  transform: translateX(100%);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
-.detail-panel.open { transform: translateX(0); }
+/* 個股詳情內容（在 .modal 內顯示，本身不需額外內距） */
+.detail-body {}
 
-.detail-topbar {
-  position: sticky;
-  top: 0;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
-  padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  z-index: 10;
+/* 詳情頂部統計格線 */
+.detail-stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 12px;
+  padding: 4px 2px 20px;
 }
-.detail-back-btn {
-  background: none;
-  border: none;
-  color: var(--accent);
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 4px 0;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.detail-title-text {
-  flex: 1;
-  font-size: 16px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: center;
-}
-.detail-body {
-  padding: 20px 16px;
-  padding-bottom: calc(100px + env(safe-area-inset-bottom));
-  max-width: 600px;
-  margin: 0 auto;
-}
-
-/* 詳情表格 */
-.detail-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.detail-table td {
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(48,54,61,0.5);
-  font-size: 14px;
-}
-.detail-table td:first-child { color: var(--text-muted); }
-.detail-table td:last-child { text-align: right; font-weight: 500; }
-.detail-table tr:last-child td { border-bottom: none; }
+.detail-stat-grid .stat-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+.detail-stat-grid .stat-value { font-size: 15px; font-weight: 600; }
+.detail-stat-grid .stat-value.lg { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
 
 /* 損益區塊 */
 .detail-pnl-block {
@@ -1272,17 +1239,37 @@ if (!sessionStorage.getItem('splashShown')) {
 .detail-pnl-row:last-child { border-bottom: none; }
 .detail-pnl-label { color: var(--text-muted); }
 
-/* 交易記錄 */
-.trade-row {
+/* 交易明細列 */
+.trade-row-v2 {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 10px 0;
+  gap: 10px;
+  padding: 12px 0;
   border-bottom: 1px solid rgba(48,54,61,0.3);
   font-size: 13px;
-  gap: 8px;
 }
-.trade-row:last-child { border-bottom: none; }
+.trade-row-v2:last-child { border-bottom: none; }
+.tr-date { width: 48px; flex-shrink: 0; color: var(--text-muted); font-size: 11.5px; line-height: 1.4; }
+.tr-col { flex: 1; min-width: 0; }
+.tr-col-right { text-align: right; }
+.tr-col-main { font-weight: 600; font-size: 13.5px; }
+.tr-col-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.tr-col-right .tr-col-sub { font-weight: 600; }
+.tr-actions { display: flex; flex-shrink: 0; }
+.trade-header-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+.trade-header-row .tr-date,
+.trade-header-row .trade-type-ph { width: 48px; flex-shrink: 0; }
+.trade-header-row .trade-type-ph { width: 40px; }
+.trade-header-row .tr-actions-ph { width: 32px; flex-shrink: 0; }
 .trade-type {
   font-size: 11px;
   font-weight: 600;
@@ -1292,19 +1279,14 @@ if (!sessionStorage.getItem('splashShown')) {
 }
 .type-buy { background: rgba(63,185,80,0.15); color: #3fb950; }
 .type-sell { background: rgba(248,81,73,0.15); color: #f85149; }
-.trade-del, .trade-edit {
+.trade-del {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 14px;
   opacity: 0.6;
-  padding: 4px 8px;
   border-radius: 6px;
-  flex-shrink: 0;
 }
-.trade-edit:active, .trade-edit:hover { opacity: 1; background: rgba(88,166,255,0.15); }
 .trade-del:active, .trade-del:hover { opacity: 1; background: rgba(248,81,73,0.15); }
-.trade-del:hover { opacity: 1; background: rgba(248,81,73,0.15); }
 
 /* 更新市價 icon 按鈕 */
 .btn-refresh-icon {
@@ -1335,8 +1317,9 @@ if (!sessionStorage.getItem('splashShown')) {
 .pnl-table td { padding:10px 8px; border-bottom:1px solid rgba(48,54,61,0.5); vertical-align:middle; }
 .pnl-table tr:last-child td { border-bottom:none; }
 .pnl-table tr:hover td { background:rgba(48,54,61,0.3); }
-.pnl-pos { color:var(--success); font-weight:600; }
-.pnl-neg { color:var(--danger); font-weight:600; }
+/* 台股習慣：正值(賺)紅、負值(賠)綠，跟全站其他頁面相反，僅投資頁適用 */
+.pnl-pos { color:var(--danger); font-weight:600; }
+.pnl-neg { color:var(--success); font-weight:600; }
 
 </style>
 <div class="main">
@@ -1416,14 +1399,18 @@ if (!sessionStorage.getItem('splashShown')) {
   </div>
 </div>
 
-<!-- ══ 個股詳情面板 ══ -->
-<div id="detail-panel" class="detail-panel">
-  <div class="detail-topbar">
-    <button class="detail-back-btn" onclick="closeDetail()">← 返回</button>
-    <div id="detail-title" class="detail-title-text"></div>
-    <button class="btn btn-secondary btn-sm" onclick="openEditDetail()">編輯</button>
+<!-- ══ 個股詳情 Modal ══ -->
+<div class="modal-overlay" id="detail-panel">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="detail-title" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      <div style="display:flex;align-items:center;gap:14px;flex-shrink:0">
+        <button class="btn btn-secondary btn-sm" onclick="openEditDetail()">編輯</button>
+        <button class="modal-close" onclick="closeDetail()">×</button>
+      </div>
+    </div>
+    <div id="detail-body" class="detail-body"></div>
   </div>
-  <div id="detail-body" class="detail-body"></div>
 </div>
 
 <!-- ══ 編輯持股 Modal ══ -->
@@ -1808,7 +1795,287 @@ if (!sessionStorage.getItem('splashShown')) {
 </div>
 </template>
 
-<script src="/js/calc-keyboard.js?v=1784791747361"></script>
-<script type="module" src="/js/router.js?v=1784791747361"></script>
+<template id="tpl-add" data-title="新增記錄">
+<style>
+#add-wrap {
+  position: fixed; inset: 0; z-index: 500;
+  background: var(--bg); color: var(--text);
+  display: flex; flex-direction: column;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+#add-wrap * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+#add-wrap .topbar { display: flex; align-items: center; justify-content: space-between;
+  padding: calc(max(12px, env(safe-area-inset-top)) + 4px) 20px 14px;
+  flex-shrink: 0; }
+#add-wrap .topbar-title { font-size: 17px; font-weight: 600; }
+#add-wrap .topbar-close { background: var(--surface2); border: none; color: var(--text-muted);
+  width: 30px; height: 30px; border-radius: 50%; font-size: 15px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; text-decoration: none; }
+
+#add-wrap .step-dots { display: flex; gap: 6px; align-items: center; justify-content: center;
+  padding-bottom: 18px; flex-shrink: 0; }
+#add-wrap .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); transition: all 0.2s; }
+#add-wrap .dot.active { background: var(--accent); width: 18px; border-radius: 3px; }
+#add-wrap .dot.done { background: var(--success); }
+
+#add-wrap .slides { flex: 1; position: relative; overflow: hidden; }
+#add-wrap .slide { position: absolute; inset: 0; padding: 0 24px 12px;
+  display: flex; flex-direction: column;
+  transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  will-change: transform; overflow: hidden; }
+#add-wrap .slide.active { transform: translateX(0); }
+#add-wrap .slide.past { transform: translateX(-100%); }
+
+/* Amount */
+#add-wrap .amount-display { display: flex; flex-direction: column; align-items: center;
+  justify-content: center; flex: 1; gap: 4px; min-height: 0; }
+#add-wrap .amount-label { font-size: 13px; color: var(--text-muted); font-weight: 500; }
+#add-wrap .amount-expr { font-size: 13px; color: var(--text-muted); min-height: 18px; margin-top: 2px; }
+#add-wrap .amount-value { font-size: 52px; font-weight: 300; letter-spacing: -2px;
+  display: flex; align-items: center; }
+#add-wrap .amount-currency { font-size: 26px; color: var(--text-muted); margin-right: 4px; }
+#add-wrap .amount-value.zero span.amt-num { color: var(--border); }
+
+/* Calculator */
+#add-wrap .calc-pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  padding: 8px 0; flex-shrink: 0; }
+#add-wrap .ck-btn { background: var(--surface); border: none; color: var(--text);
+  border-radius: 12px; font-size: 22px; cursor: pointer;
+  height: 58px; display: flex; align-items: center; justify-content: center;
+  transition: opacity 0.08s; user-select: none; font-family: inherit; }
+#add-wrap .ck-btn:active { opacity: 0.5; }
+#add-wrap .ck-op  { background: var(--surface2); color: #cdd9e5; font-size: 20px; }
+#add-wrap .ck-del { background: var(--surface2); color: var(--text-muted); font-size: 18px; }
+#add-wrap .ck-clr { background: var(--surface2); color: var(--danger); font-size: 16px; font-weight: 600; }
+#add-wrap .ck-eq  { background: var(--surface2); color: #cdd9e5; }
+#add-wrap .ck-ok  { background: var(--accent); color: #0d1117; font-size: 20px; font-weight: 700; }
+
+/* Type + Category (Step 2) */
+#add-wrap .type-tabs { display: flex; gap: 8px; flex-shrink: 0; margin-bottom: 0; }
+#add-wrap .type-tab { flex: 1; background: var(--surface); border: 2px solid var(--border);
+  border-radius: 12px; color: var(--text-muted); font-size: 15px; font-weight: 600;
+  padding: 12px 8px; cursor: pointer; text-align: center; transition: all 0.15s;
+  font-family: inherit; }
+#add-wrap .type-tab:active { transform: scale(0.96); }
+#add-wrap .type-tab.active-expense  { border-color: var(--danger);  background: rgba(248,81,73,0.1);  color: var(--danger); }
+#add-wrap .type-tab.active-income   { border-color: var(--success); background: rgba(63,185,80,0.1);  color: var(--success); }
+#add-wrap .type-tab.active-transfer { border-color: #d07030;        background: rgba(208,112,48,0.1); color: #d07030; }
+
+#add-wrap .cat-section { flex: 1; overflow: hidden; display: flex; flex-direction: column; margin-top: 16px; }
+#add-wrap .cat-hint { font-size: 13px; color: var(--text-muted); margin-bottom: 12px; flex-shrink: 0; }
+#add-wrap .choose-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+  overflow-y: auto; flex: 1; padding-bottom: 4px; align-content: start; }
+#add-wrap .choose-btn { background: var(--surface); border: 2px solid var(--border);
+  border-radius: 12px; color: var(--text); font-size: 15px; font-weight: 500;
+  padding: 16px 10px; cursor: pointer; text-align: center; transition: all 0.12s;
+  font-family: inherit; }
+#add-wrap .choose-btn:active { transform: scale(0.96); }
+#add-wrap .choose-btn.selected { border-color: var(--accent); background: rgba(88,166,255,0.1); color: var(--accent); }
+#add-wrap .cat-placeholder { flex: 1; display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted); font-size: 14px; }
+
+/* Name / Date */
+#add-wrap .step-label { font-size: 22px; font-weight: 600; margin-bottom: 6px; flex-shrink: 0; }
+#add-wrap .step-sub { font-size: 14px; color: var(--text-muted); margin-bottom: 20px; flex-shrink: 0; }
+#add-wrap .name-wrap { flex: 1; display: flex; flex-direction: column; justify-content: center;
+  max-width: 100%; overflow: hidden; }
+#add-wrap .big-input { background: var(--surface); border: 1.5px solid var(--border);
+  border-radius: 14px; color: var(--text); font-size: 18px; padding: 16px 18px;
+  width: 100%; font-family: inherit; transition: border-color 0.15s; }
+#add-wrap .big-input:focus { outline: none; border-color: var(--accent); }
+#add-wrap .date-input { display: block; width: 100%; width: -webkit-fill-available;
+  box-sizing: border-box; max-width: 100%; color-scheme: dark;
+  margin-top: 12px; text-align: left; }
+#add-wrap .field-label { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; font-weight: 500; }
+
+/* Account */
+#add-wrap .summary-card { background: var(--surface); border-radius: 12px; padding: 14px 16px;
+  margin-bottom: 14px; border: 1px solid var(--border); flex-shrink: 0; }
+#add-wrap .summary-row { display: flex; justify-content: space-between; padding: 4px 0;
+  font-size: 13px; border-bottom: 1px solid var(--border); }
+#add-wrap .summary-row:last-child { border-bottom: none; }
+#add-wrap .summary-row .key { color: var(--text-muted); }
+#add-wrap .summary-row .val { font-weight: 600; }
+
+/* Nav */
+#add-wrap .bottom-nav-flow { display: flex; gap: 10px; padding: 10px 0 0; flex-shrink: 0; }
+#add-wrap .btn-back { background: var(--surface); border: 1.5px solid var(--border);
+  color: var(--text); border-radius: 14px; font-size: 15px; font-weight: 600;
+  padding: 15px 18px; cursor: pointer; font-family: inherit; }
+#add-wrap .btn-back:active { background: var(--surface2); }
+#add-wrap .btn-next { flex: 1; background: var(--accent); border: none; color: #0d1117;
+  border-radius: 14px; font-size: 16px; font-weight: 700;
+  padding: 15px; cursor: pointer; font-family: inherit; }
+#add-wrap .btn-next:active { opacity: 0.85; }
+#add-wrap .btn-next:disabled { opacity: 0.35; pointer-events: none; }
+#add-wrap .btn-skip { background: transparent; border: 1.5px solid var(--border);
+  color: var(--text-muted); border-radius: 14px; font-size: 15px; font-weight: 500;
+  padding: 15px 16px; cursor: pointer; font-family: inherit; }
+#add-wrap .btn-skip:active { background: var(--surface); }
+
+/* Success */
+#add-wrap .success-screen { flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 10px; }
+#add-wrap .success-icon { font-size: 64px; margin-bottom: 6px; }
+#add-wrap .success-title { font-size: 24px; font-weight: 700; }
+#add-wrap .success-detail { font-size: 15px; color: var(--text-muted); text-align: center; }
+#add-wrap .success-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; margin-top: 28px; padding: 0 24px; }
+#add-wrap .btn-again { background: var(--accent); border: none; color: #0d1117; border-radius: 14px;
+  font-size: 16px; font-weight: 700; padding: 16px; cursor: pointer; font-family: inherit; }
+#add-wrap .btn-app { background: var(--surface); border: 1.5px solid var(--border); color: var(--text);
+  border-radius: 14px; font-size: 16px; font-weight: 600; padding: 16px; cursor: pointer;
+  font-family: inherit; text-decoration: none; display: block; text-align: center; }
+
+#add-wrap input[type="number"]::-webkit-outer-spin-button,
+#add-wrap input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+#add-wrap input[type="number"] { -moz-appearance: textfield; }
+</style>
+<div id="add-wrap">
+  <div class="topbar">
+    <div class="topbar-title" id="add-topbar-title">新增記錄</div>
+    <a href="/transactions.html" data-page="transactions" class="topbar-close">✕</a>
+  </div>
+  <div class="step-dots" id="add-dots"></div>
+
+  <div class="slides">
+
+    <!-- Step 1: 金額 -->
+    <div class="slide active" id="add-s1">
+      <div class="amount-display">
+        <div class="amount-label">輸入金額</div>
+        <div class="amount-value zero" id="add-amt-display">
+          <span class="amount-currency">$</span>
+          <span class="amt-num" id="add-amt-text">0</span>
+        </div>
+        <div class="amount-expr" id="add-amt-expr"></div>
+      </div>
+      <div class="calc-pad">
+        <button class="ck-btn ck-op"  onclick="addCk('÷')">÷</button>
+        <button class="ck-btn ck-op"  onclick="addCk('×')">×</button>
+        <button class="ck-btn ck-op"  onclick="addCk('-')">−</button>
+        <button class="ck-btn ck-op"  onclick="addCk('+')">+</button>
+        <button class="ck-btn"        onclick="addCk('7')">7</button>
+        <button class="ck-btn"        onclick="addCk('8')">8</button>
+        <button class="ck-btn"        onclick="addCk('9')">9</button>
+        <button class="ck-btn ck-del" onclick="addCk('⌫')">⌫</button>
+        <button class="ck-btn"        onclick="addCk('4')">4</button>
+        <button class="ck-btn"        onclick="addCk('5')">5</button>
+        <button class="ck-btn"        onclick="addCk('6')">6</button>
+        <button class="ck-btn ck-clr" onclick="addCk('C')">C</button>
+        <button class="ck-btn"        onclick="addCk('1')">1</button>
+        <button class="ck-btn"        onclick="addCk('2')">2</button>
+        <button class="ck-btn"        onclick="addCk('3')">3</button>
+        <button class="ck-btn ck-eq"  onclick="addCk('=')">＝</button>
+        <button class="ck-btn"        onclick="addCk('.')">.</button>
+        <button class="ck-btn"        onclick="addCk('0')">0</button>
+        <button class="ck-btn"        onclick="addCk('00')">00</button>
+        <button class="ck-btn ck-ok"  onclick="addCk('✓')">✓</button>
+      </div>
+    </div>
+
+    <!-- Step 2: 類型 + 分類 -->
+    <div class="slide" id="add-s2">
+      <div class="type-tabs">
+        <button class="type-tab" id="add-tab-expense"  onclick="addSelectType('支出')">支出</button>
+        <button class="type-tab" id="add-tab-income"   onclick="addSelectType('收入')">收入</button>
+        <button class="type-tab" id="add-tab-transfer" onclick="addSelectType('轉帳')">轉帳</button>
+      </div>
+      <div class="cat-section">
+        <div class="cat-placeholder" id="add-cat-placeholder">選擇類型後顯示分類</div>
+        <div id="add-cat-grid-wrap" style="display:none;flex:1;overflow:hidden;flex-direction:column;">
+          <div class="cat-hint">點選分類後自動進入下一步</div>
+          <div class="choose-grid" id="add-cat-grid"></div>
+        </div>
+      </div>
+      <div class="bottom-nav-flow">
+        <button class="btn-back" onclick="addGoTo(1)">‹</button>
+        <button class="btn-next" id="add-btn-s2-next" disabled onclick="addGoTo(3)">下一步</button>
+      </div>
+    </div>
+
+    <!-- Step 3: 名稱+日期（支出/收入）or 日期+備註（轉帳） -->
+    <div class="slide" id="add-s3">
+      <div id="add-s3-normal" style="flex:1;display:flex;flex-direction:column;">
+        <div class="name-wrap">
+          <div class="step-label">這筆叫什麼？</div>
+          <div class="step-sub">選填</div>
+          <input class="big-input" type="text" id="add-inp-name" placeholder="例：全家、Uber Eats、診所"
+            autocomplete="off" autocorrect="off" spellcheck="false">
+          <input type="date" class="big-input date-input" id="add-inp-date">
+        </div>
+        <div class="bottom-nav-flow">
+          <button class="btn-back" onclick="addGoTo(2)">‹</button>
+          <button class="btn-skip" onclick="addGoTo(4)">跳過</button>
+          <button class="btn-next" onclick="addGoTo(4)">下一步</button>
+        </div>
+      </div>
+      <div id="add-s3-xfr" style="display:none;flex:1;flex-direction:column;">
+        <div class="name-wrap">
+          <div class="step-label">日期與備註</div>
+          <div class="field-label" style="margin-top:0">日期</div>
+          <input type="date" class="big-input date-input" id="add-xfr-date" style="margin-top:0">
+          <div class="field-label" style="margin-top:16px">備註（選填）</div>
+          <input class="big-input" type="text" id="add-xfr-note" placeholder="備註"
+            autocomplete="off" autocorrect="off" spellcheck="false" style="margin-top:0">
+        </div>
+        <div class="bottom-nav-flow">
+          <button class="btn-back" onclick="addGoTo(2)">‹</button>
+          <button class="btn-next" onclick="addGoTo(4)">下一步</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 4: 帳戶（支出/收入）or 轉出帳戶（轉帳） -->
+    <div class="slide" id="add-s4">
+      <div id="add-s4-acc" style="flex:1;display:flex;flex-direction:column;">
+        <div class="step-label">選擇帳戶</div>
+        <div class="step-sub">點選後送出記錄</div>
+        <div class="summary-card" id="add-summary-preview"></div>
+        <div class="choose-grid" id="add-acc-grid" style="flex:1"></div>
+        <div class="bottom-nav-flow">
+          <button class="btn-back" onclick="addGoTo(3)">‹</button>
+        </div>
+      </div>
+      <div id="add-s4-from" style="display:none;flex:1;flex-direction:column;">
+        <div class="step-label">轉出帳戶</div>
+        <div class="step-sub">從哪個帳戶轉出？</div>
+        <div class="choose-grid" id="add-from-grid" style="flex:1"></div>
+        <div class="bottom-nav-flow">
+          <button class="btn-back" onclick="addGoTo(3)">‹</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 5: 轉入帳戶（轉帳限定） -->
+    <div class="slide" id="add-s5">
+      <div class="step-label">轉入帳戶</div>
+      <div class="step-sub" id="add-xfr-from-label">轉入哪個帳戶？</div>
+      <div class="choose-grid" id="add-to-grid" style="flex:1"></div>
+      <div class="bottom-nav-flow">
+        <button class="btn-back" onclick="addGoTo(4)">‹</button>
+      </div>
+    </div>
+
+    <!-- Success -->
+    <div class="slide" id="add-s-success">
+      <div class="success-screen">
+        <div class="success-icon">✅</div>
+        <div class="success-title">已新增！</div>
+        <div class="success-detail" id="add-success-detail"></div>
+      </div>
+      <div class="success-actions">
+        <button class="btn-again" onclick="addReset()">再新增一筆</button>
+        <a href="/transactions.html" data-page="transactions" class="btn-app">開啟消費記錄</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+</template>
+
+<script src="/js/calc-keyboard.js?v=1784876897602"></script>
+<script type="module" src="/js/router.js?v=1784876897602"></script>
 </body>
 </html>

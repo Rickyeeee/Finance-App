@@ -67,7 +67,7 @@ app.patch('/:id/future', async (c) => {
     // amount：用 base + fee 算出總額
     if (templateData.amount !== undefined) txnData.amount = templateData.amount + fee
     // note：有 fee 就覆寫，否則保留 templateData.note
-    txnData.note = fee > 0 ? `含手續費 NT$${fee.toLocaleString()}` : (templateData.note ?? null)
+    txnData.note = fee > 0 ? `含手續費 $${fee.toLocaleString()}` : (templateData.note ?? null)
 
     const fields = Object.keys(txnData)
     if (fields.length) {
@@ -113,6 +113,33 @@ app.post('/:id/generate', async (c) => {
 
   const today = new Date().toISOString().slice(0, 10)
   const body = await c.req.json().catch(() => ({}))
+
+  // 只生成單一指定日期（用於「只改這筆」：把某個「即將到來」的日期單獨生成一筆，
+  // 不動 next_date，讓中間還沒到期的日期維持原樣，不會被提前生成）
+  const onlyDate = (body as any).only_date
+  if (onlyDate) {
+    const existing = await c.env.DB.prepare(
+      'SELECT id FROM transactions WHERE recurring_id = ? AND date = ? LIMIT 1'
+    ).bind(id, onlyDate).first<{ id: string }>()
+    if (existing) return c.json({ ok: true, id: existing.id, count: 0 })
+
+    const txnId = await createTransaction(c.env.DB, {
+      name: item.name,
+      amount: item.amount + fee,
+      date: onlyDate,
+      category: item.category,
+      card: cardName,
+      account_id: accountId,
+      type: item.type,
+      status: '待確認',
+      source: '定期',
+      note: fee > 0 ? `含手續費 $${fee.toLocaleString()}` : (item.note ?? null),
+      transfer_id: null,
+      recurring_id: item.id,
+    })
+    return c.json({ ok: true, id: txnId, count: 1 })
+  }
+
   const until = (body as any).until_date ?? today
   let nd: string = item.next_date
   let count = 0
@@ -133,7 +160,7 @@ app.post('/:id/generate', async (c) => {
         type: item.type,
         status: '待確認',
         source: '定期',
-        note: fee > 0 ? `含手續費 NT$${fee.toLocaleString()}` : (item.note ?? null),
+        note: fee > 0 ? `含手續費 $${fee.toLocaleString()}` : (item.note ?? null),
         transfer_id: null,
         recurring_id: item.id,
       })

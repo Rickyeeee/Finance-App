@@ -1,4 +1,4 @@
-const CACHE = 'finance-v11'
+const CACHE = 'finance-v16'
 
 // SPA：五個頁面路徑都由 index.html 提供
 // 預快取用 '/' 和 '/add'（.html 路徑會被 assets 307 轉址，fetch 結果 redirected 無法入快取）

@@ -1,8 +1,10 @@
-import { api, toast, formatMoney, fmtSigned, amtColor, formatDate, badgeHtml, catIcon, initAppName, swr } from '/js/api.js'
+import { api, toast, formatMoney, fmtSigned, amtColor, formatDate, badgeHtml, catIcon, initAppName, swr, hideSplash } from '/js/api.js'
+import { openEditTxnModal, openEditTransferModal } from '/js/txn-modal.js'
 
 // 此模組由 build-spa 從 index.html 抽出，router 每次進入頁面時呼叫 show()
 // trendChart 放模組層級：重新進入頁面時能 destroy 前一次的 Chart 實例
 let trendChart = null
+let dailySummaryTxns = []
 
 // router 於 app 啟動後在背景呼叫：預先把本頁資料放進 swr 快取（不碰 DOM）
 export async function prefetch() {
@@ -69,23 +71,23 @@ function applyAssetsData(d, historyData) {
   document.getElementById('total-investments').textContent = formatMoney(d.total_investments)
 
   const mInc = document.getElementById('monthly-income')
-  mInc.textContent = d.monthly_income > 0 ? 'NT$' + d.monthly_income.toLocaleString() : 'NT$0'
+  mInc.textContent = d.monthly_income > 0 ? '$' + d.monthly_income.toLocaleString() : '$0'
   mInc.style.color = d.monthly_income > 0 ? 'var(--success)' : 'var(--text)'
 
   const mExp = document.getElementById('monthly-expense')
-  mExp.textContent = d.monthly_expense > 0 ? 'NT$' + d.monthly_expense.toLocaleString() : 'NT$0'
+  mExp.textContent = d.monthly_expense > 0 ? '$' + d.monthly_expense.toLocaleString() : '$0'
   mExp.style.color = d.monthly_expense > 0 ? 'var(--danger)' : 'var(--text)'
 
   const net = (d.monthly_income ?? 0) - (d.monthly_expense ?? 0)
   const incomeSub = document.getElementById('income-sub')
   const expenseSub = document.getElementById('expense-sub')
   if (net > 0) {
-    incomeSub.textContent = `本月盈餘 NT$${net.toLocaleString()}`
+    incomeSub.textContent = `本月盈餘 $${net.toLocaleString()}`
     incomeSub.style.color = 'var(--success)'
     expenseSub.textContent = '本月消費'
     expenseSub.style.color = ''
   } else if (net < 0) {
-    expenseSub.textContent = `本月虧損 NT$${Math.abs(net).toLocaleString()}`
+    expenseSub.textContent = `本月虧損 $${Math.abs(net).toLocaleString()}`
     expenseSub.style.color = 'var(--danger)'
     incomeSub.textContent = '本月收入'
     incomeSub.style.color = ''
@@ -189,7 +191,7 @@ function renderAccounts() {
             ${excluded ? '<span style="font-size:10px;color:var(--warning);margin-left:4px;vertical-align:middle">不計入</span>' : ''}
           </div>
           ${acc.bank ? `<div class="text-muted text-small">${escHtml(acc.bank)}</div>` : ''}
-          ${type === '信用卡' && acc.credit_limit ? `<div class="text-muted text-small">可用 NT$${(acc.credit_limit + acc.balance).toLocaleString()} / ${acc.credit_limit.toLocaleString()}（${Math.max(0, Math.round((acc.credit_limit + acc.balance) / acc.credit_limit * 100))}%）</div>` : ''}
+          ${type === '信用卡' && acc.credit_limit ? `<div class="text-muted text-small">可用 $${(acc.credit_limit + acc.balance).toLocaleString()} / ${acc.credit_limit.toLocaleString()}（${Math.max(0, Math.round((acc.credit_limit + acc.balance) / acc.credit_limit * 100))}%）</div>` : ''}
         </div>
         <div style="font-weight:600;color:${balanceColor};white-space:nowrap;text-align:right">${balanceSign}${formatMoney(displayBalance)}</div>
       </div>`
@@ -266,7 +268,7 @@ function renderTrendChart(history, liveTotalAssets) {
       plugins: { legend: { display: false }, tooltip: {
         callbacks: { label: ctx => {
           if (ctx.raw == null) return '無資料'
-          const val = 'NT$' + ctx.raw.toLocaleString()
+          const val = '$' + ctx.raw.toLocaleString()
           return isCarried[ctx.dataIndex] ? val + '（無快照，沿用前一筆）' : val
         } }
       }},
@@ -283,9 +285,9 @@ function renderTrendChart(history, liveTotalAssets) {
 // Y 軸標籤：範圍小於 5 萬時用小數，避免整數萬四捨五入後格線標籤重複（如連續三個都顯示「25W」）
 function wLabel(v, ticks) {
   const range = Math.abs((ticks.at(-1)?.value ?? v) - (ticks[0]?.value ?? v))
-  if (Math.abs(v) < 10000) return 'NT$' + v.toLocaleString()
+  if (Math.abs(v) < 10000) return '$' + v.toLocaleString()
   const decimals = range < 50000 ? 1 : 0
-  return 'NT$' + (v / 10000).toFixed(decimals) + 'W'
+  return '$' + (v / 10000).toFixed(decimals) + 'W'
 }
 
 async function renderCountdowns() {
@@ -396,7 +398,7 @@ async function renderCountdowns() {
     } else if (paymentPast) {
       statusHtml = `<span style="color:var(--danger);font-size:13px;font-weight:600">未繳款</span>`
     } else if (status.reconciled) {
-      statusHtml = `<span style="color:var(--success);font-size:13px;font-weight:600">NT$${status.amount.toLocaleString()} 應繳</span>`
+      statusHtml = `<span style="color:var(--success);font-size:13px;font-weight:600">$${status.amount.toLocaleString()} 應繳</span>`
     } else {
       statusHtml = `<span style="color:var(--warning);font-size:13px">未對帳</span>`
     }
@@ -492,6 +494,7 @@ async function loadDailySummary() {
   const res = await api.getTransactions({ month, limit: 500 })
   if (!res.ok) { el.innerHTML = '<div class="text-muted" style="font-size:13px">載入失敗</div>'; return }
   const txns = res.data.filter(t => t.date === today)
+  dailySummaryTxns = txns
   if (!txns.length) { el.innerHTML = '<div class="empty-state" style="padding:16px 0">今日無消費記錄</div>'; return }
 
   const realTxns = txns.filter(t => !t.transfer_id)
@@ -501,19 +504,19 @@ async function loadDailySummary() {
   let html = mergeTransferPairs(txns).map(t => {
     if (t._isMergedTransfer) {
       const icon = `<div style="width:36px;height:36px;border-radius:50%;background:rgba(208,112,48,0.15);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">↔</div>`
-      return `<div class="txn-row">
+      return `<div class="txn-row" onclick="window.__ovEditTransfer('${t.transfer_id}')">
         ${icon}
         <div class="txn-info">
           <div class="txn-name">${escHtml(t.note || '轉帳')}</div>
           <div class="txn-meta">${escHtml(t._xfrFrom)} → ${escHtml(t._xfrTo)}</div>
         </div>
         <div class="txn-right">
-          <span class="txn-amt" style="color:#d07030">NT$${t.amount.toLocaleString()}</span>
+          <span class="txn-amt" style="color:#d07030">$${t.amount.toLocaleString()}</span>
         </div>
       </div>`
     }
     const recBadge = t.source === '定期' ? ' <span style="font-size:12px">🔁</span>' : ''
-    return `<div class="txn-row">
+    return `<div class="txn-row" onclick="window.__ovEditTxn('${t.id}')">
       ${catCircleHtml(t.category, 36)}
       <div class="txn-info">
         <div class="txn-name">${escHtml(t.name || t.category)}${recBadge}</div>
@@ -527,11 +530,25 @@ async function loadDailySummary() {
 
   if (txns.length > 1) {
     const parts = []
-    if (expTotal > 0) parts.push(`支出 <b style="color:var(--danger)">$${expTotal.toLocaleString()}</b>`)
     if (incTotal > 0) parts.push(`收入 <b style="color:#3fb950">$${incTotal.toLocaleString()}</b>`)
-    if (parts.length) html += `<div style="padding:6px 0 0;font-size:12px;color:var(--text-muted);display:flex;gap:14px">${parts.join('')}</div>`
+    if (expTotal > 0) parts.push(`支出 <b style="color:var(--danger)">$${expTotal.toLocaleString()}</b>`)
+    if (parts.length) html += `<div style="padding:6px 0 0;font-size:12px;color:var(--text-muted);display:flex;justify-content:flex-end;gap:14px">${parts.join('')}</div>`
   }
   el.innerHTML = html
+}
+
+window.__ovEditTxn = function(id) {
+  const t = dailySummaryTxns.find(x => x.id === id)
+  if (!t) return
+  // 用 load() 而非 loadDailySummary()：改金額可能連動帳戶餘額/淨資產，兩個都要重新抓
+  openEditTxnModal(t, { onSave: load })
+}
+
+window.__ovEditTransfer = function(transferId) {
+  const out = dailySummaryTxns.find(x => x.transfer_id === transferId && x.type === '支出')
+  const inc = dailySummaryTxns.find(x => x.transfer_id === transferId && x.type === '收入')
+  if (!out || !inc) { toast('找不到轉帳記錄', 'error'); return }
+  openEditTransferModal(out, inc, { onSave: load })
 }
 
 // --- 帳戶操作 ---
@@ -634,7 +651,7 @@ window.previewAdjustment = function() {
   if (isNaN(newVal) || newVal === orig) { preview.style.display = 'none'; return }
   const diff = newVal - orig
   preview.style.display = 'block'
-  preview.innerHTML = `餘額調整：<strong style="color:${diff >= 0 ? 'var(--success)' : 'var(--danger)'}">NT$${Math.abs(diff).toLocaleString()}</strong>`
+  preview.innerHTML = `餘額調整：<strong style="color:${diff >= 0 ? 'var(--success)' : 'var(--danger)'}">$${Math.abs(diff).toLocaleString()}</strong>`
 }
 
 window.previewInclude = function() {
@@ -687,13 +704,6 @@ function escJs(s) { return s.replace(/'/g, "\\'").replace(/"/g, '\\"') }
 document.getElementById('last-sync').textContent =
   '今天 ' + new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
 
-
-function hideSplash() {
-  const s = document.getElementById('splash')
-  if (!s || s.classList.contains('hide')) return
-  s.classList.add('hide')
-  setTimeout(() => s.remove(), 400)
-}
 
 // 有 cache 時最多等 600ms，沒 cache 等資料回來
 const hasCachedData = !!(swr.get('assets'))

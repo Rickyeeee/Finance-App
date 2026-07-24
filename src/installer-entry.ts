@@ -144,9 +144,13 @@ app.all('*', async (c) => {
   try {
     const res = await fetch(origin + url.pathname + url.search)
     const contentType = res.headers.get('Content-Type') || 'text/html; charset=utf-8'
+    // 原本只轉發 Content-Type、把來源的 Cache-Control 整個丟掉，導致瀏覽器用預設的
+    // 快取判斷邏輯，可能一直沿用舊版 JS/CSS——沿用來源（Ricky 的 Worker）決定的
+    // 快取策略，不要自己重新判斷
+    const cacheControl = res.headers.get('Cache-Control') || 'no-store'
     return new Response(res.body, {
       status: res.status,
-      headers: { 'Content-Type': contentType },
+      headers: { 'Content-Type': contentType, 'Cache-Control': cacheControl },
     })
   } catch {
     return c.text('載入失敗，請稍後再試', 502)
@@ -205,7 +209,7 @@ async function runNightlyJob(env: Bindings) {
   const { data: txns } = await getTransactions(DB, { date: today, limit: 100 })
   const totalAmount = txns.reduce((s, t) => s + t.amount, 0)
   const summaryText = txns.length
-    ? `📊 ${today} 消費摘要\n共 ${txns.length} 筆，總金額 NT$${totalAmount.toLocaleString()}`
+    ? `📊 ${today} 消費摘要\n共 ${txns.length} 筆，總金額 $${totalAmount.toLocaleString()}`
     : `📊 ${today} 消費摘要\n今日無消費記錄`
 
   await upsertDailySummary(DB, today, {

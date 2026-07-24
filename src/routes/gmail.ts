@@ -21,7 +21,7 @@ app.post('/sync', async (c) => {
       const today = new Date().toISOString().slice(0, 10)
       const totalAmount = result.transactions.reduce((s, t) => s + t.amount, 0)
       const lines = result.transactions.map(t => `• ${t.name} $${t.amount.toLocaleString()}`)
-      const summaryText = `📊 ${today} 消費摘要\n共 ${result.synced} 筆，總金額 NT$${totalAmount.toLocaleString()}\n\n${lines.join('\n')}\n\n已寫入系統 ✅`
+      const summaryText = `📊 ${today} 消費摘要\n共 ${result.synced} 筆，總金額 $${totalAmount.toLocaleString()}\n\n${lines.join('\n')}\n\n已寫入系統 ✅`
 
       await upsertDailySummary(c.env.DB, today, {
         total_amount: totalAmount,

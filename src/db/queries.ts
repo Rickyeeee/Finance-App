@@ -535,7 +535,7 @@ export async function processRecurring(db: D1Database): Promise<number> {
       type: item.type,
       status: '待確認',
       source: '定期',
-      note: fee > 0 ? `含手續費 NT${fee.toLocaleString()}` : item.note,
+      note: fee > 0 ? `含手續費 $${fee.toLocaleString()}` : item.note,
       transfer_id: null,
       recurring_id: item.id,
     })

@@ -2,7 +2,7 @@
 // 五個頁面共用同一個 index.html：<template> 置換 + history API
 // 每頁的邏輯在 /js/pages/<key>.js，進入頁面時呼叫該模組的 show({ signal })
 // signal 供頁面掛 window/document 層級監聽用，離開頁面時自動 abort 解除
-import { initAppName, toast, openUpdateModal } from '/js/api.js'
+import { initAppName, toast, openUpdateModal, hideSplash } from '/js/api.js'
 
 const PAGE_BY_PATH = {
   '/': 'overview',
@@ -11,6 +11,8 @@ const PAGE_BY_PATH = {
   '/reconcile.html': 'reconcile',
   '/investments.html': 'investments',
   '/report.html': 'report',
+  '/add': 'add',
+  '/add.html': 'add', // 相容舊的「新增記錄」主畫面捷徑
 }
 const PATH_BY_PAGE = {
   overview: '/',
@@ -18,6 +20,7 @@ const PATH_BY_PAGE = {
   reconcile: '/reconcile.html',
   investments: '/investments.html',
   report: '/report.html',
+  add: '/add',
 }
 
 const root = document.getElementById('page-root')
@@ -25,20 +28,23 @@ let currentPage = null
 let ac = null
 let navSeq = 0
 
-async function show(page, { push = true } = {}) {
+// 關掉瀏覽器自己的捲動還原，避免跟切頁時的 scrollTo(0,0) 互搶、導致沒回到最上面
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
+
+async function show(page, { push = true, search = '' } = {}) {
   if (!PATH_BY_PAGE[page]) page = 'overview'
   if (page === currentPage) return
   const seq = ++navSeq
-  if (push) history.pushState({ page }, '', PATH_BY_PAGE[page])
+  if (push) history.pushState({ page }, '', PATH_BY_PAGE[page] + search)
   currentPage = page
 
   ac?.abort()
   ac = new AbortController()
 
-  // 清掉上一頁 modal 可能留下的捲動鎖定
-  document.documentElement.style.overflow = ''
-  document.documentElement.style.height = ''
-  document.body.style.overflow = ''
+  // 關掉上一頁可能還留著沒關的浮動視窗（例如切頁時沒有正常觸發 close），
+  // 不然視窗會殘留在新頁面上面造成殘影，而且它鎖住的捲動狀態也會一直卡住
+  document.querySelectorAll('.modal-overlay.open, #rec-modal.open, #acct-view-modal.open, #stm-wizard.open').forEach(m => m.classList.remove('open'))
+  window.__resetScrollLock?.()
 
   const tpl = document.getElementById('tpl-' + page)
   root.replaceChildren(tpl.content.cloneNode(true))
@@ -60,6 +66,10 @@ async function show(page, { push = true } = {}) {
       toast('頁面載入失敗', 'error')
     }
   }
+  // 保底關閉開機畫面：只有 overview.js 會主動關閉 splash，若從其他頁面（如 /add）直接
+  // 進站、或頁面模組出錯，splash 會卡住不消失——這裡設一個寬限時間強制關掉，
+  // 但不要太快，避免搶在 overview 自己「等資料回來再關」的體驗前面觸發
+  if (seq === navSeq) setTimeout(() => { if (seq === navSeq) hideSplash() }, 1500)
 }
 
 // 導覽連結攔截（sidebar + bottom-nav）
@@ -70,7 +80,7 @@ document.addEventListener('click', e => {
     // 「+」：在消費記錄頁 → 快速新增（帶當前選取日期）；其他頁 → 切到消費記錄
     e.preventDefault()
     if (currentPage === 'transactions') {
-      location.href = window.__getAddHref ? window.__getAddHref() : '/add.html'
+      show('add', { search: window.__getAddSearch ? window.__getAddSearch() : '' })
     } else {
       show('transactions')
     }

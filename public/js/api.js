@@ -20,11 +20,87 @@ if ('serviceWorker' in navigator) {
     const anyOpen = !!document.querySelector('.modal-overlay.open, .modal-overlay[style*="flex"], .modal-overlay[style*="block"], #rec-modal.open, #acct-view-modal.open, #stm-wizard.open')
     anyOpen ? lockBody() : unlockBody()
   }
-  const observer = new MutationObserver(checkModals)
+  // 切頁時 router 會強制關掉殘留的浮動視窗，這裡的 _scrollY 記的是「開視窗當下」
+  // 的舊頁面捲動位置，是非同步的 MutationObserver 才會觸發 unlockBody() 把它還原——
+  // 順序上會晚於 router 自己呼叫的 scrollTo(0,0)，結果把新頁面的捲動位置蓋回舊的、
+  // 導致「切頁後沒有真的在最上面」。router 切頁時改呼叫這個，先把 _scrollY 歸零，
+  // 之後 unlockBody() 就算晚一步觸發也只會 scrollTo(0,0)，不會蓋掉正確的位置
+  window.__resetScrollLock = function() {
+    _scrollY = 0
+    document.documentElement.style.overflow = ''
+    document.documentElement.style.height = ''
+    document.body.style.overflow = ''
+  }
+  // 只在真的跟 modal 開關有關的 mutation 才做事，不要每次 body 底下任何 class/style
+  // 變動（切頁時的 nav active、txn-row 的 hover class...）都整個重掃一次，避免造成卡頓
+  const observer = new MutationObserver(mutations => {
+    checkModals()
+    for (const m of mutations) {
+      if (m.attributeName !== 'class') continue
+      const el = m.target
+      if (el instanceof Element && el.classList.contains('modal-overlay')) _trackModalOpenState(el)
+    }
+  })
   document.addEventListener('DOMContentLoaded', () => {
     observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class', 'style'] })
   })
 })()
+
+// ── 保證關閉浮動視窗一定是瞬間（跟上面 CSS 的 .closing 規則搭配）──
+// 直接關 class="open" 理論上該是瞬間，但編輯消費紀錄視窗裡有些子元素
+// （支出/收入/轉帳切換鈕）自己有 transition，關閉當下可能被牽連造成殘影或卡頓，
+// 所以關閉時先暫時關掉視窗內所有 transition/animation，關完再還原，
+// 這樣不管是什麼元素在動都不會影響「瞬間關閉」
+window.__closeModalInstant = function(modalId) {
+  const modal = document.getElementById(modalId)
+  if (!modal) return
+  modal.classList.add('closing')
+  modal.classList.remove('open')
+  void modal.offsetHeight // 強制 reflow，確保上面兩個 class 變動同一幀生效
+  requestAnimationFrame(() => modal.classList.remove('closing'))
+}
+
+// ── Modal 表單變更追蹤：ESC 關閉「編輯中」的表單時要先問是否儲存 ──
+const _modalFormSnapshot = new WeakMap()
+const _knownOpenModals = new WeakSet()
+// 只有這幾個是「編輯表單」型的 modal，才需要判斷有沒有改動；其餘（新增帳戶、分類管理…）維持原本直接關閉
+const _MODAL_SAVE_FN = {
+  'shared-txn-modal': '__stm_save',
+  'shared-transfer-modal': '__stm_xfr_save',
+  'txn-modal': 'saveTxn',
+  'transfer-modal': 'saveTransfer',
+}
+
+function _serializeModalForm(modal) {
+  const fields = modal.querySelectorAll('input, select, textarea')
+  return Array.from(fields).map(f => f.id + '=' + (f.type === 'checkbox' ? f.checked : f.value)).join('|')
+}
+
+function _trackModalOpenState(modal) {
+  const isOpen = modal.classList.contains('open')
+  if (isOpen && !_knownOpenModals.has(modal)) {
+    _knownOpenModals.add(modal)
+    _modalFormSnapshot.set(modal, _serializeModalForm(modal))
+  } else if (!isOpen && _knownOpenModals.has(modal)) {
+    _knownOpenModals.delete(modal)
+  }
+}
+
+// ── Esc 關閉目前開啟的 modal（全站通用，跟上面 checkModals 用同一組選擇器）──
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return
+  document.querySelectorAll('.modal-overlay.open, #rec-modal.open, #acct-view-modal.open, #stm-wizard.open').forEach(m => {
+    const saveFnName = _MODAL_SAVE_FN[m.id]
+    if (saveFnName) {
+      const before = _modalFormSnapshot.get(m)
+      const now = _serializeModalForm(m)
+      if (before !== undefined && before !== now) {
+        if (confirm('有未儲存的變更，是否要儲存？')) { window[saveFnName]?.(); return }
+      }
+    }
+    m.classList.remove('open')
+  })
+})
 
 // ── App config（公開，不需 token）──
 let _appName = null
@@ -209,6 +285,7 @@ export const api = {
   addRecurring: (data) => request('/recurring', { method: 'POST', body: JSON.stringify(data) }),
   updateRecurring: (id, data) => request('/recurring/' + id, { method: 'PATCH', body: JSON.stringify(data) }),
   generateRecurring: (id, until_date) => request('/recurring/' + id + '/generate', { method: 'POST', body: JSON.stringify(until_date ? { until_date } : {}) }),
+  generateRecurringOnce: (id, date) => request('/recurring/' + id + '/generate', { method: 'POST', body: JSON.stringify({ only_date: date }) }),
   updateRecurringTemplate: (id, data) => request('/recurring/' + id + '/template', { method: 'PATCH', body: JSON.stringify(data) }),
   updateRecurringFuture: (id, data) => request('/recurring/' + id + '/future', { method: 'PATCH', body: JSON.stringify(data) }),
   deleteRecurring: (id) => request('/recurring/' + id, { method: 'DELETE' }),
@@ -415,7 +492,7 @@ export function toast(message, type = 'success') {
 // ── Format helpers ──
 export function formatMoney(n) {
   if (n === null || n === undefined) return '–'
-  return 'NT$' + Math.abs(n).toLocaleString()
+  return '$' + Math.abs(n).toLocaleString()
 }
 
 export function fmtSigned(amount, type) {
@@ -521,6 +598,16 @@ export const swr = {
   delete(key) {
     try { sessionStorage.removeItem('swr:' + key) } catch {}
   },
+}
+
+// ── 開機畫面（splash）──
+// 只有 overview.js 會主動關閉，若從 /add 等其他頁面直接進站，splash 永遠不會被關掉、
+// 畫面卡死在啟動動畫——改成 router 每次切頁都保底呼叫一次，不管進站頁面是誰都會關
+export function hideSplash() {
+  const s = document.getElementById('splash')
+  if (!s || s.classList.contains('hide')) return
+  s.classList.add('hide')
+  setTimeout(() => s.remove(), 400)
 }
 
 // ── 背景預載 txn-modal（頁面模組與資料的預載由 router.js 負責）──

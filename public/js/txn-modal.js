@@ -96,12 +96,12 @@ function injectModal() {
         <select id="shared-f-category"></select>
       </div>
       <div class="form-group">
-        <label class="form-label">金額 (NT$) *</label>
+        <label class="form-label">金額 ($) *</label>
         <input type="number" id="shared-f-amount" placeholder="0" class="calc-input" oninput="window.__stm_updateTotal()">
       </div>
       <div id="shared-fee-section" style="display:none">
         <div class="form-group" style="margin-bottom:4px">
-          <label class="form-label">手續費 (NT$)</label>
+          <label class="form-label">手續費 ($)</label>
           <input type="number" id="shared-f-fee" placeholder="0" class="calc-input" oninput="window.__stm_updateTotal()">
         </div>
         <div id="shared-fee-total" style="font-size:12px;color:var(--text-muted);padding:0 0 8px;font-weight:500"></div>
@@ -134,7 +134,7 @@ function injectModal() {
       </div>
       <div class="grid-2">
         <div class="form-group">
-          <label class="form-label">金額 (NT$) *</label>
+          <label class="form-label">金額 ($) *</label>
           <input type="number" id="shared-f-xfr-amount" placeholder="0" class="calc-input">
         </div>
         <div class="form-group">
@@ -227,7 +227,7 @@ window.__stm_updateTotal = function() {
   const fee  = parseInt(document.getElementById('shared-f-fee').value)   || 0
   const el = document.getElementById('shared-fee-total')
   el.textContent = (fee > 0 && base > 0)
-    ? `NT$${base.toLocaleString()} + 手續費 NT$${fee.toLocaleString()} = 合計 NT$${(base+fee).toLocaleString()}`
+    ? `$${base.toLocaleString()} + 手續費 $${fee.toLocaleString()} = 合計 $${(base+fee).toLocaleString()}`
     : ''
 }
 
@@ -241,7 +241,7 @@ window.__stm_toggleFee = function() {
 }
 
 window.__stm_close = function() {
-  document.getElementById('shared-txn-modal').classList.remove('open')
+  window.__closeModalInstant('shared-txn-modal')
 }
 
 window.__stm_closeScope = function() {
@@ -295,7 +295,7 @@ window.__stm_save = async function() {
     card:       acctObj?.name ?? '',
     account_id: acctObj?.id ?? null,
     type:       _currentType,
-    note:       fee > 0 ? `含手續費 NT$${fee.toLocaleString()}` : null,
+    note:       fee > 0 ? `含手續費 $${fee.toLocaleString()}` : null,
   }
   if (!data.amount || !data.date) { toast('請填寫金額和日期', 'error'); return }
 
@@ -481,7 +481,7 @@ function injectWizardModal() {
         <div class="stm-w-amt-display">
           <div class="stm-w-amt-label">輸入金額</div>
           <div class="stm-w-amt-value zero" id="stm-w-amt">
-            <span class="stm-w-amt-currency">NT$</span>
+            <span class="stm-w-amt-currency">$</span>
             <span class="stm-w-amt-num" id="stm-w-amt-num">0</span>
           </div>
           <div class="stm-w-amt-expr" id="stm-w-amt-expr"></div>
@@ -753,7 +753,7 @@ window.__stm_wSelAcc = async function(id, name) {
   })
   if (res.ok) {
     document.getElementById('stm-w-ok-detail').textContent =
-      `${_wForm.type} NT$${_wForm.amount.toLocaleString()}${_wForm.name ? ' — '+_wForm.name : ''}`
+      `${_wForm.type} $${_wForm.amount.toLocaleString()}${_wForm.name ? ' — '+_wForm.name : ''}`
     window.__stm_wgo('success')
     _wOnSave?.()
   } else { toast(res.error ?? '新增失敗', 'error') }
@@ -776,7 +776,7 @@ window.__stm_wSelTo = async function(id, name) {
   })
   if (res.ok) {
     document.getElementById('stm-w-ok-detail').textContent =
-      `轉帳 NT$${_wForm.amount.toLocaleString()} ${_wForm.card} → ${_wForm.toCard}`
+      `轉帳 $${_wForm.amount.toLocaleString()} ${_wForm.card} → ${_wForm.toCard}`
     window.__stm_wgo('success')
     _wOnSave?.()
   } else { toast(res.error ?? '轉帳失敗', 'error') }
@@ -817,19 +817,58 @@ window.__stm_wizard_again = function() {
 }
 
 // ── 公開 API ─────────────────────────────────────────────
+// 桌機：一頁式表單（跟編輯共用）；手機：分步驟精靈（觸控操作較快）
 export async function openAddTxnModal({ prefillCard = null, prefillDate = null, onSave = null } = {}) {
-  injectWizardModal()
+  if (window.innerWidth <= 768) {
+    injectWizardModal()
+    await loadData()
+    _wOnSave = onSave
+    _wPrefillCard = prefillCard
+    _wPrefillDate = prefillDate
+    window.__stm_wizard_again()
+    document.getElementById('stm-wizard').classList.add('open')
+    return
+  }
+  injectModal()
   await loadData()
-  _wOnSave = onSave
-  _wPrefillCard = prefillCard
-  _wPrefillDate = prefillDate
-  window.__stm_wizard_again()
-  document.getElementById('stm-wizard').classList.add('open')
+  _onSave = onSave
+  _onDelete = null
+  _editTxn = null
+  _editScope = 'this'
+  _openAddForm({ prefillCard, prefillDate })
+}
+
+function _openAddForm({ prefillCard = null, prefillDate = null } = {}) {
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
+  const date = prefillDate || today
+
+  document.getElementById('shared-edit-id').value = ''
+  document.getElementById('shared-f-name').value = ''
+  document.getElementById('shared-f-amount').value = ''
+  document.getElementById('shared-f-date').value = date
+  document.getElementById('shared-f-fee').value = ''
+  document.getElementById('shared-fee-section').style.display = 'none'
+  document.getElementById('shared-fee-toggle').textContent = '＋ 加入手續費'
+  document.getElementById('shared-fee-total').textContent = ''
+  document.getElementById('shared-delete-btn').style.display = 'none'
+
+  window.__stm_setType('支出')
+
+  const cardSel = document.getElementById('shared-f-card')
+  cardSel.innerHTML = groupedAccountOpts(_allAccounts)
+  const cardAcctId = prefillCard ? _allAccounts.find(a => a.name === prefillCard)?.id : null
+  if (cardAcctId) cardSel.value = cardAcctId
+
+  document.getElementById('shared-f-xfr-date').value = date
+  document.getElementById('shared-f-xfr-amount').value = ''
+  document.getElementById('shared-f-xfr-note').value = ''
+
+  document.getElementById('shared-txn-modal').classList.add('open')
 }
 
 function _openEditForm(txn, { asTemplate = false } = {}) {
-  // 從 note 反解手續費（例：「含手續費 NT$50」）
-  const feeMatch = txn.note ? txn.note.match(/含手續費\s*NT\$([0-9,]+)/) : null
+  // 從 note 反解手續費（例：「含手續費 $50」）
+  const feeMatch = txn.note ? txn.note.match(/含手續費\s*\$([0-9,]+)/) : null
   const fee = feeMatch ? parseInt(feeMatch[1].replace(/,/g, '')) : 0
   const baseAmount = fee > 0 ? txn.amount - fee : txn.amount
 
@@ -882,4 +921,107 @@ export async function openEditTxnModal(txn, { onSave = null, onDelete = null } =
   }
 
   _openEditForm(txn)
+}
+
+// ── 共用編輯轉帳 Modal ────────────────────────────────────
+// 轉帳牽涉來源＋目標兩個帳戶、兩筆關聯記錄，不能套用一般收支的編輯表單，
+// 所以另外做一個專用的（跟 transactions.js 原本的轉帳 modal 同一套欄位）
+let _xfrOnSave = null
+
+function injectTransferModal() {
+  if (document.getElementById('shared-transfer-modal')) return
+  const el = document.createElement('div')
+  el.innerHTML = `
+<div class="modal-overlay" id="shared-transfer-modal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title" id="shared-xfr-title">↔ 編輯轉帳</div>
+      <button class="modal-close" onclick="window.__stm_xfr_close()">×</button>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">來源帳戶 *</label>
+        <select id="shared-xfr-from"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">目標帳戶 *</label>
+        <select id="shared-xfr-to"></select>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">金額 ($) *</label>
+        <input type="number" id="shared-xfr-amount" placeholder="0" class="calc-input">
+      </div>
+      <div class="form-group">
+        <label class="form-label">日期 *</label>
+        <input type="date" id="shared-xfr-date">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">備註</label>
+      <input type="text" id="shared-xfr-note" placeholder="選填">
+    </div>
+    <input type="hidden" id="shared-edit-transfer-id">
+    <input type="hidden" id="shared-edit-transfer-txn-id">
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="shared-xfr-delete-btn" style="margin-right:auto" onclick="window.__stm_xfr_delete()">刪除</button>
+      <button class="btn btn-secondary" onclick="window.__stm_xfr_close()">取消</button>
+      <button class="btn btn-primary" onclick="window.__stm_xfr_save()">更新轉帳</button>
+    </div>
+  </div>
+</div>`.trim()
+  document.body.appendChild(el.firstElementChild)
+}
+
+window.__stm_xfr_close = function() {
+  window.__closeModalInstant('shared-transfer-modal')
+}
+
+window.__stm_xfr_save = async function() {
+  const editId = document.getElementById('shared-edit-transfer-id').value
+  const from_account_id = document.getElementById('shared-xfr-from').value
+  const to_account_id = document.getElementById('shared-xfr-to').value
+  const fromObj = _allAccounts.find(a => a.id === from_account_id)
+  const toObj = _allAccounts.find(a => a.id === to_account_id)
+  const amount = parseInt(document.getElementById('shared-xfr-amount').value)
+  const date = document.getElementById('shared-xfr-date').value
+  const note = document.getElementById('shared-xfr-note').value.trim() || null
+  if (!amount || !date) { toast('請填寫金額和日期', 'error'); return }
+  if (from_account_id === to_account_id) { toast('來源與目標帳戶不能相同', 'error'); return }
+  const res = await api.updateTransfer(editId, {
+    from_account: fromObj?.name ?? '', to_account: toObj?.name ?? '',
+    from_account_id, to_account_id, amount, date, note,
+  })
+  if (res.ok) { window.__stm_xfr_close(); toast('轉帳記錄已更新'); _xfrOnSave?.() }
+  else toast(res.error ?? '更新失敗', 'error')
+}
+
+window.__stm_xfr_delete = async function() {
+  const transferTxnId = document.getElementById('shared-edit-transfer-txn-id').value
+  if (!transferTxnId) return
+  if (!confirm('確定要刪除這筆轉帳記錄（兩筆關聯記錄都會刪除）？')) return
+  const res = await api.deleteTransaction(transferTxnId)
+  if (res.ok) { window.__stm_xfr_close(); toast('轉帳已刪除'); _xfrOnSave?.() }
+  else toast(res.error ?? '刪除失敗', 'error')
+}
+
+export async function openEditTransferModal(outTxn, inTxn, { onSave = null } = {}) {
+  injectTransferModal()
+  await loadData()
+  _xfrOnSave = onSave
+
+  const opts = groupedAccountOpts(_allAccounts)
+  document.getElementById('shared-xfr-from').innerHTML = opts
+  document.getElementById('shared-xfr-to').innerHTML = opts
+  document.getElementById('shared-edit-transfer-id').value = outTxn.transfer_id
+  document.getElementById('shared-edit-transfer-txn-id').value = outTxn.id
+  // 優先用 account_id 選取；舊資料沒有 account_id 時才退回用名稱找（可能因同名選錯，僅供相容）
+  document.getElementById('shared-xfr-from').value = outTxn.account_id || _allAccounts.find(a => a.name === outTxn.card)?.id || ''
+  document.getElementById('shared-xfr-to').value = inTxn.account_id || _allAccounts.find(a => a.name === inTxn.card)?.id || ''
+  document.getElementById('shared-xfr-amount').value = String(outTxn.amount)
+  document.getElementById('shared-xfr-date').value = outTxn.date
+  document.getElementById('shared-xfr-note').value = outTxn.note ?? ''
+
+  document.getElementById('shared-transfer-modal').classList.add('open')
 }

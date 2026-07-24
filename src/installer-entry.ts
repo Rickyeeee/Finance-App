@@ -17,6 +17,14 @@ import { processRecurring, getAssets, getInvestments, getMonthlySummary, recordA
 
 const app = new Hono<{ Bindings: Bindings }>()
 
+// 統一錯誤處理：沒接住的例外（例如舊安裝的資料庫缺欄位）預設會變成 Cloudflare 的
+// 純文字 500 頁面，前端 request() 直接 res.json() 會整個崩潰、按鈕看起來完全沒反應。
+// 這裡統一攔截，至少回傳前端看得懂的 JSON 格式
+app.onError((err, c) => {
+  console.error('[unhandled]', err)
+  return c.json({ ok: false, error: '伺服器發生錯誤，請稍後再試' }, 500)
+})
+
 app.use('/api/*', cors({
   origin: '*',
   allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],

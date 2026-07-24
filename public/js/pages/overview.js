@@ -207,8 +207,31 @@ function renderAccounts() {
   container.innerHTML = html
 }
 
+// 無資料時只隱藏 canvas + 插入提示文字，不能整個刪掉 canvas 節點——同一頁面
+// 之後還會再畫一次（cache 先渲染、fresh 資料回來再渲染一次），canvas 沒了
+// 第二次就整個拋錯、後面該更新的資料全部卡住（曾經在投資頁踩過同樣的坑）
+function showChartEmpty(canvas, html) {
+  if (!canvas) return
+  canvas.style.display = 'none'
+  let empty = canvas.nextElementSibling
+  if (!empty || !empty.classList.contains('chart-empty-state')) {
+    empty = document.createElement('div')
+    empty.className = 'chart-empty-state empty-state'
+    canvas.after(empty)
+  }
+  empty.innerHTML = html
+}
+function hideChartEmpty(canvas) {
+  if (!canvas) return
+  canvas.style.display = ''
+  const empty = canvas.nextElementSibling
+  if (empty && empty.classList.contains('chart-empty-state')) empty.remove()
+}
+
 function renderTrendChart(history, liveTotalAssets) {
-  const ctx = document.getElementById('trendChart').getContext('2d')
+  const canvas = document.getElementById('trendChart')
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
   if (trendChart) trendChart.destroy()
 
   // 建立快照索引（以 YYYY-MM 為 key）
@@ -240,9 +263,10 @@ function renderTrendChart(history, liveTotalAssets) {
   }
 
   if (values.every(v => v === null)) {
-    ctx.canvas.parentElement.innerHTML = '<div class="empty-state">尚無歷史資料<p>系統每日午夜自動記錄，或手動點「快照」</p></div>'
+    showChartEmpty(canvas, '尚無歷史資料<p>系統每日午夜自動記錄，或手動點「快照」</p>')
     return
   }
+  hideChartEmpty(canvas)
 
   const carriedColor = 'rgba(139,148,158,0.55)'
 

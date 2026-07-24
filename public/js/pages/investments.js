@@ -699,18 +699,43 @@ window.deleteTrade = async function(id, symbol) {
 }
 
 // ── 圖表 ──────────────────────────────────
+// 無資料時只隱藏 canvas + 插入提示文字，不能整個刪掉 canvas 節點——同一頁面
+// 之後還會再畫（例如新增交易後 loadData() 重新整理），canvas 沒了下次就整個
+// 拋錯，害後面的帳戶下拉選單、已實現損益等全部更新不到、畫面卡在舊資料
+// （曾經踩過這個坑，症狀是「不重新整理頁面資料就不會更新」）
+function showChartEmpty(canvas, html) {
+  if (!canvas) return
+  canvas.style.display = 'none'
+  let empty = canvas.nextElementSibling
+  if (!empty || !empty.classList.contains('chart-empty-state')) {
+    empty = document.createElement('div')
+    empty.className = 'chart-empty-state empty-state'
+    canvas.after(empty)
+  }
+  empty.innerHTML = html
+}
+function hideChartEmpty(canvas) {
+  if (!canvas) return
+  canvas.style.display = ''
+  const empty = canvas.nextElementSibling
+  if (empty && empty.classList.contains('chart-empty-state')) empty.remove()
+}
+
 function renderCharts() {
   renderHoldingChart(allInvestments)
 }
 
 function renderHoldingChart(investments) {
-  const ctx = document.getElementById('holdingChart').getContext('2d')
-  if (holdingChart) holdingChart.destroy()
+  const canvas = document.getElementById('holdingChart')
+  if (!canvas) return
+  if (holdingChart) { holdingChart.destroy(); holdingChart = null }
   const hasValue = investments.some(i => i.market_value > 0)
   if (!hasValue) {
-    ctx.canvas.parentElement.innerHTML = '<div class="empty-state">尚無市值資料</div>'
+    showChartEmpty(canvas, '尚無市值資料')
     return
   }
+  hideChartEmpty(canvas)
+  const ctx = canvas.getContext('2d')
   holdingChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
@@ -742,8 +767,7 @@ async function renderGrowthChart(range) {
   const res = await api.getInvestmentHistory(range)
   if (!res.ok) {
     if (!cached) {
-      const canvas = document.getElementById('growthChart')
-      if (canvas) canvas.parentElement.innerHTML = '<div class="empty-state">尚無歷史快照<p>在資產總覽頁點「快照」以記錄資產</p></div>'
+      showChartEmpty(document.getElementById('growthChart'), '尚無歷史快照<p>在資產總覽頁點「快照」以記錄資產</p>')
     }
     return
   }
@@ -810,9 +834,10 @@ function drawGrowthChart(range, res) {
   }
 
   if (values.every(v => v === null)) {
-    ctx.canvas.parentElement.innerHTML = '<div class="empty-state">尚無歷史快照<p>在資產總覽頁點「快照」以記錄資產</p></div>'
+    showChartEmpty(canvas, '尚無歷史快照<p>在資產總覽頁點「快照」以記錄資產</p>')
     return
   }
+  hideChartEmpty(canvas)
 
   const nonNull = values.filter(v => v !== null)
   const first = nonNull[0] ?? 0

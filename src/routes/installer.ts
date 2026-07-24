@@ -12,8 +12,8 @@ const SCHEMA_STATEMENTS = [
     date DATE NOT NULL, category TEXT NOT NULL DEFAULT '其他',
     card TEXT NOT NULL DEFAULT '', type TEXT NOT NULL DEFAULT '支出',
     status TEXT NOT NULL DEFAULT '待確認', source TEXT NOT NULL DEFAULT '手動輸入',
-    note TEXT, transfer_id TEXT, deferred_to TEXT DEFAULT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    account_id TEXT DEFAULT NULL, note TEXT, transfer_id TEXT, deferred_to TEXT DEFAULT NULL,
+    recurring_id TEXT DEFAULT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE TABLE IF NOT EXISTS reconciliation (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, bill_amount INTEGER NOT NULL,
@@ -66,8 +66,12 @@ const SCHEMA_STATEMENTS = [
     total_investments INTEGER NOT NULL, total_cash INTEGER NOT NULL,
     monthly_expense INTEGER NOT NULL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`,
   `CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date)`,
   `CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id)`,
   `CREATE INDEX IF NOT EXISTS idx_reconciliation_bill_month ON reconciliation(bill_month)`,
   `CREATE INDEX IF NOT EXISTS idx_asset_history_date ON asset_history(snapshot_date)`,
   // 預設類別
@@ -83,6 +87,26 @@ const SCHEMA_STATEMENTS = [
     ('cat-009', '其他',   '支出', 90,  '📎'),
     ('cat-010', '薪資',   '收入', 10,  '💰'),
     ('cat-011', '投資收益','收入', 20,  '📈')`,
+]
+
+// 補欄位用：CREATE TABLE IF NOT EXISTS 對「已經存在」的舊表不會生效，較早安裝的資料庫
+// 不會自動長出後來才加的欄位，導致新版程式碼一存取就整個掛掉（500 + 前端 JSON.parse 失敗）。
+// 這裡用 ALTER TABLE ADD COLUMN 補齊，欄位已存在時會回傳失敗，執行時要忽略單筆失敗、不能中斷。
+const MIGRATION_STATEMENTS = [
+  `ALTER TABLE transactions ADD COLUMN account_id TEXT DEFAULT NULL`,
+  `ALTER TABLE transactions ADD COLUMN recurring_id TEXT DEFAULT NULL`,
+  `ALTER TABLE assets ADD COLUMN billing_day INTEGER DEFAULT NULL`,
+  `ALTER TABLE assets ADD COLUMN payment_day INTEGER DEFAULT NULL`,
+  `ALTER TABLE assets ADD COLUMN credit_limit INTEGER DEFAULT 0`,
+  `ALTER TABLE assets ADD COLUMN payment_method TEXT DEFAULT 'manual'`,
+  `ALTER TABLE assets ADD COLUMN payment_account TEXT`,
+  `ALTER TABLE assets ADD COLUMN payment_account_id TEXT`,
+  `ALTER TABLE investment_trades ADD COLUMN to_account TEXT`,
+  `ALTER TABLE investment_trades ADD COLUMN transfer_id TEXT`,
+  `ALTER TABLE investment_trades ADD COLUMN note TEXT`,
+  `ALTER TABLE recurring_transactions ADD COLUMN end_date DATE`,
+  `ALTER TABLE recurring_transactions ADD COLUMN fee INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE recurring_transactions ADD COLUMN last_generated TEXT`,
 ]
 
 // ── Cloudflare API helpers ──
@@ -379,274 +403,11 @@ app.post('/update', async (c) => {
       send('done', { step: 2, message: `資料庫確認（${dbName}）` })
 
       send('step', { step: 3, message: '執行資料庫更新…' })
-      for (const sql of SCHEMA_STATEMENTS) {
-        const r = await cfPost(`/accounts/${accountId}/d1/database/${dbId}/query`, body.api_token, { sql })
-        if (!r.success) {
-          send('error', { message: `Schema 更新失敗：${sql.slice(0, 50)}…` })
-          return
-        }
+      // 先補齊舊安裝可能缺少的欄位：ALTER TABLE ADD COLUMN 對已有該欄位的資料庫一定會失敗，
+      // 這裡刻意忽略單筆失敗、不能中斷（沒有 IF NOT EXISTS 可用，只能靠試了失敗就跳過）
+      for (const sql of MIGRATION_STATEMENTS) {
+        await cfPost(`/accounts/${accountId}/d1/database/${dbId}/query`, body.api_token, { sql })
       }
-      send('done', { step: 3, message: '資料庫結構更新完成' })
-
-      send('step', { step: 4, message: '部署最新 Worker…' })
-      const workerScript = body.bundle
-      if (!workerScript) {
-        send('error', { message: 'Worker bundle 未附帶，請重新整理頁面後再試' })
-        return
-      }
-
-      // 取得現有 Worker 的 bindings（保留 APP_NAME 等設定）
-      const settingsRes = await cfGet(`/accounts/${accountId}/workers/scripts/${body.worker_name}/settings`, body.api_token)
-      if (!settingsRes.success) {
-        send('error', { message: `找不到 Worker ${body.worker_name}，請確認名稱正確` })
-        return
-      }
-      const existingSettings = settingsRes.result as { bindings?: Array<{ type: string; name: string; text?: string }> }
-      const appNameBinding = existingSettings?.bindings?.find(b => b.name === 'APP_NAME')
-      const appName = appNameBinding?.text || '我的財務'
-
-      const boundary = '----FormBoundary' + Math.random().toString(36).slice(2)
-      const metadata = {
-        main_module: 'worker.js',
-        compatibility_date: '2024-09-23',
-        compatibility_flags: ['nodejs_compat'],
-        bindings: [
-          { type: 'd1', name: 'DB', id: dbId },
-          { type: 'plain_text', name: 'APP_NAME', text: appName },
-          { type: 'plain_text', name: 'STATIC_ORIGIN', text: 'https://ricky-finance.ke877857.workers.dev' },
-        ],
-      }
-
-      const multipart = [
-        `--${boundary}`,
-        'Content-Disposition: form-data; name="metadata"',
-        'Content-Type: application/json',
-        '',
-        JSON.stringify(metadata),
-        `--${boundary}`,
-        'Content-Disposition: form-data; name="worker.js"; filename="worker.js"',
-        'Content-Type: application/javascript+module',
-        '',
-        workerScript,
-        `--${boundary}--`,
-      ].join('\r\n')
-
-      const deployRes = await fetch(`${CF_API}/accounts/${accountId}/workers/scripts/${body.worker_name}`, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${body.api_token}`,
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        },
-        body: multipart,
-      })
-      const deployData = await deployRes.json() as { success: boolean; errors?: unknown[] }
-      if (!deployData.success) {
-        send('error', { message: `Worker 部署失敗：${JSON.stringify(deployData.errors)}` })
-        return
-      }
-      send('done', { step: 4, message: 'Worker 更新完成' })
-
-      send('complete', { message: '系統已更新到最新版本' })
-    } catch (e) {
-      send('error', { message: `更新發生錯誤：${String(e)}` })
-    } finally {
-      writer.close()
-    }
-  }
-
-  runUpdate()
-
-  return new Response(readable, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    },
-  })
-})
-
-// ── 更新已安裝的 Worker ──
-app.post('/update', async (c) => {
-  const body = await c.req.json<{
-    api_token: string
-    worker_name: string
-    bundle?: string
-  }>()
-
-  if (!body.api_token || !body.worker_name) {
-    return c.json({ ok: false, error: '缺少必填欄位' }, 400)
-  }
-
-  const { readable, writable } = new TransformStream()
-  const writer = writable.getWriter()
-  const enc = new TextEncoder()
-
-  const send = (event: string, data: unknown) => {
-    writer.write(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
-  }
-
-  const runUpdate = async () => {
-    try {
-      send('step', { step: 1, message: '驗證 Cloudflare 帳號…' })
-      const accountsRes = await cfGet('/accounts?per_page=1', body.api_token)
-      if (!accountsRes.success || !Array.isArray(accountsRes.result) || accountsRes.result.length === 0) {
-        send('error', { message: 'API Token 無效或沒有帳號權限' })
-        return
-      }
-      const account = accountsRes.result[0] as { id: string; name: string }
-      const accountId = account.id
-      send('done', { step: 1, message: `帳號確認：${account.name}` })
-
-      send('step', { step: 2, message: '取得資料庫資訊…' })
-      const dbName = `${body.worker_name}-db`
-      const listRes = await cfGet(`/accounts/${accountId}/d1/database`, body.api_token)
-      if (!listRes.success || !Array.isArray(listRes.result)) {
-        send('error', { message: '無法取得資料庫列表' })
-        return
-      }
-      const existing = (listRes.result as Array<{ uuid: string; name: string }>).find(db => db.name === dbName)
-      if (!existing) {
-        send('error', { message: `找不到資料庫 ${dbName}，請確認 Worker 名稱正確` })
-        return
-      }
-      const dbId = existing.uuid
-      send('done', { step: 2, message: `資料庫確認（${dbName}）` })
-
-      send('step', { step: 3, message: '執行資料庫更新…' })
-      for (const sql of SCHEMA_STATEMENTS) {
-        const r = await cfPost(`/accounts/${accountId}/d1/database/${dbId}/query`, body.api_token, { sql })
-        if (!r.success) {
-          send('error', { message: `Schema 更新失敗：${sql.slice(0, 50)}…` })
-          return
-        }
-      }
-      send('done', { step: 3, message: '資料庫結構更新完成' })
-
-      send('step', { step: 4, message: '部署最新 Worker…' })
-      const workerScript = body.bundle
-      if (!workerScript) {
-        send('error', { message: 'Worker bundle 未附帶，請重新整理頁面後再試' })
-        return
-      }
-
-      // 取得現有 Worker 的 bindings（保留 APP_NAME 等設定）
-      const settingsRes = await cfGet(`/accounts/${accountId}/workers/scripts/${body.worker_name}/settings`, body.api_token)
-      if (!settingsRes.success) {
-        send('error', { message: `找不到 Worker ${body.worker_name}，請確認名稱正確` })
-        return
-      }
-      const existingSettings = settingsRes.result as { bindings?: Array<{ type: string; name: string; text?: string }> }
-      const appNameBinding = existingSettings?.bindings?.find(b => b.name === 'APP_NAME')
-      const appName = appNameBinding?.text || '我的財務'
-
-      const boundary = '----FormBoundary' + Math.random().toString(36).slice(2)
-      const metadata = {
-        main_module: 'worker.js',
-        compatibility_date: '2024-09-23',
-        compatibility_flags: ['nodejs_compat'],
-        bindings: [
-          { type: 'd1', name: 'DB', id: dbId },
-          { type: 'plain_text', name: 'APP_NAME', text: appName },
-          { type: 'plain_text', name: 'STATIC_ORIGIN', text: 'https://ricky-finance.ke877857.workers.dev' },
-        ],
-      }
-
-      const multipart = [
-        `--${boundary}`,
-        'Content-Disposition: form-data; name="metadata"',
-        'Content-Type: application/json',
-        '',
-        JSON.stringify(metadata),
-        `--${boundary}`,
-        'Content-Disposition: form-data; name="worker.js"; filename="worker.js"',
-        'Content-Type: application/javascript+module',
-        '',
-        workerScript,
-        `--${boundary}--`,
-      ].join('\r\n')
-
-      const deployRes = await fetch(`${CF_API}/accounts/${accountId}/workers/scripts/${body.worker_name}`, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${body.api_token}`,
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
-        },
-        body: multipart,
-      })
-      const deployData = await deployRes.json() as { success: boolean; errors?: unknown[] }
-      if (!deployData.success) {
-        send('error', { message: `Worker 部署失敗：${JSON.stringify(deployData.errors)}` })
-        return
-      }
-      send('done', { step: 4, message: 'Worker 更新完成' })
-
-      send('complete', { message: '系統已更新到最新版本' })
-    } catch (e) {
-      send('error', { message: `更新發生錯誤：${String(e)}` })
-    } finally {
-      writer.close()
-    }
-  }
-
-  runUpdate()
-
-  return new Response(readable, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    },
-  })
-})
-
-// ── 更新已安裝的 Worker ──
-app.post('/update', async (c) => {
-  const body = await c.req.json<{
-    api_token: string
-    worker_name: string
-    bundle?: string
-  }>()
-
-  if (!body.api_token || !body.worker_name) {
-    return c.json({ ok: false, error: '缺少必填欄位' }, 400)
-  }
-
-  const { readable, writable } = new TransformStream()
-  const writer = writable.getWriter()
-  const enc = new TextEncoder()
-
-  const send = (event: string, data: unknown) => {
-    writer.write(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
-  }
-
-  const runUpdate = async () => {
-    try {
-      send('step', { step: 1, message: '驗證 Cloudflare 帳號…' })
-      const accountsRes = await cfGet('/accounts?per_page=1', body.api_token)
-      if (!accountsRes.success || !Array.isArray(accountsRes.result) || accountsRes.result.length === 0) {
-        send('error', { message: 'API Token 無效或沒有帳號權限' })
-        return
-      }
-      const account = accountsRes.result[0] as { id: string; name: string }
-      const accountId = account.id
-      send('done', { step: 1, message: `帳號確認：${account.name}` })
-
-      send('step', { step: 2, message: '取得資料庫資訊…' })
-      const dbName = `${body.worker_name}-db`
-      const listRes = await cfGet(`/accounts/${accountId}/d1/database`, body.api_token)
-      if (!listRes.success || !Array.isArray(listRes.result)) {
-        send('error', { message: '無法取得資料庫列表' })
-        return
-      }
-      const existing = (listRes.result as Array<{ uuid: string; name: string }>).find(db => db.name === dbName)
-      if (!existing) {
-        send('error', { message: `找不到資料庫 ${dbName}，請確認 Worker 名稱正確` })
-        return
-      }
-      const dbId = existing.uuid
-      send('done', { step: 2, message: `資料庫確認（${dbName}）` })
-
-      send('step', { step: 3, message: '執行資料庫更新…' })
       for (const sql of SCHEMA_STATEMENTS) {
         const r = await cfPost(`/accounts/${accountId}/d1/database/${dbId}/query`, body.api_token, { sql })
         if (!r.success) {

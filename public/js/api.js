@@ -239,7 +239,13 @@ async function request(path, opts = {}) {
     _showLogin()
     return { ok: false, error: '未授權' }
   }
-  return res.json()
+  try {
+    return await res.json()
+  } catch {
+    // 後端有時會回傳非 JSON 的錯誤頁（例如未接住的例外），避免整個 promise chain 崩潰、
+    // 畫面看起來「按了沒反應」——至少回傳一個看得懂的錯誤物件
+    return { ok: false, error: `伺服器錯誤（${res.status}）` }
+  }
 }
 
 export const api = {

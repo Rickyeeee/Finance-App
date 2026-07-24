@@ -5382,6 +5382,10 @@ var auth_default = app8;
 // src/installer-entry.ts
 init_queries();
 var app9 = new Hono2();
+app9.onError((err, c) => {
+  console.error("[unhandled]", err);
+  return c.json({ ok: false, error: "\u4F3A\u670D\u5668\u767C\u751F\u932F\u8AA4\uFF0C\u8ACB\u7A0D\u5F8C\u518D\u8A66" }, 500);
+});
 app9.use("/api/*", cors({
   origin: "*",
   allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],

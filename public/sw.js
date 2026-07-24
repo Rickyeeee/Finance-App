@@ -1,4 +1,4 @@
-const CACHE = 'finance-v16'
+const CACHE = 'finance-v17'
 
 // SPA：五個頁面路徑都由 index.html 提供
 // 預快取用 '/' 和 '/add'（.html 路徑會被 assets 307 轉址，fetch 結果 redirected 無法入快取）
@@ -42,7 +42,12 @@ self.addEventListener('fetch', e => {
       caches.match(request).then(cached => {
         if (cached) return cached
         return fetch(request).then(r => {
-          if (r.ok) caches.open(CACHE).then(c => c.put(request, r.clone()))
+          // clone 一定要在回傳/被讀取之前同步做，不然瀏覽器可能已經開始讀取
+          // response body，非同步 caches.open().then() 才 clone 時 body 已經被鎖住、丟例外
+          if (r.ok) {
+            const copy = r.clone()
+            caches.open(CACHE).then(c => c.put(request, copy))
+          }
           return r
         })
       })
@@ -60,7 +65,10 @@ self.addEventListener('fetch', e => {
 
         // 背景更新（存回統一的 cacheKey）
         const revalidate = fetch(request).then(r => {
-          if (r.ok && !r.redirected) cache.put(cacheKey, r.clone())
+          if (r.ok && !r.redirected) {
+            const copy = r.clone()
+            cache.put(cacheKey, copy)
+          }
           return r
         }).catch(() => null)
 
@@ -75,7 +83,10 @@ self.addEventListener('fetch', e => {
     caches.open(CACHE).then(cache =>
       cache.match(request).then(cached => {
         const fetchAndCache = fetch(request).then(r => {
-          if (r.ok) cache.put(request, r.clone())
+          if (r.ok) {
+            const copy = r.clone()
+            cache.put(request, copy)
+          }
           return r
         }).catch(() => cached)
         return cached || fetchAndCache

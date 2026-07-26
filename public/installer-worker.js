@@ -4314,10 +4314,16 @@ app2.get("/lookup/:symbol", async (c) => {
   }
   return c.json({ ok: false, error: `\u627E\u4E0D\u5230\u80A1\u7968\u4EE3\u865F ${symbol}` }, 404);
 });
+function taipeiDateStr(d) {
+  const t = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+}
+__name(taipeiDateStr, "taipeiDateStr");
 app2.post("/refresh-all", async (c) => {
   const investments = await getInvestments(c.env.DB);
   if (!investments.length) return c.json({ ok: true, updated: 0, total: 0 });
   const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const todayTaipei = taipeiDateStr(/* @__PURE__ */ new Date());
   const priceResults = await Promise.all(
     investments.map(async (inv) => {
       for (const suffix of [".TW", ".TWO"]) {
@@ -4331,7 +4337,7 @@ app2.post("/refresh-all", async (c) => {
           const meta = data?.chart?.result?.[0]?.meta;
           if (!meta?.regularMarketPrice) continue;
           const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? inv.previous_close;
-          return { inv, price: meta.regularMarketPrice, previousClose: prevClose, ok: true };
+          return { inv, price: meta.regularMarketPrice, previousClose: prevClose, marketTime: meta.regularMarketTime, ok: true };
         } catch {
           continue;
         }
@@ -4339,6 +4345,7 @@ app2.post("/refresh-all", async (c) => {
       return { inv, ok: false };
     })
   );
+  const marketOpenToday = priceResults.some((r) => r.ok && r.marketTime && taipeiDateStr(new Date(r.marketTime * 1e3)) === todayTaipei);
   let updated = 0;
   for (const r of priceResults) {
     if (!r.ok) continue;
@@ -4362,10 +4369,10 @@ app2.post("/refresh-all", async (c) => {
   const totalCost = updatedInvestments.reduce((s, i) => s + i.avg_cost * i.shares, 0);
   const totalProfitLoss = updatedInvestments.reduce((s, i) => s + i.profit_loss, 0);
   const overallReturn = totalCost > 0 ? (totalValue - totalCost) / totalCost * 100 : 0;
-  const totalDailyPnl = updatedInvestments.reduce((s, i) => {
+  const totalDailyPnl = marketOpenToday ? updatedInvestments.reduce((s, i) => {
     if (!i.previous_close || !i.current_price) return s;
     return s + (i.current_price - i.previous_close) * i.shares;
-  }, 0);
+  }, 0) : 0;
   const totalRealizedPnl = updatedInvestments.reduce((s, i) => s + (i.realized_pnl ?? 0), 0);
   return c.json({
     ok: true,
@@ -4378,7 +4385,8 @@ app2.post("/refresh-all", async (c) => {
       total_profit_loss: totalProfitLoss,
       total_realized_pnl: Math.round(totalRealizedPnl),
       overall_return: Math.round(overallReturn * 100) / 100,
-      total_daily_pnl: Math.round(totalDailyPnl)
+      total_daily_pnl: Math.round(totalDailyPnl),
+      market_open_today: marketOpenToday
     }
   });
 });

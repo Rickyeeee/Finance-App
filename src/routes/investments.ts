@@ -70,12 +70,19 @@ app.get('/lookup/:symbol', async (c) => {
   return c.json({ ok: false, error: `找不到股票代號 ${symbol}` }, 404)
 })
 
+// 台北時區的 YYYY-MM-DD，用來比對「這個報價到底是不是今天的」
+function taipeiDateStr(d: Date) {
+  const t = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Taipei' }))
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
+}
+
 // 批量更新所有持股市價
 app.post('/refresh-all', async (c) => {
   const investments = await getInvestments(c.env.DB)
   if (!investments.length) return c.json({ ok: true, updated: 0, total: 0 })
 
   const today = new Date().toISOString().slice(0, 10)
+  const todayTaipei = taipeiDateStr(new Date())
 
   // 並行抓取所有股價
   const priceResults = await Promise.all(
@@ -88,17 +95,22 @@ app.post('/refresh-all', async (c) => {
           )
           if (!res.ok) continue
           const data = await res.json() as {
-            chart: { result?: Array<{ meta: { regularMarketPrice: number; previousClose?: number; chartPreviousClose?: number } }> }
+            chart: { result?: Array<{ meta: { regularMarketPrice: number; previousClose?: number; chartPreviousClose?: number; regularMarketTime?: number } }> }
           }
           const meta = data?.chart?.result?.[0]?.meta
           if (!meta?.regularMarketPrice) continue
           const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? inv.previous_close
-          return { inv, price: meta.regularMarketPrice, previousClose: prevClose, ok: true as const }
+          return { inv, price: meta.regularMarketPrice, previousClose: prevClose, marketTime: meta.regularMarketTime, ok: true as const }
         } catch { continue }
       }
       return { inv, ok: false as const }
     })
   )
+
+  // Yahoo 的 regularMarketTime 是「最近一次成交」的時間戳，休市（週末/國定假日）時
+  // 抓到的其實是上一個交易日的資料——只要有任何一檔的報價時間對得上今天，就代表
+  // 今天真的有開盤，這樣才不會把休市日的舊資料誤算成「今日損益」
+  const marketOpenToday = priceResults.some(r => r.ok && r.marketTime && taipeiDateStr(new Date(r.marketTime * 1000)) === todayTaipei)
 
   // 依序寫入 DB（避免 SQLite 並發衝突）
   let updated = 0
@@ -128,10 +140,12 @@ app.post('/refresh-all', async (c) => {
   const totalCost = updatedInvestments.reduce((s, i) => s + i.avg_cost * i.shares, 0)
   const totalProfitLoss = updatedInvestments.reduce((s, i) => s + i.profit_loss, 0)
   const overallReturn = totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : 0
-  const totalDailyPnl = updatedInvestments.reduce((s, i) => {
-    if (!i.previous_close || !i.current_price) return s
-    return s + (i.current_price - i.previous_close) * i.shares
-  }, 0)
+  const totalDailyPnl = marketOpenToday
+    ? updatedInvestments.reduce((s, i) => {
+        if (!i.previous_close || !i.current_price) return s
+        return s + (i.current_price - i.previous_close) * i.shares
+      }, 0)
+    : 0
   const totalRealizedPnl = updatedInvestments.reduce((s, i) => s + (i.realized_pnl ?? 0), 0)
 
   return c.json({
@@ -146,6 +160,7 @@ app.post('/refresh-all', async (c) => {
       total_realized_pnl: Math.round(totalRealizedPnl),
       overall_return: Math.round(overallReturn * 100) / 100,
       total_daily_pnl: Math.round(totalDailyPnl),
+      market_open_today: marketOpenToday,
     },
   })
 })

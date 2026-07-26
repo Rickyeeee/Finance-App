@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="瑞奇財務">
 <meta name="theme-color" content="#161b22">
 <link rel="apple-touch-icon" href="/icons/icon.svg">
-<link rel="stylesheet" href="/css/style.css?v=1784899388257">
+<link rel="stylesheet" href="/css/style.css?v=1785052194385">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 #splash {
@@ -886,9 +886,12 @@ if (!isAddEntry && !sessionStorage.getItem('splashShown')) {
 }
 
 /* 桌面：更寬的浮動視窗 */
+/* 不能加 backdrop-filter：Chromium 對「有 backdrop-filter 的元素」關閉時（display:none）
+   compositor 層要多花一幀才會真正拆掉，視覺上會變成裡面的按鈕等元素退出時卡頓、
+   停滯一下才跟著消失（曾經踩過這個坑，只有桌機這個 media query 加過 blur，手機沒有
+   這個問題就是因為手機版沒套用 backdrop-filter） */
 @media (min-width: 769px) {
   #rec-modal, #acct-view-modal {
-    backdrop-filter: blur(3px);
     padding: 40px;
     touch-action: auto;
   }
@@ -1012,7 +1015,13 @@ if (!isAddEntry && !sessionStorage.getItem('splashShown')) {
   flex-shrink: 0;
 }
 .acct-view-wrap { flex: 1; min-height: 0; overflow: hidden; position: relative; touch-action: pan-y; }
-.acct-view-strip { display: flex; width: 300%; height: 100%; transform: translateX(-33.333%); will-change: transform; }
+.acct-view-strip { display: flex; width: 300%; height: 100%; transform: translateX(-33.333%); }
+/* will-change 只給手機用：拖曳手勢只綁 touch 事件，電腦版滑鼠永遠用不到，卻會讓
+   這個元素永遠佔一個 GPU 合成層，浮動視窗關閉（display:none）時這層要多花一幀
+   才拆得掉，會讓裡面的東西看起來卡頓、慢一拍才消失 */
+@media (max-width: 768px) {
+  .acct-view-strip { will-change: transform; }
+}
 .acct-view-list { width: 33.333%; height: 100%; flex-shrink: 0; overflow-y: auto; padding: 0 14px; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; box-sizing: border-box; }
 .acct-view-footer {
   padding: 10px 18px 12px;
@@ -2068,7 +2077,7 @@ if (!isAddEntry && !sessionStorage.getItem('splashShown')) {
 </div>
 </template>
 
-<script src="/js/calc-keyboard.js?v=1784899388257"></script>
-<script type="module" src="/js/router.js?v=1784899388257"></script>
+<script src="/js/calc-keyboard.js?v=1785052194385"></script>
+<script type="module" src="/js/router.js?v=1785052194385"></script>
 </body>
 </html>

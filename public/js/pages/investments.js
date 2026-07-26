@@ -45,6 +45,15 @@ let currentDetailId = null   // investment.id，唯一識別 (symbol, account) �
 
 const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' })
 
+// 休市時 Yahoo 回傳的現價/昨收其實還是上一個交易日的資料，拿來算「今日損益」會
+// 誤導成「今天休市也在漲跌」——先用星期幾猜一個初始值讓畫面能立刻渲染，
+// 待 refreshAll() 用 Yahoo 實際的報價時間戳（regularMarketTime）比對出「今天真的
+// 有開盤」後會覆蓋成準確值（能連國定假日一起判斷，不是只看週末）
+let isTradingDay = (() => {
+  const dow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Taipei' })).getDay()
+  return dow >= 1 && dow <= 5
+})()
+
 // ── 資料載入 ──────────────────────────────
 function applyInvData({ investments, trades, brokers, summary, pnl, pnlTotal }) {
   allInvestments = investments
@@ -132,6 +141,9 @@ window.refreshAll = async function(silent = false) {
     // 直接用回傳的資料更新 UI，不需要再打一次 GET
     if (res.data && res.summary) {
       allInvestments = res.data
+      // 後端用 Yahoo 報價的實際時間戳判斷「今天真的有開盤」，比前端猜星期幾準
+      // （連國定假日休市都判斷得出來），拿到後蓋掉初始猜測值
+      if (typeof res.summary.market_open_today === 'boolean') isTradingDay = res.summary.market_open_today
       renderSummary(res.summary)
       renderInvestmentCards()
       renderCharts()
@@ -170,7 +182,7 @@ function renderSummary(summary) {
   document.getElementById('total-cost-sub').textContent = `成本 ${fmtNum(Math.round(summary.total_cost))}`
 
   const dailyEl = document.getElementById('total-daily-pnl')
-  if (summary.total_daily_pnl !== 0) {
+  if (isTradingDay && summary.total_daily_pnl !== 0) {
     dailyEl.textContent = fmtTop(summary.total_daily_pnl)
     dailyEl.style.color = twColor(summary.total_daily_pnl)
   } else {
@@ -248,7 +260,7 @@ function renderInvCard(inv, totalPortfolio = 0) {
 
   // 現價漲跌
   let dailyRateStr = '', dailyColor = 'var(--text-muted)', dailyPnl = 0, dailyPnlStr = '–'
-  if (inv.current_price && inv.previous_close && inv.previous_close > 0) {
+  if (isTradingDay && inv.current_price && inv.previous_close && inv.previous_close > 0) {
     const rate = (inv.current_price - inv.previous_close) / inv.previous_close * 100
     dailyPnl = Math.round((inv.current_price - inv.previous_close) * inv.shares)
     dailyColor = twColor(rate)
@@ -337,7 +349,7 @@ function renderDetail(inv) {
     : '–'
 
   let dailyRow = ''
-  if (inv.current_price && inv.previous_close) {
+  if (isTradingDay && inv.current_price && inv.previous_close) {
     const dailyPnl = Math.round((inv.current_price - inv.previous_close) * inv.shares)
     const dailyRate = ((inv.current_price - inv.previous_close) / inv.previous_close * 100).toFixed(2)
     const dColor = twColor(dailyPnl)
